@@ -138,8 +138,9 @@ def generate_launch_description():
         package='ackermann_mux',
         executable='ackermann_mux',
         name='ackermann_mux',
-        parameters=[LaunchConfiguration('mux_config')],
-        remappings=[('ackermann_cmd_out', 'ackermann_drive')]
+        parameters=[LaunchConfiguration('mux_config')]
+        #! Napattnpp: No need to remap for this version
+        # remappings=[('ackermann_cmd_out', 'ackermann_drive')]
     )
     static_tf_node = Node(
         package='tf2_ros',
