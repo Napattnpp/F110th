@@ -41,10 +41,16 @@ def generate_launch_description():
         'config',
         'vesc.yaml'
     )
-    sensors_config = os.path.join(
+    #! Napattnpp: replace URG lidar to RP lidar
+    # sensors_config = os.path.join(
+    #     get_package_share_directory('f1tenth_stack'),
+    #     'config',
+    #     'sensors.yaml'
+    # )
+    sllidar_s1_config = os.path.join(
         get_package_share_directory('f1tenth_stack'),
         'config',
-        'sensors.yaml'
+        'sllidar_s1.yaml'
     )
     mux_config = os.path.join(
         get_package_share_directory('f1tenth_stack'),
@@ -60,16 +66,23 @@ def generate_launch_description():
         'vesc_config',
         default_value=vesc_config,
         description='Descriptions for vesc configs')
-    sensors_la = DeclareLaunchArgument(
-        'sensors_config',
-        default_value=sensors_config,
-        description='Descriptions for sensor configs')
+    #! Napattnpp: replace URG lidar to RP lidar
+    # sensors_la = DeclareLaunchArgument(
+    #     'sensors_config',
+    #     default_value=sensors_config,
+    #     description='Descriptions for sensor configs')
+    sllidar_s1_la = DeclareLaunchArgument(
+        'sllidar_s1_config',
+        default_value=sllidar_s1_config,
+        description='Descriptions for sllidar-s1 configs')
     mux_la = DeclareLaunchArgument(
         'mux_config',
         default_value=mux_config,
         description='Descriptions for ackermann mux configs')
 
-    ld = LaunchDescription([joy_la, vesc_la, sensors_la, mux_la])
+    #! Napattnpp: replace URG lidar to RP lidar
+    # ld = LaunchDescription([joy_la, vesc_la, sensors_la, mux_la])
+    ld = LaunchDescription([joy_la, vesc_la, sllidar_s1_la, mux_la])
 
     joy_node = Node(
         package='joy',
@@ -107,13 +120,20 @@ def generate_launch_description():
         name='throttle_interpolator',
         parameters=[LaunchConfiguration('vesc_config')]
     )
-    # Napattnpp edit
+    #! Napattnpp: replace URG lidar to RP lidar
     # urg_node = Node(
     #     package='urg_node',
     #     executable='urg_node_driver',
     #     name='urg_node',
     #     parameters=[LaunchConfiguration('sensors_config')]
     # )
+    sllidar_ros2_node = Node(
+        package='sllidar_ros2',
+        executable='sllidar_node',
+        name='sllidar_node',
+        parameters=[LaunchConfiguration('sllidar_s1_config')],
+        output='screen'
+    )
     ackermann_mux_node = Node(
         package='ackermann_mux',
         executable='ackermann_mux',
@@ -135,8 +155,9 @@ def generate_launch_description():
     ld.add_action(vesc_to_odom_node)
     ld.add_action(vesc_driver_node)
     # ld.add_action(throttle_interpolator_node)
-    # Napattnpp edit
+    #! Napattnpp: replace URG lidar to RP lidar
     # ld.add_action(urg_node)
+    ld.add_action(sllidar_ros2_node)
     ld.add_action(ackermann_mux_node)
     ld.add_action(static_tf_node)
 

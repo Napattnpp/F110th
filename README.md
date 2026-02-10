@@ -3,6 +3,7 @@
 # First Setup
 ```
 sudo apt update && rosdep update
+sudo apt install ros-$ROS_DISTRO-diagnostic-updater
 rosdep install --from-paths src --ignore-src -y
 colcon build
 ```
