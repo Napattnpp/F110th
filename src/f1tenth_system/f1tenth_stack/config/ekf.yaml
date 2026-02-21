@@ -24,6 +24,15 @@ ekf_filter_node:
     odom0_relative: false
     odom0_pose_rejection_threshold: 5.0
     odom0_twist_rejection_threshold: 2.0
+
+    
+    #> Codex: Config order is [ x, y, z,
+    #                           roll, pitch, yaw,
+    #                           vx, vy, vz,
+    #                           vroll, vpitch, vyaw,
+    #                           ax, ay, az
+    #                          ]
+    #> Codex: Use wheel-odom x, y, yaw, vx, vyaw; ignore the rest for 2D.
     odom0_config: [true, true, false,
                    false, false, true,
                    true, false, false,
@@ -40,6 +49,8 @@ ekf_filter_node:
     imu0_twist_rejection_threshold: 0.8
     imu0_linear_acceleration_rejection_threshold: 1.5
     imu0_remove_gravitational_acceleration: true
+    #> Codex: Same 15-state order as above.
+    #> Codex: Use IMU yaw + yaw rate (gyro z); ignore linear accel for now.
     imu0_config: [false, false, false,
                   false, false, true,
                   false, false, false,
