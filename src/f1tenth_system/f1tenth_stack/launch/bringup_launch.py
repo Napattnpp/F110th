@@ -57,6 +57,12 @@ def generate_launch_description():
         'config',
         'mux.yaml'
     )
+    #> Codex: Add EKF config
+    ekf_config = os.path.join(
+        get_package_share_directory('f1tenth_stack'),
+        'config',
+        'ekf.yaml'
+    )
 
     joy_la = DeclareLaunchArgument(
         'joy_config',
@@ -79,10 +85,16 @@ def generate_launch_description():
         'mux_config',
         default_value=mux_config,
         description='Descriptions for ackermann mux configs')
+    #> Codex: Add EKF launch argument
+    ekf_la = DeclareLaunchArgument(
+        'ekf_config',
+        default_value=ekf_config,
+        description='Descriptions for robot_localization EKF configs')
 
     #> Napattnpp: replace URG lidar to RP lidar
     # ld = LaunchDescription([joy_la, vesc_la, sensors_la, mux_la])
-    ld = LaunchDescription([joy_la, vesc_la, sllidar_s1_la, mux_la])
+    #> Codex: Launch EKF
+    ld = LaunchDescription([joy_la, vesc_la, sllidar_s1_la, mux_la, ekf_la])
 
     joy_node = Node(
         package='joy',
@@ -148,6 +160,15 @@ def generate_launch_description():
         name='static_baselink_to_laser',
         arguments=['0.27', '0.0', '0.11', '0.0', '0.0', '0.0', 'base_link', 'laser']
     )
+    #> Codex: Add EKF node
+    ekf_node = Node(
+        package='robot_localization',
+        executable='ekf_node',
+        name='ekf_filter_node',
+        #> Codex: Fuse wheel odom + micro-ROS IMU and publish odom->base_link TF.
+        parameters=[LaunchConfiguration('ekf_config')],
+        output='screen'
+    )
 
     # finalize
     ld.add_action(joy_node)
@@ -161,5 +182,7 @@ def generate_launch_description():
     ld.add_action(sllidar_ros2_node)
     ld.add_action(ackermann_mux_node)
     ld.add_action(static_tf_node)
+    #> Codex: Add EKF node
+    ld.add_action(ekf_node)
 
     return ld

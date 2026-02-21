@@ -8,11 +8,13 @@
   <license>MIT</license>
 
   <depend>ackermann_msgs</depend>
-  <!-- Napattnpp edit -->
+  <!-- #>Napattnpp: Remove URG lidar depend -->
   <!-- <depend>urg_node</depend> -->
   <depend>joy</depend>
   <depend>joy_teleop</depend>
   <depend>rosbridge_server</depend>
+  <!-- #> Codex: Add Robot Localization depend -->
+  <depend>robot_localization</depend>
   <depend>vesc</depend>
   <depend>ackermann_mux</depend>
   <depend>std_msgs</depend>
