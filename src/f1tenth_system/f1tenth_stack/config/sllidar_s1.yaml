@@ -1,4 +1,4 @@
-#! Napattnpp add sllidar s1 config
+#> Napattnpp add sllidar s1 config
 sllidar_node:
   ros__parameters:
     channel_type: "serial"

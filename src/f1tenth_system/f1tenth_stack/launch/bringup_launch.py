@@ -41,7 +41,7 @@ def generate_launch_description():
         'config',
         'vesc.yaml'
     )
-    #! Napattnpp: replace URG lidar to RP lidar
+    #> Napattnpp: replace URG lidar to RP lidar
     # sensors_config = os.path.join(
     #     get_package_share_directory('f1tenth_stack'),
     #     'config',
@@ -66,7 +66,7 @@ def generate_launch_description():
         'vesc_config',
         default_value=vesc_config,
         description='Descriptions for vesc configs')
-    #! Napattnpp: replace URG lidar to RP lidar
+    #> Napattnpp: replace URG lidar to RP lidar
     # sensors_la = DeclareLaunchArgument(
     #     'sensors_config',
     #     default_value=sensors_config,
@@ -80,7 +80,7 @@ def generate_launch_description():
         default_value=mux_config,
         description='Descriptions for ackermann mux configs')
 
-    #! Napattnpp: replace URG lidar to RP lidar
+    #> Napattnpp: replace URG lidar to RP lidar
     # ld = LaunchDescription([joy_la, vesc_la, sensors_la, mux_la])
     ld = LaunchDescription([joy_la, vesc_la, sllidar_s1_la, mux_la])
 
@@ -120,7 +120,7 @@ def generate_launch_description():
         name='throttle_interpolator',
         parameters=[LaunchConfiguration('vesc_config')]
     )
-    #! Napattnpp: replace URG lidar to RP lidar
+    #> Napattnpp: replace URG lidar to RP lidar
     # urg_node = Node(
     #     package='urg_node',
     #     executable='urg_node_driver',
@@ -139,7 +139,7 @@ def generate_launch_description():
         executable='ackermann_mux',
         name='ackermann_mux',
         parameters=[LaunchConfiguration('mux_config')]
-        #! Napattnpp: No need to remap for this version
+        #> Napattnpp: No need to remap for this version
         # remappings=[('ackermann_cmd_out', 'ackermann_drive')]
     )
     static_tf_node = Node(
@@ -156,7 +156,7 @@ def generate_launch_description():
     ld.add_action(vesc_to_odom_node)
     ld.add_action(vesc_driver_node)
     # ld.add_action(throttle_interpolator_node)
-    #! Napattnpp: replace URG lidar to RP lidar
+    #> Napattnpp: replace URG lidar to RP lidar
     # ld.add_action(urg_node)
     ld.add_action(sllidar_ros2_node)
     ld.add_action(ackermann_mux_node)
