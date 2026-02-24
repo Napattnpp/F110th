@@ -191,9 +191,9 @@ def generate_launch_description():
     ld.add_action(sllidar_ros2_node)
     ld.add_action(ackermann_mux_node)
     ld.add_action(static_tf_lidar_node)
-    #> Codex: Add EKF node
+    #> Codex: Add IMU static TF
     ld.add_action(static_tf_imu_node)
     #> Codex: Add EKF node
-    ld.add_action(ekf_node)
+    # ld.add_action(ekf_node)
 
     return ld

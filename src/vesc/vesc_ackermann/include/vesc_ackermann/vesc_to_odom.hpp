@@ -66,18 +66,22 @@ private:
 
   // odometry state
   double x_, y_, yaw_;
+  double last_yaw_rad_;
   Float64::SharedPtr last_servo_cmd_;  ///< Last servo position commanded value
+  Float64::SharedPtr last_yaw_msg_;  ///< Last received yaw angle from /yaw_rad
   VescStateStamped::SharedPtr last_state_;  ///< Last received state message
 
   // ROS services
   rclcpp::Publisher<Odometry>::SharedPtr odom_pub_;
   rclcpp::Subscription<VescStateStamped>::SharedPtr vesc_state_sub_;
   rclcpp::Subscription<Float64>::SharedPtr servo_sub_;
+  rclcpp::Subscription<Float64>::SharedPtr yaw_sub_;
   std::shared_ptr<tf2_ros::TransformBroadcaster> tf_pub_;
 
   // ROS callbacks
   void vescStateCallback(const VescStateStamped::SharedPtr state);
   void servoCmdCallback(const Float64::SharedPtr servo);
+  void yawCallback(const Float64::SharedPtr yaw);
 };
 
 }  // namespace vesc_ackermann

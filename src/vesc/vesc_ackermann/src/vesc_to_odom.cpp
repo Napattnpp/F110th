@@ -53,7 +53,8 @@ VescToOdom::VescToOdom(const rclcpp::NodeOptions & options)
   publish_tf_(false),
   x_(0.0),
   y_(0.0),
-  yaw_(0.0)
+  yaw_(0.0),
+  last_yaw_rad_(0.0)
 {
   // get ROS parameters
   odom_frame_ = declare_parameter("odom_frame", odom_frame_);
@@ -83,9 +84,14 @@ VescToOdom::VescToOdom(const rclcpp::NodeOptions & options)
   vesc_state_sub_ = create_subscription<VescStateStamped>(
     "sensors/core", 10, std::bind(&VescToOdom::vescStateCallback, this, _1));
 
+  // #> Codex: use_servo_cmd_to_calc_angular_velocity (true=servo model, false=/yaw_rad).
   if (use_servo_cmd_) {
     servo_sub_ = create_subscription<Float64>(
       "sensors/servo_position_command", 10, std::bind(&VescToOdom::servoCmdCallback, this, _1));
+  } else {
+    // #> Codex: Added /yaw_rad heading source. Selection is controlled by
+    yaw_sub_ = create_subscription<Float64>(
+      "yaw_rad", 20, std::bind(&VescToOdom::yawCallback, this, _1));
   }
 }
 
@@ -93,6 +99,9 @@ void VescToOdom::vescStateCallback(const VescStateStamped::SharedPtr state)
 {
   // check that we have a last servo command if we are depending on it for angular velocity
   if (use_servo_cmd_ && !last_servo_cmd_) {
+    return;
+  }
+  if (!use_servo_cmd_ && !last_yaw_msg_) {
     return;
   }
 
@@ -103,14 +112,23 @@ void VescToOdom::vescStateCallback(const VescStateStamped::SharedPtr state)
   }
   double current_steering_angle(0.0), current_angular_velocity(0.0);
   if (use_servo_cmd_) {
-    current_steering_angle =
-      (last_servo_cmd_->data - steering_to_servo_offset_) / steering_to_servo_gain_;
+    current_steering_angle = (last_servo_cmd_->data - steering_to_servo_offset_) / steering_to_servo_gain_;
     current_angular_velocity = current_speed * tan(current_steering_angle) / wheelbase_;
+  }
+
+  double current_yaw_rad = yaw_;
+  if (!use_servo_cmd_ && last_yaw_msg_) {
+    current_yaw_rad = last_yaw_msg_->data;
   }
 
   // use current state as last state if this is our first time here
   if (!last_state_) {
+    if (!use_servo_cmd_) {
+      yaw_ = current_yaw_rad;
+      last_yaw_rad_ = current_yaw_rad;
+    }
     last_state_ = state;
+    return;
   }
 
   // calc elapsed time
@@ -123,8 +141,19 @@ void VescToOdom::vescStateCallback(const VescStateStamped::SharedPtr state)
   double y_dot = current_speed * sin(yaw_);
   x_ += x_dot * dt.seconds();
   y_ += y_dot * dt.seconds();
+
+  // #> Codex: Keep original servo-based heading update.
   if (use_servo_cmd_) {
     yaw_ += current_angular_velocity * dt.seconds();
+  } else {
+    double yaw_delta = atan2(sin(current_yaw_rad - last_yaw_rad_), cos(current_yaw_rad - last_yaw_rad_));
+    if (dt.seconds() > 0.0) {
+      current_angular_velocity = yaw_delta / dt.seconds();
+    } else {
+      current_angular_velocity = 0.0;
+    }
+    yaw_ = current_yaw_rad;
+    last_yaw_rad_ = current_yaw_rad;
   }
 
   // save state for next time
@@ -181,6 +210,11 @@ void VescToOdom::vescStateCallback(const VescStateStamped::SharedPtr state)
 void VescToOdom::servoCmdCallback(const Float64::SharedPtr servo)
 {
   last_servo_cmd_ = servo;
+}
+
+void VescToOdom::yawCallback(const Float64::SharedPtr yaw)
+{
+  last_yaw_msg_ = yaw;
 }
 
 }  // namespace vesc_ackermann
