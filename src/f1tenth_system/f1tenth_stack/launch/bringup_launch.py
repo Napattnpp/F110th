@@ -154,11 +154,20 @@ def generate_launch_description():
         #> Napattnpp: No need to remap for this version
         # remappings=[('ackermann_cmd_out', 'ackermann_drive')]
     )
-    static_tf_node = Node(
+    #> Napattnpp[TF][LIDAR]:
+    static_tf_lidar_node = Node(
         package='tf2_ros',
         executable='static_transform_publisher',
         name='static_baselink_to_laser',
-        arguments=['0.27', '0.0', '0.11', '0.0', '0.0', '0.0', 'base_link', 'laser']
+        # arguments=['0.27', '0.0', '0.11', '0.0', '0.0', '0.0', 'base_link', 'laser']
+        arguments=['0.0', '0.0', '0.0', '0.0', '0.0', '0.0', 'base_link', 'laser']
+    )
+    static_tf_imu_node = Node(
+        package='tf2_ros',
+        executable='static_transform_publisher',
+        name='static_baselink_to_imu',
+        #> Codex[TF][IMU]: Identity TF keeps imu_link explicit while aligned with base_link.
+        arguments=['0.0', '0.0', '0.0', '0.0', '0.0', '0.0', 'base_link', 'imu_link']
     )
     #> Codex: Add EKF node
     ekf_node = Node(
@@ -181,7 +190,9 @@ def generate_launch_description():
     # ld.add_action(urg_node)
     ld.add_action(sllidar_ros2_node)
     ld.add_action(ackermann_mux_node)
-    ld.add_action(static_tf_node)
+    ld.add_action(static_tf_lidar_node)
+    #> Codex: Add EKF node
+    ld.add_action(static_tf_imu_node)
     #> Codex: Add EKF node
     ld.add_action(ekf_node)
 
