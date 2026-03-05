@@ -53,6 +53,7 @@ VescToOdom::VescToOdom(const rclcpp::NodeOptions & options)
   publish_tf_(false),
   x_(0.0),
   y_(0.0),
+  // #> Note that last_yaw_rad_ exactly is yaw_ (just to EMPHASIZE that it is previous yaw variable)
   yaw_(0.0),
   last_yaw_rad_(0.0)
 {
@@ -110,18 +111,17 @@ void VescToOdom::vescStateCallback(const VescStateStamped::SharedPtr state)
   if (std::fabs(current_speed) < 0.05) {
     current_speed = 0.0;
   }
+
   double current_steering_angle(0.0), current_angular_velocity(0.0);
+  double current_yaw_rad = yaw_;
   if (use_servo_cmd_) {
     current_steering_angle = (last_servo_cmd_->data - steering_to_servo_offset_) / steering_to_servo_gain_;
     current_angular_velocity = current_speed * tan(current_steering_angle) / wheelbase_;
-  }
-
-  double current_yaw_rad = yaw_;
-  if (!use_servo_cmd_ && last_yaw_msg_) {
+  } else if (!use_servo_cmd_ && last_yaw_msg_) {
     current_yaw_rad = last_yaw_msg_->data;
   }
 
-  // use current state as last state if this is our first time here
+  // let last state = current state if this is our first time here
   if (!last_state_) {
     if (!use_servo_cmd_) {
       yaw_ = current_yaw_rad;
