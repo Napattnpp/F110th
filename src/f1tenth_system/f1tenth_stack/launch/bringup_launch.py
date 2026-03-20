@@ -63,6 +63,12 @@ def generate_launch_description():
         'config',
         'ekf.yaml'
     )
+    #> copilot[ADD][PATH]: odom_to_path config - loads parameters from the package share directory
+    # odom_to_path_config = os.path.join(
+    #     get_package_share_directory('odom_to_path'),
+    #     'config',
+    #     'odom_to_path.yaml'
+    # )
 
     joy_la = DeclareLaunchArgument(
         'joy_config',
@@ -90,6 +96,12 @@ def generate_launch_description():
         'ekf_config',
         default_value=ekf_config,
         description='Descriptions for robot_localization EKF configs')
+    #> copilot[ADD][PATH]: odom_to_path launch argument - uncomment when enabling the node
+    # odom_to_path_la = DeclareLaunchArgument(
+    #     'odom_to_path_config',
+    #     default_value=odom_to_path_config,
+    #     description='Description for odom_to_path configs'
+    # )
 
     #> Napattnpp: replace URG lidar to RP lidar
     # ld = LaunchDescription([joy_la, vesc_la, sensors_la, mux_la])
@@ -178,6 +190,15 @@ def generate_launch_description():
         parameters=[LaunchConfiguration('ekf_config')],
         output='screen'
     )
+    #> copilot[ADD][PATH]: odom_to_path node - subscribes /odom and publishes /path
+    #> copilot[DISABLED]: uncomment the block below and the ld.add_action line to enable
+    # odom_to_path_node = Node(
+    #     package='odom_to_path',
+    #     executable='odom_to_path_node',
+    #     name='odom_to_path_node',
+    #     parameters=[LaunchConfiguration('odom_to_path_config')],
+    #     output='screen'
+    # )
 
     # finalize
     ld.add_action(joy_node)
@@ -195,5 +216,7 @@ def generate_launch_description():
     ld.add_action(static_tf_imu_node)
     #> Codex: Add EKF node
     # ld.add_action(ekf_node)
+    #> copilot[ADD][PATH]: disabled by default; uncomment to launch odom_to_path
+    # ld.add_action(odom_to_path_node)
 
     return ld
