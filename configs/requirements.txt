@@ -1,0 +1,17 @@
+# Host-side Python tooling for F110th
+# These are installed into the project's .venv by setup.sh
+# (NOT for inside the Docker container — ROS packages use rosdep/pip inside Docker)
+
+# Data analysis & visualization
+numpy>=1.21.0
+scipy>=1.7.0
+matplotlib>=3.5.0
+pandas
+
+opencv-python>=4.6.0
+
+# ROS bag parsing (host-side)
+# rosbags          # uncomment if you need to parse .db3 / .mcap bags on the host
+
+# Utilities
+pyyaml

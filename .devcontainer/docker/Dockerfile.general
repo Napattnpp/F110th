@@ -1,0 +1,94 @@
+# 1. Use the ros humble image
+FROM ros:humble-perception-jammy
+
+# Build-time user args (injected from docker-compose / .env)
+ARG USER=f110th
+ARG UID=1000
+ARG GID=1000
+
+# 2. ROS core setup & locales
+RUN apt-get update && apt-get install -y locales \
+    && locale-gen en_US en_US.UTF-8 \
+    && update-locale LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8 \
+    && rm -rf /var/lib/apt/lists/*
+ENV LANG=en_US.UTF-8
+ENV ROS_DISTRO=humble
+
+# 3. Cyclone DDS Configuration for Shared Memory
+COPY ./.devcontainer/docker/cyclonedds.xml /cyclonedds.xml
+ENV CYCLONEDDS_URI=file:///cyclonedds.xml
+
+# 4. Additional installations
+RUN apt-get update && apt-get install -y \
+    sudo \
+    nano \
+    vim \
+    tmux \
+    htop \
+    iputils-ping \
+    net-tools \
+    git \
+    python3-pip \
+    python3-numpy \
+    python3-scipy \
+    udev \
+    i2c-tools \
+    python3-rosdep \
+    ros-$ROS_DISTRO-turtlesim \
+    ros-$ROS_DISTRO-rqt \
+    ros-$ROS_DISTRO-rmw-cyclonedds-cpp \
+    ros-$ROS_DISTRO-rqt-common-plugins \
+    ros-$ROS_DISTRO-slam-toolbox \
+    ros-$ROS_DISTRO-cartographer \
+    ros-$ROS_DISTRO-cartographer-ros \
+    ros-$ROS_DISTRO-navigation2 \
+    ros-$ROS_DISTRO-nav2-bringup \
+    ros-$ROS_DISTRO-ackermann-msgs \
+    ros-$ROS_DISTRO-serial-driver \
+    ros-$ROS_DISTRO-asio-cmake-module \
+    ros-$ROS_DISTRO-joy \
+    ros-$ROS_DISTRO-urg-node \
+    ros-$ROS_DISTRO-xacro \
+    ros-$ROS_DISTRO-robot-state-publisher \
+    ros-$ROS_DISTRO-joy-teleop \
+    ros-$ROS_DISTRO-foxglove-bridge \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install additional Python packages
+RUN python3 -m pip install smbus2 transforms3d
+
+# 5. Micro ROS (general image only)
+SHELL ["/bin/bash", "-c"]
+WORKDIR /uros_ws
+RUN git clone -b $ROS_DISTRO https://github.com/micro-ROS/micro_ros_setup.git src/micro_ros_setup \
+    && source /opt/ros/$ROS_DISTRO/setup.bash \
+    && rosdep update \
+    && apt-get update \
+    && rosdep install --from-paths src --ignore-src -y \
+    && rm -rf /var/lib/apt/lists/* \
+    && colcon build \
+    && source install/local_setup.bash \
+    && ros2 run micro_ros_setup create_agent_ws.sh \
+    && ros2 run micro_ros_setup build_agent.sh
+SHELL ["/bin/sh", "-c"]
+
+# 6. Create non-root user matching the host UID/GID
+RUN groupadd -f -g ${GID} ${USER} \
+    && useradd -ms /bin/bash -u ${UID} -g ${GID} ${USER} \
+    && echo "${USER} ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+
+# 7. Configure user environment
+USER ${USER}
+RUN echo "source /opt/ros/$ROS_DISTRO/setup.bash" >> /home/${USER}/.bashrc \
+    && echo "source /uros_ws/install/setup.bash" >> /home/${USER}/.bashrc \
+    && echo "if [ -f /home/${USER}/F110th/out/install/setup.bash ]; then source /home/${USER}/F110th/out/install/setup.bash; fi" >> /home/${USER}/.bashrc \
+    && echo "export ROS_DOMAIN_ID=${ROS_DOMAIN_ID}" >> /home/${USER}/.bashrc \
+    && echo "export RMW_IMPLEMENTATION=${RMW_IMPLEMENTATION}" >> /home/${USER}/.bashrc
+
+USER root
+WORKDIR /home/${USER}/F110th
+
+COPY ./.devcontainer/docker/ros_entrypoint.sh /
+RUN chmod +x /ros_entrypoint.sh
+ENTRYPOINT ["/ros_entrypoint.sh"]
+CMD ["bash"]

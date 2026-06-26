@@ -1,0 +1,34 @@
+{
+    "name": "F110th Stack Humble Dev",
+    "dockerComposeFile": "../docker-compose.yml",
+    "service": "general",
+    "runServices": [
+        "general"
+    ],
+    "initializeCommand": "/bin/bash -c 'source ${localWorkspaceFolder}/.devcontainer/xauth_setup.sh'",
+    "workspaceFolder": "/home/${localEnv:USER}/F110th",
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "ms-vscode.cpptools",
+                "ms-vscode.cpptools-themes",
+                "ms-vscode.cpptools-extension-pack",
+                "twxs.cmake",
+                "donjayamanne.python-extension-pack",
+                "aaron-bond.better-comments",
+                "eamodio.gitlens",
+                "ms-iot.vscode-ros",
+                "Github.copilot",
+                "redhat.vscode-xml",
+                "ms-python.autopep8",
+                "xaver.clang-format",
+                "cschlosser.doxdocgen",
+                "foxundermoon.shell-format",
+                "timonwong.shellcheck"
+            ]
+        }
+    },
+    "containerEnv": {
+        "DISPLAY": ":501"
+    }
+}

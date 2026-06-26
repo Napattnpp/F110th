@@ -1,0 +1,84 @@
+# 1. Use the hardware-accelerated Jetson L4T image
+FROM dustynv/ros:humble-desktop-l4t-r36.4.0
+
+# Build-time user args (injected from docker-compose / .env)
+ARG USER=f110th
+ARG UID=1000
+ARG GID=1000
+
+# Refresh ROS keyring
+RUN curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key -o /usr/share/keyrings/ros-archive-keyring.gpg
+
+# 2. ROS core setup & locales
+RUN apt-get update && apt-get install -y locales \
+    && locale-gen en_US en_US.UTF-8 \
+    && update-locale LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8 \
+    && rm -rf /var/lib/apt/lists/*
+ENV LANG=en_US.UTF-8
+ENV ROS_DISTRO=humble
+
+# 3. Cyclone DDS Configuration for Shared Memory
+COPY ./.devcontainer/docker/cyclonedds.xml /cyclonedds.xml
+ENV CYCLONEDDS_URI=file:///cyclonedds.xml
+
+# 4. Additional installations
+# NOTE: micro-ROS is NOT installed here. The dustynv base image provides
+#       GPU-accelerated ROS; install micro-ROS on the host or use the
+#       general image for agent development.
+RUN apt-get update && apt-get install -y \
+    sudo \
+    nano \
+    vim \
+    tmux \
+    htop \
+    iputils-ping \
+    net-tools \
+    git \
+    python3-pip \
+    python3-numpy \
+    python3-scipy \
+    udev \
+    i2c-tools \
+    python3-rosdep \
+    ros-$ROS_DISTRO-turtlesim \
+    ros-$ROS_DISTRO-rqt \
+    ros-$ROS_DISTRO-rmw-cyclonedds-cpp \
+    ros-$ROS_DISTRO-rqt-common-plugins \
+    ros-$ROS_DISTRO-slam-toolbox \
+    ros-$ROS_DISTRO-cartographer \
+    ros-$ROS_DISTRO-cartographer-ros \
+    ros-$ROS_DISTRO-navigation2 \
+    ros-$ROS_DISTRO-nav2-bringup \
+    ros-$ROS_DISTRO-ackermann-msgs \
+    ros-$ROS_DISTRO-serial-driver \
+    ros-$ROS_DISTRO-asio-cmake-module \
+    ros-$ROS_DISTRO-joy \
+    ros-$ROS_DISTRO-urg-node \
+    ros-$ROS_DISTRO-xacro \
+    ros-$ROS_DISTRO-robot-state-publisher \
+    ros-$ROS_DISTRO-joy-teleop \
+    ros-$ROS_DISTRO-foxglove-bridge \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install additional Python packages
+RUN python3 -m pip install smbus2 transforms3d
+
+# 5. Create non-root user matching the host UID/GID
+RUN groupadd -f -g ${GID} ${USER} \
+    && useradd -ms /bin/bash -u ${UID} -g ${GID} ${USER} \
+    && echo "${USER} ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+
+# 6. Configure user environment
+USER ${USER}
+RUN echo "source /opt/ros/$ROS_DISTRO/setup.bash" >> /home/${USER}/.bashrc \
+    && echo "if [ -f /home/${USER}/F110th/out/install/setup.bash ]; then source /home/${USER}/F110th/out/install/setup.bash; fi" >> /home/${USER}/.bashrc \
+    && echo "export ROS_DOMAIN_ID=${ROS_DOMAIN_ID}" >> /home/${USER}/.bashrc \
+    && echo "export RMW_IMPLEMENTATION=${RMW_IMPLEMENTATION}" >> /home/${USER}/.bashrc
+
+USER root
+WORKDIR /home/${USER}/F110th
+
+COPY ./.devcontainer/docker/ros_entrypoint.sh /
+RUN chmod +x /ros_entrypoint.sh
+ENTRYPOINT ["/ros_entrypoint.sh"]
+CMD ["bash"]

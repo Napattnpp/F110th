@@ -1,0 +1,8 @@
+# Arduino MKR Zero for micro-ROS
+SUBSYSTEM=="tty", ATTRS{idVendor}=="2341", ATTRS{idProduct}=="804f", MODE="0666", SYMLINK+="sensors/micro_ros"
+
+# VESC Motor Controller
+SUBSYSTEM=="tty", ATTRS{idVendor}=="0483", ATTRS{idProduct}=="5740", MODE="0666", SYMLINK+="sensors/vesc"
+
+# RP-Lidar S1
+SUBSYSTEM=="tty", ATTRS{idVendor}=="10c4", ATTRS{idProduct}=="ea60", MODE="0666", SYMLINK+="sensors/rplidar"
