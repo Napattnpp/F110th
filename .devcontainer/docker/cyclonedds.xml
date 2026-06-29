@@ -5,7 +5,7 @@
             <!-- <NetworkInterfaceAddress>127.0.0.1</NetworkInterfaceAddress> -->
         </General>
         <SharedMemory>
-            <Enable>true</Enable>
+            <Enable>false</Enable>
             <LogLevel>info</LogLevel>
         </SharedMemory>
     </Domain>

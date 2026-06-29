@@ -12,7 +12,7 @@ ORIGINAL_XAUTHORITY := $(XAUTHORITY)
 -include .env
 export
 
-.PHONY: help setup export_env setup_build_output build launch attach stop push clean prune
+.PHONY: help setup export_env colcon_build clean docker_build docker_launch docker_attach docker_stop docker_push docker_prune
 
 # ── Auto-detect platform ───────────────────────────────────────────────────────
 HOST_OS := $(shell uname)
@@ -51,7 +51,7 @@ help: ## Show available targets
 	@echo "  For first-time setup, run: \033[33m./setup.sh\033[0m"
 	@echo ""
 	@echo "  Available targets:"
-	@grep -E '^[a-zA-Z_-]+:.*?## ' Makefile | awk 'BEGIN {FS = ":.*?## "}; {printf "    \033[32m%-18s\033[0m %s\n", $$1, $$2}'
+	@grep -E '^[a-zA-Z0-9_-]+:.*?## ' Makefile | awk 'BEGIN {FS = ":.*?## "}; {printf "    \033[32m%-18s\033[0m %s\n", $$1, $$2}'
 	@echo ""
 
 setup: ## Run the full first-time setup (same as configs/setup.sh)
@@ -64,21 +64,27 @@ export_env: ## Re-generate the .env file from configs/f110th.config
 	    "$$USER" "$$(id -u)" "$$(id -g)" "$$ROS_DOMAIN_ID" "$$RMW_IMPLEMENTATION" "$$RACECAR_VERSION" "$$DOCKER_PROFILE" "$$DOCKERHUB_USER" "$$IMAGE_NAME" > .env
 	@echo ".env written."
 
-setup_build_output: ## Create out/{build,install,logs} directories
-	@echo "Creating colcon build output directories..."
+colcon_build: ## Build the workspace locally (creates directories if missing)
+	@echo "Building with colcon to out/ ..."
 	@mkdir -p out/build out/install out/logs
-	@echo "Colcon build output directories ready at out/"
+	@bash -c "source /opt/ros/humble/setup.bash && colcon --log-base out/logs build --build-base out/build --install-base out/install --symlink-install"
+	@echo "Build complete. Run: source out/install/setup.bash"
 
-build: ## Build the Docker image for your detected platform (SERVICE override: make build SERVICE=jetson)
+clean: ## Remove colcon build output directory (out/)
+	@echo "Removing out/ ..."
+	rm -rf out/
+	@echo "Colcon build output removed."
+
+docker_build: ## Build the Docker image for your detected platform (SERVICE override: make build SERVICE=jetson)
 	@echo "Building service: $(SERVICE) (detected arch: $(ARCH))"
 	docker compose build $(SERVICE)
 
-launch: ## Launch the container in detached mode
+docker_launch: ## Launch the container in detached mode
 	@echo "Launching service: $(SERVICE)"
 	docker compose --profile $(SERVICE) up -d
 	@echo "Container started. Attach with: make attach"
 
-attach: ## Attach to the running container and sync dynamic X11 forwarding credentials
+docker_attach: ## Attach to the running container and sync dynamic X11 forwarding credentials
 	@if [ "$(HOST_OS)" = "Darwin" ]; then \
 		if ! pgrep -x "Xquartz" >/dev/null 2>&1; then \
 			open -a XQuartz; \
@@ -99,23 +105,18 @@ attach: ## Attach to the running container and sync dynamic X11 forwarding crede
 	fi
 	docker compose exec -e DISPLAY=$(DISPLAY) -e XAUTHORITY="$(XAUTHORITY_ENV)" -e LIBGL_ALWAYS_INDIRECT="$(LIBGL_ENV)" -u $(USER) $(SERVICE) /bin/bash
 
-stop: ## Stop the container
+docker_stop: ## Stop the container
 	docker compose --profile $(SERVICE) stop
 	@echo "Container stopped."
 
-push: ## Build and push image to DockerHub (requires DOCKERHUB_USER and IMAGE_NAME in .env)
+docker_push: ## Build and push image to DockerHub (requires DOCKERHUB_USER and IMAGE_NAME in .env)
 	@[ -n "$(DOCKERHUB_USER)" ] || (echo "DOCKERHUB_USER not set in .env"; exit 1)
 	@[ -n "$(IMAGE_NAME)"    ] || (echo "IMAGE_NAME not set in .env"; exit 1)
 	docker compose build $(SERVICE)
 	docker push $(DOCKERHUB_USER)/$(IMAGE_NAME):humble-$(SERVICE)
 	@echo "Pushed: $(DOCKERHUB_USER)/$(IMAGE_NAME):humble-$(SERVICE)"
 
-clean: ## Remove colcon build output directories
-	@echo "Removing out/ ..."
-	rm -rf out/
-	@echo "Colcon build output removed."
-
-prune: stop ## Stop containers, remove volumes, and delete build outputs and .env
+docker_prune: stop ## Stop containers, remove volumes, and delete build outputs and .env
 	@echo "Removing containers and volumes..."
 	docker compose --profile $(SERVICE) down --volumes --remove-orphans
 	@echo "Removing environment configurations..."

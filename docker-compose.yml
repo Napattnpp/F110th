@@ -32,8 +32,12 @@ x-common-settings: &common-settings
     - ${XAUTHORITY:-/tmp/.docker.xauth}:${XAUTHORITY:-/tmp/.docker.xauth}
     # Source code (repo root → workspace inside container)
     - .:/home/${USER}/F110th
+    # CycloneDDS configuration override (disables shared memory to prevent RouDi timeouts)
+    - ./.devcontainer/docker/cyclonedds.xml:/cyclonedds.xml:ro
     # Dedicated log volume (persists outside the colcon build output)
     - ~/f110th_logs:/logs
+    # Global Tmux configuration
+    - ./configs/.tmux.conf:/home/${USER}/.tmux.conf:ro
   command: /bin/bash
 
 # ─────────────────────────────────────────────────────────────────────────────
