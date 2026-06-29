@@ -51,13 +51,6 @@ echo "Installing jetson-stats..."
 sudo apt-get install -y python3-pip
 sudo -H pip3 install -U jetson-stats
 
-# 7. Log Directory
-mkdir -p ~/f110th_logs
-
-# 8. Tmux Workspace Script (Symlink)
-echo "Symlinking tmux workspace launcher..."
-ln -sf "$CONFIG_DIR/start_f1tenth_workspace.sh" ~/start_f1tenth_workspace.sh
-chmod +x ~/start_f1tenth_workspace.sh
 
 # 9. Wi-Fi Power Saving
 echo "Copying NetworkManager config..."
