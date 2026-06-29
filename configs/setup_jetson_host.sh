@@ -10,10 +10,13 @@ sudo jetson_clocks
 
 echo "Starting Jetson Host Setup (Dotfiles Method)..."
 
-# 1. Setup Screen (xhost)
-echo "Configuring xhost..."
+# 1. Setup Screen (xhost & OpenGL Forwarding)
+echo "Configuring xhost and OpenGL forwarding..."
 if ! grep -q "xhost +local:root" ~/.bashrc; then
     echo -e '\n# Allow local root (Docker containers) to access X11 display\nif [ -n "$DISPLAY" ]; then\n    xhost +local:root >/dev/null 2>&1\nfi' >> ~/.bashrc
+fi
+if ! grep -q "export LIBGL_ALWAYS_INDIRECT=" ~/.bashrc; then
+    echo -e '\n# Fix OpenGL rendering issues over SSH X11 forwarding\nexport LIBGL_ALWAYS_INDIRECT=1' >> ~/.bashrc
 fi
 
 # 2. Setup udev rules
