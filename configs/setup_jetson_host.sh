@@ -40,11 +40,6 @@ if ! grep -q "usbcore.usbfs_memory_mb=" "$EXTLINUX_CONF"; then
     sudo sed -i 's/\(^[[:space:]]*APPEND[[:space:]]\)/\1usbcore.usbfs_memory_mb=1024 /' "$EXTLINUX_CONF"
 fi
 
-# 5. Docker Aliases
-echo "Configuring Bash aliases..."
-if ! grep -q "alias startf1" ~/.bashrc; then
-    echo -e "\n# F1TENTH Docker Aliases\nalias startf1='sudo docker start f1tenth_jetson'\nalias stopf1='sudo docker stop f1tenth_jetson'\nalias execf1='sudo docker exec -it f1tenth_jetson /bin/bash'" >> ~/.bashrc
-fi
 
 # 6. Install jtop
 echo "Installing jetson-stats..."
