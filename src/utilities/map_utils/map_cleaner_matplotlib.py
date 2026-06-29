@@ -10,6 +10,7 @@ import cv2
 import numpy as np
 import os
 import sys
+import signal
 from pathlib import Path
 from map_cleaner_core import MapCleaner
 
@@ -98,13 +99,29 @@ class MapCleanerApp:
         # Parameter storage
         self.params = {
             'free_th': 222,
-            'wall_thickness': 5,
-            'smooth_radius': 2,
+            'wall_thickness': 3,                # Optimized default based on manual edits
+            'smooth_radius': 5,                 # Optimized default for smooth curves
             'min_blob': 80,
-            'cover_track_edge': True,
+            'cover_track_edge': False,          # Optimized default: walls sit outside the track
             'keep_largest_track': True,
+            'edge_smooth_method': 'bilateral',  # 'bilateral', 'distance', 'contour', 'none'
+            'edge_smooth_iterations': 0,        # 0-3: smoothing iterations
         }
         self.map_resolution = 0.05
+        
+        # Setup signal handlers for safe exit (Ctrl+C, Ctrl+Z)
+        signal.signal(signal.SIGINT, self._signal_handler)   # Ctrl+C
+        signal.signal(signal.SIGTSTP, self._signal_handler)  # Ctrl+Z
+    
+    def _signal_handler(self, signum, frame):
+        """Handle Ctrl+C and Ctrl+Z gracefully."""
+        signal_name = "Ctrl+C" if signum == signal.SIGINT else "Ctrl+Z"
+        print(f"\n\n→ {signal_name} detected")
+        print("✓ Closing interactive GUI safely...")
+        if self.fig is not None:
+            plt.close('all')
+        print("✓ Goodbye!")
+        sys.exit(0)
     
     def load_file(self, filepath=None):
         """Load map file interactively."""
@@ -157,6 +174,8 @@ class MapCleanerApp:
             min_track_blob=self.params['min_blob'],
             cover_track_edge=self.params['cover_track_edge'],
             keep_largest_track=self.params['keep_largest_track'],
+            edge_smooth_method=self.params['edge_smooth_method'],
+            edge_smooth_iterations=self.params['edge_smooth_iterations'],
         )
         if self.fig is not None and self.ax_clean is not None:
             self.redraw()
@@ -229,6 +248,7 @@ class MapCleanerApp:
         # Params display
         param_text = (
             f"free_th={self.params['free_th']} wall={self.params['wall_thickness']}px "
+            f"smooth_radius={self.params['smooth_radius']} cover_edge={self.params['cover_track_edge']} "
             f"resolution={self.map_resolution:.3f} m/px from YAML"
         )
         for text in list(self.fig.texts):
@@ -262,8 +282,9 @@ class MapCleanerApp:
             color='#202020',
         )
 
-        sliders_height = 0.035
-        slider_y_start = 0.27
+        sliders_height = 0.025
+        slider_y_start = 0.28
+        slider_spacing = 0.05
         slider_width = 0.58
         slider_x = 0.30
 
@@ -271,10 +292,13 @@ class MapCleanerApp:
         slider_labels = [
             ('free_th', 'White threshold', 150, 254, 1, self.params['free_th']),
             ('wall_thickness', 'Wall thickness', 1, 24, 1, self.params['wall_thickness']),
+            ('smooth_radius', 'Track smooth radius', 0, 10, 1, self.params['smooth_radius']),
+            ('cover_track_edge', 'Cover track edge (0/1)', 0, 1, 1, 1 if self.params['cover_track_edge'] else 0),
+            ('edge_smooth_iterations', 'Edge straighten (0=none)', 0, 3, 1, self.params['edge_smooth_iterations']),
         ]
         
         for i, (key, label, vmin, vmax, step, init) in enumerate(slider_labels):
-            y = slider_y_start - i * 0.075
+            y = slider_y_start - i * slider_spacing
             ax_slider = plt.axes([slider_x, y, slider_width, sliders_height])
             slider = Slider(ax_slider, label, vmin, vmax, valinit=init, valstep=step, 
                           color='#185FA5', alpha=0.7)
@@ -282,7 +306,10 @@ class MapCleanerApp:
             
             def make_callback(k):
                 def on_change(val):
-                    self.params[k] = int(val)
+                    if k == 'cover_track_edge':
+                        self.params[k] = bool(val)
+                    else:
+                        self.params[k] = int(val)
                     self.update_clean()
                 return on_change
             
@@ -298,53 +325,92 @@ class MapCleanerApp:
         clear_button.on_clicked(clear_measure)
         self.clear_button = clear_button
 
-        instr = "Click two points to measure   S save   Q quit   R reset cleaning"
+        instr = "Click two points to measure   [S] save (cleaned image)   [Q] quit   [R] reset   Ctrl+C/Z safe exit"
         plt.figtext(0.06, 0.055, instr, fontsize=9, family='monospace')
+        
+        # Show which smoothing method is being used
+        smooth_method_text = f"Edge straightening: {self.params['edge_smooth_method']} | Iterations: {self.params['edge_smooth_iterations']}"
+        plt.figtext(0.06, 0.025, smooth_method_text, fontsize=8, family='monospace', style='italic')
+        
+        # Disable matplotlib's default key handlers completely
+        # This prevents matplotlib from intercepting 's' to save the figure
+        if self.fig.canvas.manager.toolbar is not None:
+            self.fig.canvas.manager.toolbar.hide()  # Hide toolbar (Qt backend)
+        
+        # Remove ALL default matplotlib key press handlers
+        for cid in list(self.fig.canvas.callbacks.callbacks['key_press_event'].keys()):
+            self.fig.canvas.mpl_disconnect(cid)
         
         # Key handlers
         def on_key(event):
             if event.key == 's':
+                # Our custom save handler for the cleaned image
                 self.save_interactive()
             elif event.key == 'q':
+                print("\n→ Quitting...")
                 plt.close('all')
+                print("✓ Goodbye!")
+                sys.exit(0)
             elif event.key == 'r':
                 tuned = MapCleaner(verbose=False).auto_tune_f1tenth(self.raw_img)
                 defaults = {
                     'free_th': tuned['free_threshold'],
                     'wall_thickness': tuned['wall_thickness'],
+                    'smooth_radius': tuned['smooth_radius'],
+                    'cover_track_edge': 1 if tuned['cover_track_edge'] else 0,
+                    'edge_smooth_iterations': 0,
                 }
                 self.params.update({
-                    'cover_track_edge': tuned['cover_track_edge'],
                     'keep_largest_track': tuned['keep_largest_track'],
                 })
                 for key, value in defaults.items():
                     sliders[key].set_val(value)
-                    self.params[key] = value
+                    if key == 'cover_track_edge':
+                        self.params[key] = bool(value)
+                    else:
+                        self.params[key] = int(value)
                 self.update_clean()
         
+        # Connect our handler AFTER removing defaults
         self.fig.canvas.mpl_connect('key_press_event', on_key)
         self.fig.canvas.mpl_connect('button_press_event', self.on_image_click)
         
         plt.show()
     
     def save_interactive(self):
-        """Save from interactive mode."""
+        """Save cleaned image when user presses 'S' - auto-saves to file and closes window."""
         if self.clean_img is None:
             print("✗ No cleaned image to save")
             return
         
-        default_name = 'map_cleaned.pgm'
-        print(f"\nSave as [{default_name}]: ", end='', flush=True)
-        user_input = input().strip()
-        
-        filename = user_input if user_input else default_name
+        # Save in the SAME directory as the input map
+        if self.map_path:
+            input_dir = Path(self.map_path).parent
+            base_name = Path(self.map_path).stem
+            filename = input_dir / f"{base_name}_cleaned.pgm"
+        else:
+            # If no input map (demo mode), save in current directory
+            filename = Path('map_cleaned.pgm')
         
         try:
-            if filename.endswith('.pgm'):
-                save_pgm(filename, self.clean_img)
+            # Ensure the directory exists
+            filename.parent.mkdir(parents=True, exist_ok=True)
+            
+            # Save the cleaned image (numpy array), not the matplotlib figure
+            if str(filename).endswith('.pgm'):
+                save_pgm(str(filename), self.clean_img)
             else:
-                cv2.imwrite(filename, self.clean_img)
-            print(f"✓ Saved: {filename}")
+                # Force cv2 to save the array directly
+                success = cv2.imwrite(str(filename), self.clean_img)
+                if not success:
+                    raise IOError(f"cv2.imwrite failed for {filename}")
+            print(f"✓ Saved cleaned image: {filename}")
+            print("→ Closing window...")
+            # Auto-close window after successful save
+            if self.fig is not None:
+                plt.close('all')
+            print("✓ Goodbye!")
+            sys.exit(0)
         except Exception as e:
             print(f"✗ Save failed: {e}")
     
@@ -457,7 +523,8 @@ Examples:
         app.run_batch(args.output)
     else:
         print("\n→ Launching interactive GUI...")
-        print("   Press [S] to save, [Q] to quit, [R] to reset")
+        print("   [S] to save cleaned image | [Q] to quit | [R] to reset")
+        print("   Ctrl+C or Ctrl+Z for safe exit")
         app.run_interactive()
 
 if __name__ == '__main__':

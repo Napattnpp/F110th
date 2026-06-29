@@ -146,6 +146,310 @@ class MapCleaner:
         return (mag / mag.max() * 255).astype(np.uint8) if mag.max() > 0 else mag.astype(np.uint8)
     
     @staticmethod
+    def gaussian_blur(img, kernel_size=5, sigma=1.0):
+        """Apply Gaussian blur to smooth edges."""
+        if kernel_size % 2 == 0:
+            kernel_size += 1  # Ensure odd kernel size
+        return cv2.GaussianBlur(img, (kernel_size, kernel_size), sigma)
+    
+    @staticmethod
+    def morphological_close(img, iterations=1, kernel_size=3):
+        """Morphological closing: dilation followed by erosion (fills small holes)."""
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (kernel_size, kernel_size))
+        return cv2.morphologyEx(img, cv2.MORPH_CLOSE, kernel, iterations=iterations)
+    
+    @staticmethod
+    def morphological_open(img, iterations=1, kernel_size=3):
+        """Morphological opening: erosion followed by dilation (removes small noise)."""
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (kernel_size, kernel_size))
+        return cv2.morphologyEx(img, cv2.MORPH_OPEN, kernel, iterations=iterations)
+    
+    @staticmethod
+    def bilateral_filter(img, d=9, sigma_color=75, sigma_space=75):
+        """Apply bilateral filter to smooth edges while preserving boundaries.
+        
+        This smooths the image while keeping sharp edges intact.
+        Great for smoothing walls without blurring boundaries.
+        """
+        if img.dtype != np.uint8:
+            img = img.astype(np.uint8)
+        return cv2.bilateralFilter(img, d, sigma_color, sigma_space)
+    
+    @staticmethod
+    def distance_field_smooth(binary_img, iterations=2):
+        """Smooth a binary image using distance transform smoothing.
+        
+        Converts to distance field, smooths it, then rethresholds.
+        This actually moves pixels to create straighter edges.
+        """
+        if binary_img.max() == 0:
+            return binary_img
+        
+        # Compute distance transform
+        dist = cv2.distanceTransform(binary_img, cv2.DIST_L2, cv2.DIST_MASK_PRECISE)
+        
+        # Smooth the distance field with Gaussian blur
+        for _ in range(iterations):
+            dist = cv2.GaussianBlur(dist, (5, 5), 0)
+        
+        # Rethreshold to create smooth binary image
+        result = cv2.threshold(dist, dist.max() * 0.3, 255, cv2.THRESH_BINARY)[1]
+        return result.astype(np.uint8)
+    
+    @staticmethod
+    def contour_smooth(binary_img, epsilon_factor=0.02):
+        """Smooth wall contours by approximating them with fewer points.
+        
+        This finds the wall edges and smooths them by fitting simpler curves.
+        Directly straightens misaligned pixels.
+        
+        Args:
+            binary_img: Binary image (walls=255, background=0)
+            epsilon_factor: Contour approximation precision (lower=smoother)
+        
+        Returns:
+            Smoothed binary image with straighter walls
+        """
+        if binary_img.max() == 0:
+            return binary_img
+        
+        # Find contours (wall boundaries)
+        contours, _ = cv2.findContours(binary_img, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
+        
+        if not contours:
+            return binary_img
+        
+        # Create output image
+        h, w = binary_img.shape
+        result = np.zeros((h, w), dtype=np.uint8)
+        
+        # Process each contour
+        for contour in contours:
+            if cv2.contourArea(contour) < 10:  # Skip tiny contours
+                continue
+            
+            # Approximate the contour to a simpler shape (smoothing)
+            epsilon = epsilon_factor * cv2.arcLength(contour, True)
+            approx = cv2.approxPolyDP(contour, epsilon, True)
+            
+            # Draw the smoothed contour
+            cv2.drawContours(result, [approx], 0, 255, -1)
+        
+        return result
+    
+    @staticmethod
+    def _pixel_snap_edges(binary_img):
+        """Remove 1-pixel staircase jags from wall boundaries.
+        
+        Scans every boundary pixel of the wall and checks if it forms a
+        staircase offset. When a pixel juts out by 1px from an otherwise
+        straight run (horizontal or vertical), it is either filled in or
+        removed to create a flush edge.
+        
+        The algorithm works on the *outer* boundary of the wall mask.
+        For each boundary pixel it looks at the 4-connected neighbourhood
+        to decide whether the pixel is part of a staircase step.
+        
+        Visual idea:
+            Before:  ---_----   (one pixel dips down)
+            After:   --------   (pixel snapped up to form straight line)
+        """
+        h, w = binary_img.shape
+        wall = (binary_img > 0).astype(np.uint8)
+        result = wall.copy()
+        
+        # Pad to avoid boundary checks
+        padded = np.pad(wall, 1, mode='constant', constant_values=0)
+        out = np.pad(result, 1, mode='constant', constant_values=0)
+        
+        # Find boundary pixels (wall pixel with at least one non-wall 4-neighbor)
+        # Work on padded coordinates (offset by 1)
+        for y in range(1, h + 1):
+            for x in range(1, w + 1):
+                if padded[y, x] == 0:
+                    continue
+                
+                # Check if this is a boundary pixel
+                n4 = [padded[y-1, x], padded[y+1, x], padded[y, x-1], padded[y, x+1]]
+                if sum(n4) == 4:
+                    continue  # Interior pixel, skip
+                
+                # This is a boundary pixel. Check for staircase patterns.
+                # A staircase jag means this pixel sticks out by 1 from
+                # an otherwise straight edge.
+                
+                up, down, left, right = padded[y-1, x], padded[y+1, x], padded[y, x-1], padded[y, x+1]
+                
+                # --- Detect single-pixel protrusion (pixel sticks out) ---
+                # The pixel is a protrusion if it has only 1 wall neighbor in
+                # the 4-connected sense (it's a tip sticking out).
+                wall_neighbors = up + down + left + right
+                if wall_neighbors == 1:
+                    # This pixel sticks out by itself - remove it
+                    out[y, x] = 0
+                    continue
+                
+                # --- Detect staircase step on horizontal runs ---
+                # Pattern: a horizontal run where one pixel shifts up or down
+                # Check if this pixel creates a step in a horizontal wall line
+                
+                # Horizontal run with a 1px vertical offset:
+                # The pixel has wall left AND right, but one of up/down is
+                # misaligned compared to its horizontal neighbors
+                if left == 1 and right == 1:
+                    # This pixel is in a horizontal run
+                    # Check if it's offset vertically from its neighbors
+                    # by looking at the diagonal: if left-neighbor and right-neighbor
+                    # both have a wall pixel above but this one doesn't (or vice versa),
+                    # this pixel is the staircase step
+                    
+                    # Case: neighbors above on left and right exist, but not above this one
+                    # (this pixel dips down from an upper row)
+                    ul, ur = padded[y-1, x-1], padded[y-1, x+1]
+                    dl, dr = padded[y+1, x-1], padded[y+1, x+1]
+                    
+                    if up == 0 and ul == 1 and ur == 1:
+                        # Fill above to straighten: add pixel above
+                        out[y-1, x] = 1
+                    elif down == 0 and dl == 1 and dr == 1:
+                        # Fill below to straighten
+                        out[y+1, x] = 1
+                
+                # Vertical run with a 1px horizontal offset
+                if up == 1 and down == 1:
+                    ul, dl = padded[y-1, x-1], padded[y+1, x-1]
+                    ur, dr = padded[y-1, x+1], padded[y+1, x+1]
+                    
+                    if left == 0 and ul == 1 and dl == 1:
+                        out[y, x-1] = 1
+                    elif right == 0 and ur == 1 and dr == 1:
+                        out[y, x+1] = 1
+        
+        # Remove padding and scale back to 255
+        return (out[1:-1, 1:-1] * 255).astype(np.uint8)
+
+    @staticmethod
+    def _pixel_snap_edges_fast(binary_img):
+        """Fix pixel-level staircase jags along wall boundaries.
+        
+        Scans the wall mask to find and fix two types of staircase artifacts:
+        
+        1. **Concave notches**: A 1-2 pixel indentation in an otherwise 
+           straight wall edge. These get filled in.
+           
+            ##.         ###
+            ##.   ->    ###     (notch on right side filled)
+            ###         ###
+        
+        2. **Convex bumps**: A 1-2 pixel protrusion from an otherwise 
+           straight wall edge. These get removed.
+           
+            ###         ##.
+            ###   ->    ##.     (bump on right side removed)
+            ##.         ##.
+        
+        The algorithm works by scanning each column of the image vertically
+        and each row horizontally, looking at transitions in the wall boundary.
+        """
+        h, w = binary_img.shape
+        wall = (binary_img > 0).astype(np.uint8)
+        result = wall.copy()
+        
+        # Maximum jag size to fix (in pixels)
+        max_jag = 2
+        
+        # ---- Vectorized notch filling ----
+        # For each direction we find "boundary" pixels (wall pixel with no wall 
+        # in that direction) and check whether the empty neighbor is flanked by
+        # wall pixels within max_jag distance on both sides perpendicular to
+        # the direction.
+        
+        # Process all four edge directions (right, left, bottom, top)
+        
+        # -- RIGHT: fill pixel at (y, x+1) when wall[y,x]=1, wall[y,x+1]=0,
+        #    and there exists wall within max_jag rows above AND below at col x+1
+        is_right_boundary = (result[:, :-1] == 1) & (result[:, 1:] == 0)  # shape (h, w-1)
+
+        
+        # For each offset dy=1..max_jag, check if wall exists at (y-dy, x+1) 
+        has_above = np.zeros((h, w - 1), dtype=bool)
+        has_below = np.zeros((h, w - 1), dtype=bool)
+        for dy in range(1, max_jag + 1):
+            has_above[dy:, :] |= (result[:-dy, 1:] == 1) & ~has_above[dy:, :]  
+            has_below[:-dy, :] |= (result[dy:, 1:] == 1) & ~has_below[:-dy, :]
+        # Only keep those on actual boundary
+        fill_right = is_right_boundary & has_above & has_below
+        result[:, 1:] = np.maximum(result[:, 1:], fill_right.astype(np.uint8))
+        
+        # -- LEFT: fill pixel at (y, x-1)
+        is_left_boundary = (result[:, 1:] == 1) & (result[:, :-1] == 0)
+        has_above = np.zeros((h, w - 1), dtype=bool)
+        has_below = np.zeros((h, w - 1), dtype=bool)
+        for dy in range(1, max_jag + 1):
+            has_above[dy:, :] |= (result[:-dy, :-1] == 1)
+            has_below[:-dy, :] |= (result[dy:, :-1] == 1)
+        fill_left = is_left_boundary & has_above & has_below
+        result[:, :-1] = np.maximum(result[:, :-1], fill_left.astype(np.uint8))
+        
+        # -- BOTTOM: fill pixel at (y+1, x)
+        is_bottom_boundary = (result[:-1, :] == 1) & (result[1:, :] == 0)
+        has_left = np.zeros((h - 1, w), dtype=bool)
+        has_right = np.zeros((h - 1, w), dtype=bool)
+        for dx in range(1, max_jag + 1):
+            has_left[:, dx:] |= (result[1:, :-dx] == 1)
+            has_right[:, :-dx] |= (result[1:, dx:] == 1)
+        fill_bottom = is_bottom_boundary & has_left & has_right
+        result[1:, :] = np.maximum(result[1:, :], fill_bottom.astype(np.uint8))
+        
+        # -- TOP: fill pixel at (y-1, x)
+        is_top_boundary = (result[1:, :] == 1) & (result[:-1, :] == 0)
+        has_left = np.zeros((h - 1, w), dtype=bool)
+        has_right = np.zeros((h - 1, w), dtype=bool)
+        for dx in range(1, max_jag + 1):
+            has_left[:, dx:] |= (result[:-1, :-dx] == 1)
+            has_right[:, :-dx] |= (result[:-1, dx:] == 1)
+        fill_top = is_top_boundary & has_left & has_right
+        result[:-1, :] = np.maximum(result[:-1, :], fill_top.astype(np.uint8))
+        
+        return (result * 255).astype(np.uint8)
+
+    @staticmethod
+    def edge_straighten(binary_img, method='bilateral', iterations=1):
+        """Straighten jagged wall edges using smart smoothing.
+        
+        Args:
+            binary_img: Binary image of walls
+            method: 'bilateral' (preserves edges + pixel snap), 
+                     'distance' (moves pixels), 
+                     'contour' (approximates curves)
+            iterations: Number of smoothing iterations
+        
+        Returns:
+            Smoothed binary image with straighter edges
+        """
+        result = binary_img.copy()
+        
+        for _ in range(iterations):
+            if method == 'bilateral':
+                # Step 1: Bilateral filter to smooth gray-level noise
+                result = MapCleaner.bilateral_filter(result.astype(np.uint8), d=9, sigma_color=50, sigma_space=50)
+                result = cv2.threshold(result, 127, 255, cv2.THRESH_BINARY)[1]
+                # Step 2: Pixel-level snap to fix remaining staircase jags
+                result = MapCleaner._pixel_snap_edges_fast(result)
+            
+            elif method == 'distance':
+                # Uses distance field - actually moves misaligned pixels
+                result = MapCleaner.distance_field_smooth(result, iterations=1)
+                result = MapCleaner._pixel_snap_edges_fast(result)
+            
+            elif method == 'contour':
+                # Approximates contours for smooth boundaries
+                result = MapCleaner.contour_smooth(result, epsilon_factor=0.03)
+                result = MapCleaner._pixel_snap_edges_fast(result)
+        
+        return result
+    
+    @staticmethod
     def label_blobs(binary_img):
         """Label connected components."""
         labeled, count = label(binary_img)
@@ -274,22 +578,27 @@ class MapCleaner:
 
         return {
             'free_threshold': free_threshold,
-            'wall_thickness': self._clip_int(np.sqrt(total_px) / 220, 3, 14),
-            'smooth_radius': 2,
+            'wall_thickness': 3,  # Optimized default based on high-quality manual edits
+            'smooth_radius': 5,   # Optimized default for high-quality smooth curves
             'min_track_blob': self._clip_int(total_px * 0.0002, 30, 1000),
-            'cover_track_edge': True,
+            'cover_track_edge': False,  # Optimized default: walls sit outside the track
             'keep_largest_track': True,
         }
 
-    def clean_f1tenth(self, raw_img, free_threshold=None, wall_thickness=5,
-                     smooth_radius=2, min_track_blob=80,
-                     cover_track_edge=True, keep_largest_track=True):
+    def clean_f1tenth(self, raw_img, free_threshold=None, wall_thickness=3,
+                     smooth_radius=5, min_track_blob=80,
+                     cover_track_edge=False, keep_largest_track=True,
+                     edge_smooth_method='bilateral', edge_smooth_iterations=0):
         """
         Clean an F1TENTH racetrack map by segmenting the white track first.
 
         This is better for maps where drivable track is white and non-track
         space is gray: the wall is a fixed-thickness band around the track
         boundary, so both inner and outer boundaries stay consistent.
+        
+        Args:
+            edge_smooth_method: 'bilateral' (sharp edges), 'distance' (pixel alignment), 'contour' (smooth curves), 'none'
+            edge_smooth_iterations: Number of smoothing iterations (1-3 recommended)
         """
         img = raw_img.astype(np.uint8)
         h, w = img.shape
@@ -300,6 +609,13 @@ class MapCleaner:
         track_mask = img >= int(free_threshold)
 
         if smooth_radius > 0:
+            # Apply Gaussian Blur first to smooth high-frequency edge noise
+            gauss_k = int(smooth_radius) * 2 + 1
+            track_f = track_mask.astype(np.float32)
+            track_blurred = cv2.GaussianBlur(track_f, (gauss_k, gauss_k), 0)
+            track_mask = track_blurred > 0.5
+            
+            # Apply Morphological closing/opening to ensure no holes/islands
             kernel_size = int(smooth_radius) * 2 + 1
             kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (kernel_size, kernel_size))
             track_mask = cv2.morphologyEx(track_mask.astype(np.uint8), cv2.MORPH_CLOSE, kernel) > 0
@@ -339,7 +655,22 @@ class MapCleaner:
         result = np.full((h, w), 128, dtype=np.uint8)
         result[track_mask] = 255
         result[wall_mask] = 0
-
+        
+        # Apply wall edge straightening if requested
+        if edge_smooth_method != 'none' and edge_smooth_iterations > 0:
+            # Extract wall pixels for smoothing
+            wall_binary = (result == 0).astype(np.uint8) * 255
+            
+            # Apply edge straightening (actually moves pixels to align them)
+            wall_smooth = self.edge_straighten(wall_binary, 
+                                              method=edge_smooth_method,
+                                              iterations=edge_smooth_iterations)
+            
+            # Put straightened walls back
+            result[wall_smooth == 255] = 0
+            result[wall_smooth == 0] = 128  # Reset unknowns
+            result[track_mask] = 255  # Preserve track
+        
         stats = self.compute_stats(result)
         self.log(
             f"F1TENTH clean: {stats['walls']}% wall, "

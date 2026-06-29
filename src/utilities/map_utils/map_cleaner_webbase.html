@@ -1,0 +1,529 @@
+
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font-sans);font-size:13px;color:var(--color-text-primary)}
+.root{display:flex;flex-direction:column;border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);overflow:hidden}
+.topbar{display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--color-background-secondary);border-bottom:0.5px solid var(--color-border-tertiary);flex-wrap:wrap}
+.btn{font-size:12px;padding:5px 11px;border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md);background:var(--color-background-primary);color:var(--color-text-primary);cursor:pointer;white-space:nowrap}
+.btn:hover{background:var(--color-background-tertiary)}
+.btn.acc{background:#185FA5;color:#E6F1FB;border-color:#185FA5}
+.btn.acc:hover{background:#0C447C}
+.btn:disabled{opacity:0.4;cursor:default}
+.sep{width:1px;height:22px;background:var(--color-border-tertiary);margin:0 2px;flex-shrink:0}
+.body{display:flex;min-height:0}
+.sidebar{width:200px;flex-shrink:0;border-right:0.5px solid var(--color-border-tertiary);background:var(--color-background-secondary);overflow-y:auto}
+.sec{padding:10px 12px;border-bottom:0.5px solid var(--color-border-tertiary)}
+.sec-t{font-size:10px;font-weight:500;color:var(--color-text-tertiary);text-transform:uppercase;letter-spacing:.07em;margin-bottom:9px}
+.row{display:flex;align-items:center;gap:6px;margin-bottom:7px}
+.row label{font-size:12px;color:var(--color-text-secondary);min-width:72px;flex-shrink:0;line-height:1.3}
+.row input[type=range]{flex:1;min-width:0}
+.val{font-size:12px;font-weight:500;min-width:26px;text-align:right}
+.chk-row{display:flex;align-items:center;gap:7px;margin-bottom:7px}
+.chk-row label{font-size:12px;color:var(--color-text-secondary);flex:1}
+.canvas-area{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.views{flex:1;display:grid;grid-template-columns:1fr 1fr;min-height:0}
+.pane{display:flex;flex-direction:column;border-right:0.5px solid var(--color-border-tertiary)}
+.pane:last-child{border-right:none}
+.pane-hd{font-size:10px;color:var(--color-text-tertiary);padding:4px 8px;background:var(--color-background-secondary);border-bottom:0.5px solid var(--color-border-tertiary);letter-spacing:.04em;display:flex;align-items:center;justify-content:space-between}
+.pane-inner{flex:1;background:#1a1a1a;display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative;min-height:200px}
+canvas{image-rendering:pixelated;max-width:100%;max-height:100%}
+.hint{font-size:12px;color:#666;text-align:center;padding:16px;position:absolute}
+.sbar{display:flex;gap:14px;padding:5px 12px;font-size:11px;color:var(--color-text-tertiary);background:var(--color-background-secondary);border-top:0.5px solid var(--color-border-tertiary);flex-wrap:wrap}
+.badge{font-size:10px;padding:2px 7px;border-radius:3px;font-weight:500;background:#EAF3DE;color:#27500A}
+.badge.w{background:#FAEEDA;color:#633806}
+.prog{height:3px;background:var(--color-border-tertiary);position:relative;overflow:hidden}
+.prog-bar{height:100%;background:#185FA5;width:0;transition:width .2s}
+</style>
+
+<h2 class="sr-only">Radar PGM scan map cleaner — remove noise and control wall edge thickness</h2>
+
+<div class="root">
+<div class="topbar">
+  <button class="btn acc" onclick="document.getElementById('fi').click()"><i class="ti ti-upload" aria-hidden="true"></i> Open raw PGM</button>
+  <input type="file" id="fi" accept=".pgm,image/*" style="display:none">
+  <button class="btn" onclick="loadDemo()" id="demoBtn"><i class="ti ti-map-2" aria-hidden="true"></i> Demo scan</button>
+  <div class="sep"></div>
+  <button class="btn acc" onclick="runPipeline()" id="runBtn" disabled><i class="ti ti-adjustments" aria-hidden="true"></i> Apply</button>
+  <button class="btn" onclick="autoRun()" id="autoBtn" disabled>
+    <i class="ti ti-player-play" aria-hidden="true"></i> Auto-apply
+    <input type="checkbox" id="autoChk" style="margin-left:4px;vertical-align:middle" onclick="event.stopPropagation();toggleAuto(this)">
+  </button>
+  <div class="sep"></div>
+  <button class="btn acc" onclick="exportPGM()" id="expBtn" disabled><i class="ti ti-download" aria-hidden="true"></i> Export PGM</button>
+  <span id="badge" class="badge w" style="margin-left:auto">No file</span>
+  <span id="dimLbl" style="font-size:11px;color:var(--color-text-tertiary)"></span>
+</div>
+
+<div class="prog"><div class="prog-bar" id="progBar"></div></div>
+
+<div class="body">
+<div class="sidebar">
+
+  <div class="sec">
+    <div class="sec-t">Noise removal</div>
+    <div class="row">
+      <label>Median kernel</label>
+      <input type="range" id="medK" min="3" max="11" value="7" step="2">
+      <span class="val" id="medKV">7</span>
+    </div>
+    <div class="row">
+      <label>Free threshold</label>
+      <input type="range" id="freeTh" min="180" max="254" value="222" step="1">
+      <span class="val" id="freeThV">222</span>
+    </div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-t">Wall edge thickness</div>
+    <div class="row">
+      <label>Gradient sens.</label>
+      <input type="range" id="gradTh" min="20" max="200" value="60" step="5">
+      <span class="val" id="gradThV">60</span>
+    </div>
+    <div class="row">
+      <label>Dark cutoff</label>
+      <input type="range" id="darkTh" min="50" max="200" value="120" step="5">
+      <span class="val" id="darkThV">120</span>
+    </div>
+    <div class="row">
+      <label>Wall dilation</label>
+      <input type="range" id="dilate" min="0" max="8" value="1" step="1">
+      <span class="val" id="dilateV">1</span>
+    </div>
+    <div class="row">
+      <label>Wall erosion</label>
+      <input type="range" id="erode" min="0" max="8" value="1" step="1">
+      <span class="val" id="erodeV">1</span>
+    </div>
+    <div class="row">
+      <label>Search radius</label>
+      <input type="range" id="searchR" min="2" max="20" value="8" step="1">
+      <span class="val" id="searchRV">8</span>
+    </div>
+    <div style="margin-top:8px;padding:8px;background:var(--color-background-primary);border-radius:var(--border-radius-md);border:0.5px solid var(--color-border-tertiary)">
+      <div style="font-size:11px;color:var(--color-text-tertiary);margin-bottom:4px">Net thickness</div>
+      <div style="font-size:20px;font-weight:500" id="netThick">+0 px</div>
+      <div style="font-size:11px;color:var(--color-text-tertiary)">dilate − erode</div>
+    </div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-t">Cleanup</div>
+    <div class="row">
+      <label>Min wall blob</label>
+      <input type="range" id="minBlob" min="5" max="200" value="20" step="5">
+      <span class="val" id="minBlobV">20</span>
+    </div>
+    <div class="chk-row">
+      <label>Fill inner gaps</label>
+      <input type="checkbox" id="chkFill" checked>
+    </div>
+    <div class="chk-row">
+      <label>Smooth walls</label>
+      <input type="checkbox" id="chkSmooth" checked>
+    </div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-t">Display</div>
+    <div class="chk-row">
+      <label>Show colormap</label>
+      <input type="checkbox" id="chkColor" onchange="recolor()">
+    </div>
+    <div class="row">
+      <label>Colormap</label>
+      <select id="cmap" onchange="recolor()" style="flex:1;font-size:12px;padding:2px 4px;border:0.5px solid var(--color-border-secondary);border-radius:4px;background:var(--color-background-primary);color:var(--color-text-primary)">
+        <option value="gray">Gray</option>
+        <option value="jet">Heat (jet)</option>
+        <option value="viridis">Viridis</option>
+      </select>
+    </div>
+  </div>
+
+</div>
+
+<div class="canvas-area">
+  <div class="views">
+    <div class="pane">
+      <div class="pane-hd"><span>Raw scan</span><span id="rawStats"></span></div>
+      <div class="pane-inner">
+        <canvas id="cvRaw"></canvas>
+        <div class="hint" id="hRaw">Open a PGM or load demo</div>
+      </div>
+    </div>
+    <div class="pane">
+      <div class="pane-hd"><span>Cleaned output</span><span id="procStats"></span></div>
+      <div class="pane-inner">
+        <canvas id="cvProc"></canvas>
+        <div class="hint" id="hProc">Apply filters to preview</div>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+<div class="sbar">
+  <span id="stSize">—</span>
+  <span id="stWalls">—</span>
+  <span id="stFree">—</span>
+  <span id="stNoise">—</span>
+  <span style="margin-left:auto;color:var(--color-text-tertiary)">Jetson Orin Nano · JetPack 6.2.2</span>
+</div>
+</div>
+
+<script>
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+let W=0,H=0,rawPx=null,procPx=null,autoMode=false;
+
+function sv(id,outId){
+  const el=document.getElementById(id);
+  if(!el)return;
+  el.oninput=()=>{
+    if(outId)document.getElementById(outId).textContent=el.value;
+    updateNetThick();
+    if(autoMode)runPipeline();
+  };
+}
+['medK medKV','freeTh freeThV','gradTh gradThV','darkTh darkThV',
+ 'dilate dilateV','erode erodeV','searchR searchRV','minBlob minBlobV']
+  .forEach(p=>{const[a,b]=p.split(' ');sv(a,b);});
+
+['chkFill','chkSmooth'].forEach(id=>{
+  const el=document.getElementById(id);
+  if(el)el.onchange=()=>{if(autoMode)runPipeline();};
+});
+
+function updateNetThick(){
+  const d=parseInt(document.getElementById('dilate').value);
+  const e=parseInt(document.getElementById('erode').value);
+  const net=d-e;
+  document.getElementById('netThick').textContent=(net>=0?'+':'')+net+' px';
+}
+updateNetThick();
+
+function toggleAuto(cb){autoMode=cb.checked;if(autoMode&&rawPx)runPipeline();}
+
+function progress(pct){document.getElementById('progBar').style.width=pct+'%';}
+
+function drawPx(cv,px,w,h,cmap){
+  cv.width=w;cv.height=h;
+  const ctx=cv.getContext('2d');
+  const id=ctx.createImageData(w,h);
+  const d=id.data;
+  for(let i=0;i<w*h;i++){
+    const v=px[i]/255;
+    let r,g,b;
+    if(cmap==='jet'){[r,g,b]=jet(v);}
+    else if(cmap==='viridis'){[r,g,b]=viridis(v);}
+    else{r=g=b=px[i];}
+    d[i*4]=r;d[i*4+1]=g;d[i*4+2]=b;d[i*4+3]=255;
+  }
+  ctx.putImageData(id,0,0);
+}
+
+function jet(t){
+  return[clamp(Math.round(255*(1.5-Math.abs(4*t-3))),0,255),clamp(Math.round(255*(1.5-Math.abs(4*t-2))),0,255),clamp(Math.round(255*(1.5-Math.abs(4*t-1))),0,255)];
+}
+function viridis(t){
+  const s=[[68,1,84],[59,82,139],[33,145,140],[94,201,98],[253,231,37]];
+  const si=Math.min(Math.floor(t*(s.length-1)),s.length-2);
+  const f=t*(s.length-1)-si;
+  return[Math.round(s[si][0]+(s[si+1][0]-s[si][0])*f),Math.round(s[si][1]+(s[si+1][1]-s[si][1])*f),Math.round(s[si][2]+(s[si+1][2]-s[si][2])*f)];
+}
+
+function getCmap(){return document.getElementById('chkColor').checked?document.getElementById('cmap').value:'gray';}
+
+function recolor(){
+  if(rawPx)drawPx(document.getElementById('cvRaw'),rawPx,W,H,getCmap());
+  if(procPx)drawPx(document.getElementById('cvProc'),procPx,W,H,getCmap());
+}
+
+function getV(id){return parseInt(document.getElementById(id).value);}
+function getChk(id){return document.getElementById(id).checked;}
+
+function medianFilter(px,w,h,k){
+  const r=Math.floor(k/2),out=new Uint8Array(px.length),buf=[];
+  for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+    buf.length=0;
+    for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++)
+      buf.push(px[clamp(y+dy,0,h-1)*w+clamp(x+dx,0,w-1)]);
+    buf.sort((a,b)=>a-b);
+    out[y*w+x]=buf[buf.length>>1];
+  }
+  return out;
+}
+
+function sobel(px,w,h){
+  const gx=new Float32Array(w*h),gy=new Float32Array(w*h),mag=new Float32Array(w*h);
+  for(let y=1;y<h-1;y++)for(let x=1;x<w-1;x++){
+    const tl=px[(y-1)*w+x-1],tc=px[(y-1)*w+x],tr=px[(y-1)*w+x+1];
+    const ml=px[y*w+x-1],mr=px[y*w+x+1];
+    const bl=px[(y+1)*w+x-1],bc=px[(y+1)*w+x],br=px[(y+1)*w+x+1];
+    gx[y*w+x]=-tl-2*ml-bl+tr+2*mr+br;
+    gy[y*w+x]=-tl-2*tc-tr+bl+2*bc+br;
+    mag[y*w+x]=Math.sqrt(gx[y*w+x]**2+gy[y*w+x]**2);
+  }
+  return mag;
+}
+
+function dilate(mask,w,h,iter){
+  let cur=new Uint8Array(mask);
+  for(let it=0;it<iter;it++){
+    const next=new Uint8Array(cur);
+    for(let y=1;y<h-1;y++)for(let x=1;x<w-1;x++){
+      if(!cur[y*w+x]){
+        if(cur[(y-1)*w+x]||cur[(y+1)*w+x]||cur[y*w+x-1]||cur[y*w+x+1])next[y*w+x]=1;
+      }
+    }
+    cur=next;
+  }
+  return cur;
+}
+
+function erode(mask,w,h,iter){
+  let cur=new Uint8Array(mask);
+  for(let it=0;it<iter;it++){
+    const next=new Uint8Array(cur);
+    for(let y=1;y<h-1;y++)for(let x=1;x<w-1;x++){
+      if(cur[y*w+x]){
+        if(!cur[(y-1)*w+x]||!cur[(y+1)*w+x]||!cur[y*w+x-1]||!cur[y*w+x+1])next[y*w+x]=0;
+      }
+    }
+    cur=next;
+  }
+  return cur;
+}
+
+function labelBlobs(mask,w,h){
+  const labels=new Int32Array(w*h);
+  let nLabels=0;
+  for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+    if(mask[y*w+x]&&!labels[y*w+x]){
+      nLabels++;
+      const stack=[[x,y]];
+      labels[y*w+x]=nLabels;
+      while(stack.length){
+        const[cx,cy]=stack.pop();
+        const neighbors=[[cx-1,cy],[cx+1,cy],[cx,cy-1],[cx,cy+1]];
+        for(const[nx,ny]of neighbors){
+          if(nx>=0&&ny>=0&&nx<w&&ny<h&&mask[ny*w+nx]&&!labels[ny*w+nx]){
+            labels[ny*w+nx]=nLabels;stack.push([nx,ny]);
+          }
+        }
+      }
+    }
+  }
+  return{labels,nLabels};
+}
+
+function runPipeline(){
+  if(!rawPx){return;}
+  progress(10);
+  setTimeout(()=>{
+  try{
+    const medK=getV('medK');
+    const freeTh=getV('freeTh');
+    const gradTh=getV('gradTh');
+    const darkTh=getV('darkTh');
+    const dil=getV('dilate');
+    const ero=getV('erode');
+    const searchR=getV('searchR');
+    const minBlob=getV('minBlob');
+    const doFill=getChk('chkFill');
+    const doSmooth=getChk('chkSmooth');
+
+    progress(20);
+
+    // Step 1: median filter
+    const filtered=medianFilter(rawPx,W,H,medK);
+    progress(35);
+
+    // Step 2: free space detection
+    const brightMask=new Uint8Array(W*H);
+    for(let i=0;i<W*H;i++)brightMask[i]=filtered[i]>freeTh?1:0;
+
+    // Keep only largest bright blob = track interior
+    const{labels:bLabels,nLabels:nB}=labelBlobs(brightMask,W,H);
+    const bSizes=new Int32Array(nB+1);
+    for(let i=0;i<W*H;i++)if(bLabels[i])bSizes[bLabels[i]]++;
+    let trackLabel=0,trackSz=0;
+    for(let j=1;j<=nB;j++)if(bSizes[j]>trackSz){trackSz=bSizes[j];trackLabel=j;}
+    const trackMask=new Uint8Array(W*H);
+    for(let i=0;i<W*H;i++)if(bLabels[i]===trackLabel)trackMask[i]=1;
+
+    progress(50);
+
+    // Step 3: gradient edge detection
+    const mag=sobel(filtered,W,H);
+
+    // Search zone: dilated track
+    const searchZone=dilate(trackMask,W,H,searchR);
+
+    // Wall candidates in search zone
+    const wallCand=new Uint8Array(W*H);
+    for(let i=0;i<W*H;i++){
+      if(searchZone[i]&&!trackMask[i]){
+        if(mag[i]>gradTh||filtered[i]<darkTh)wallCand[i]=1;
+      }
+    }
+
+    progress(65);
+
+    // Step 4: morphological control — this is the thickness control
+    let wallMask=wallCand;
+    if(doSmooth){
+      wallMask=dilate(wallMask,W,H,1);
+      wallMask=erode(wallMask,W,H,1);
+    }
+    if(dil>0)wallMask=dilate(wallMask,W,H,dil);
+    if(ero>0)wallMask=erode(wallMask,W,H,ero);
+
+    // Remove wall from inside track
+    for(let i=0;i<W*H;i++)if(trackMask[i])wallMask[i]=0;
+
+    progress(75);
+
+    // Step 5: fill inner obstacles (things inside the track)
+    if(doFill){
+      // Holes inside track that are dark = inner obstacles, keep as 0
+      const innerDark=new Uint8Array(W*H);
+      for(let i=0;i<W*H;i++){
+        if(trackMask[i]&&filtered[i]<darkTh)innerDark[i]=1;
+      }
+      for(let i=0;i<W*H;i++)if(innerDark[i])wallMask[i]=1;
+    }
+
+    progress(85);
+
+    // Step 6: remove tiny wall blobs
+    const{labels:wLabels,nLabels:nW}=labelBlobs(wallMask,W,H);
+    const wSizes=new Int32Array(nW+1);
+    for(let i=0;i<W*H;i++)if(wLabels[i])wSizes[wLabels[i]]++;
+    for(let i=0;i<W*H;i++)if(wLabels[i]&&wSizes[wLabels[i]]<minBlob)wallMask[i]=0;
+
+    // Step 7: build output
+    const result=new Uint8Array(W*H).fill(128);
+    for(let i=0;i<W*H;i++){
+      if(trackMask[i])result[i]=255;
+      if(wallMask[i])result[i]=0;
+    }
+
+    procPx=result;
+    progress(95);
+
+    // Count
+    let walls=0,free=0,unk=0;
+    for(let i=0;i<result.length;i++){
+      if(result[i]===0)walls++;
+      else if(result[i]===255)free++;
+      else unk++;
+    }
+    const tot=W*H;
+    document.getElementById('stWalls').textContent=`Walls: ${Math.round(walls/tot*100)}%`;
+    document.getElementById('stFree').textContent=`Free: ${Math.round(free/tot*100)}%`;
+    document.getElementById('stNoise').textContent=`Unknown: ${Math.round(unk/tot*100)}%`;
+    document.getElementById('procStats').textContent=`${walls} wall px`;
+
+    document.getElementById('hProc').style.display='none';
+    drawPx(document.getElementById('cvProc'),result,W,H,getCmap());
+    document.getElementById('expBtn').disabled=false;
+    progress(100);
+    setTimeout(()=>progress(0),600);
+  }catch(e){console.error(e);progress(0);}
+  },10);
+}
+
+function parsePGM(buf){
+  const bytes=new Uint8Array(buf);
+  let i=0;
+  function skipWC(){while(i<bytes.length){if(bytes[i]===35){while(i<bytes.length&&bytes[i]!==10)i++;}else if(bytes[i]<=32)i++;else break;}}
+  function tok(){skipWC();let s='';while(i<bytes.length&&bytes[i]>32)s+=String.fromCharCode(bytes[i++]);return s;}
+  const magic=tok();
+  if(magic!=='P5'&&magic!=='P2'){alert('Supports P5 binary and P2 ASCII PGM only.');return;}
+  const w=parseInt(tok()),h=parseInt(tok()),maxval=parseInt(tok());
+  if(magic==='P5')i++;
+  W=w;H=h;
+  rawPx=new Uint8Array(w*h);
+  if(magic==='P5'){
+    for(let j=0;j<w*h;j++){
+      let v=bytes[i++];if(maxval>255){v=(v<<8)|bytes[i++];}
+      rawPx[j]=Math.round(v*255/maxval);
+    }
+  } else {
+    for(let j=0;j<w*h;j++){
+      let v=parseInt(tok());rawPx[j]=Math.round(v*255/maxval);
+    }
+  }
+  afterLoad();
+}
+
+function afterLoad(){
+  procPx=null;
+  document.getElementById('hRaw').style.display='none';
+  drawPx(document.getElementById('cvRaw'),rawPx,W,H,getCmap());
+  document.getElementById('stSize').textContent=`${W} × ${H} px`;
+  let mn=255,mx=0;
+  for(let i=0;i<rawPx.length;i++){mn=Math.min(mn,rawPx[i]);mx=Math.max(mx,rawPx[i]);}
+  document.getElementById('rawStats').textContent=`${mn}–${mx}`;
+  document.getElementById('badge').textContent='Loaded';
+  document.getElementById('badge').className='badge';
+  document.getElementById('dimLbl').textContent=`${W}×${H}`;
+  document.getElementById('runBtn').disabled=false;
+  document.getElementById('autoBtn').disabled=false;
+}
+
+document.getElementById('fi').onchange=function(e){
+  const file=e.target.files[0];if(!file)return;
+  const name=file.name.toLowerCase();
+  if(name.endsWith('.pgm')){
+    const r=new FileReader();
+    r.onload=ev=>parsePGM(ev.target.result);
+    r.readAsArrayBuffer(file);
+  } else {
+    const url=URL.createObjectURL(file);
+    const img=new Image();
+    img.onload=()=>{
+      W=img.width;H=img.height;
+      const tmp=document.createElement('canvas');tmp.width=W;tmp.height=H;
+      const c=tmp.getContext('2d');c.drawImage(img,0,0);
+      const id=c.getImageData(0,0,W,H);
+      rawPx=new Uint8Array(W*H);
+      for(let i=0;i<W*H;i++)rawPx[i]=Math.round(.299*id.data[i*4]+.587*id.data[i*4+1]+.114*id.data[i*4+2]);
+      afterLoad();URL.revokeObjectURL(url);
+    };
+    img.src=url;
+  }
+  this.value='';
+};
+
+function loadDemo(){
+  W=200;H=200;
+  rawPx=new Uint8Array(W*H);
+  const cx=100,cy=100;
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+    const dist=Math.sqrt((x-cx)**2+(y-cy)**2);
+    let v=128;
+    if(dist<15)v=5;
+    else if(dist<80)v=Math.round(130+50*Math.cos(dist*0.28+Math.atan2(y-cy,x-cx)*3));
+    if(x>50&&x<80&&y>60&&y<140)v=20;
+    if(x>110&&x<140&&y>80&&y<130)v=22;
+    if(x>60&&x<90&&y>110&&y<160)v=18;
+    if(x>130&&x<145&&y>50&&y<65)v=15;
+    const speckle=Math.round((Math.random()-.5)*45);
+    const sp=Math.random()<.04?(Math.random()<.5?0:255):0;
+    rawPx[y*W+x]=clamp(v+speckle+sp,0,255);
+  }
+  afterLoad();
+}
+
+function exportPGM(){
+  if(!procPx){alert('Apply filters first.');return;}
+  const header=`P5\n# Radar scan cleaned - wall thickness controlled\n${W} ${H}\n255\n`;
+  const hb=new TextEncoder().encode(header);
+  const out=new Uint8Array(hb.length+procPx.length);
+  out.set(hb);out.set(procPx,hb.length);
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([out],{type:'image/x-portable-graymap'}));
+  a.download='scan_cleaned.pgm';a.click();
+}
+</script>

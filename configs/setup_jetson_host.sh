@@ -81,7 +81,7 @@ echo "Symlinking .tmux.conf and installing TPM..."
 if [ ! -d "$HOME/.tmux/plugins/tpm" ]; then
     git clone https://github.com/tmux-plugins/tpm ~/.tmux/plugins/tpm
 fi
-ln -sf "$CONFIG_DIR/.tmux.conf" ~/.tmux.conf
+ln -sf "$REPO_DIR/.tmux.conf" ~/.tmux.conf
 
 # 11. Enable Real-Time Priority and Memory Locking limits
 echo "Configuring real-time scheduling limits..."
