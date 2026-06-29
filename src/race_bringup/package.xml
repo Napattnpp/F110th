@@ -1,0 +1,39 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>race_bringup</name>
+  <version>0.0.0</version>
+  <description>Race bringup</description>
+  <maintainer email="nnapat156@gmail.com">napat</maintainer>
+  <license>MIT</license>
+
+  <test_depend>ament_copyright</test_depend>
+  <test_depend>ament_flake8</test_depend>
+  <test_depend>ament_pep257</test_depend>
+  <test_depend>python3-pytest</test_depend>
+
+  <depend>rclpy</depend>
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+  <exec_depend>ros2launch</exec_depend>
+  <exec_depend>controller</exec_depend>
+  <exec_depend>f1tenth_gym_ros</exec_depend>
+  <exec_depend>f1tenth_stack</exec_depend>
+  <exec_depend>foxglove_bridge</exec_depend>
+  <exec_depend>frenet_odom_republisher</exec_depend>
+  <exec_depend>global_planner</exec_depend>
+  <exec_depend>nav2_amcl</exec_depend>
+  <exec_depend>nav2_lifecycle_manager</exec_depend>
+  <exec_depend>nav2_map_server</exec_depend>
+  <exec_depend>robot_state_publisher</exec_depend>
+  <exec_depend>sector_tuner</exec_depend>
+  <exec_depend>spline_planner</exec_depend>
+  <exec_depend>state_estimation</exec_depend>
+  <exec_depend>state_machine</exec_depend>
+  <exec_depend>xacro</exec_depend>
+  <exec_depend>python3-yaml</exec_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

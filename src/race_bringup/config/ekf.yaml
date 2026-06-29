@@ -1,0 +1,79 @@
+ekf_filter_node:
+  ros__parameters:
+    #> Codex: 2D car model for flat-ground F1TENTH driving.
+    two_d_mode: true
+    frequency: 50.0
+    sensor_timeout: 0.1
+    transform_time_offset: 0.0
+    transform_timeout: 0.0
+    print_diagnostics: true
+    debug: false
+    publish_tf: true
+    publish_acceleration: false
+
+    map_frame: map
+    odom_frame: odom
+    base_link_frame: base_link
+    world_frame: odom
+
+    #> Codex: Wheel odometry from vesc_to_odom_node.
+    odom0: /odom
+    odom0_queue_size: 10
+    odom0_nodelay: false
+    odom0_differential: false
+    odom0_relative: false
+    # odom0_pose_rejection_threshold: 5.0
+    # odom0_twist_rejection_threshold: 2.0
+    
+    # --------------------------------------------------------------------------
+    # ODOMETRY FUSION CONFIGURATION (odom0)
+    # --------------------------------------------------------------------------
+    # Config/State order is:
+    # [ 0: x,      1: y,      2: z,
+    #   3: roll,   4: pitch,  5: yaw,
+    #   6: vx,     7: vy,     8: vz,
+    #   9: vroll, 10: vpitch, 11: vyaw,
+    #  12: ax,    13: ay,    14: az ]
+    #
+    # PRACTICAL RULES:
+    # 1. Do NOT fuse absolute positions (x, y) from wheel encoders. Encoders slip
+    #    and accumulate infinite drift; fusing them forces EKF to track this drift.
+    #    We only fuse velocity (vx) and let EKF integrate it smoothly.
+    # 2. Do NOT fuse yaw (5) or vyaw (11) from odom0 here because:
+    #    - Your vesc_to_odom_node is set to get its heading from the IMU's /yaw_rad.
+    #    - Fusing it here would double-fuse the same IMU data, violating EKF 
+    #      independence assumptions and shrinking covariances incorrectly.
+    # --------------------------------------------------------------------------
+    odom0_config: [false, false, false,
+                   false, false, false,
+                   true, true, false,
+                   false, false, false,
+                   false, false, false]
+
+    #> Codex: IMU topic from bmi160_ros2 node.
+    imu0: /imu/data
+    imu0_queue_size: 20
+    imu0_nodelay: false
+    imu0_differential: false
+    imu0_relative: true
+    # imu0_pose_rejection_threshold: 0.8
+    # imu0_twist_rejection_threshold: 0.8
+    # imu0_linear_acceleration_rejection_threshold: 1.5
+    imu0_remove_gravitational_acceleration: true
+
+    # --------------------------------------------------------------------------
+    # IMU FUSION CONFIGURATION (imu0)
+    # --------------------------------------------------------------------------
+    # PRACTICAL RULES:
+    # 1. We set imu0_relative to true so the IMU's initial yaw starts aligned 
+    #    at 0.0 at startup, matching the starting coordinates of the wheel odom.
+    # 2. We fuse absolute yaw (5) and yaw rate / vyaw (11) directly from the 
+    #    IMU's high-frequency gyroscope.
+    # 3. We ignore linear acceleration (ax, ay) for now as raw accel is noisy and
+    #    causes position drift without a correction source (e.g. SLAM/Lidar).
+    # --------------------------------------------------------------------------
+    imu0_config: [false, false, false,
+                  false, false, true,
+                  false, false, false,
+                  false, false, true,
+                  false, false, false]

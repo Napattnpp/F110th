@@ -1,0 +1,41 @@
+controller:
+  ros__parameters:
+    # ── Lookahead distance: L1 = q_l1 + speed * m_l1, clipped to [t_clip_min, t_clip_max] ──
+    # OSCILLATION FIX: increase t_clip_min → longer lookahead → smoother path, less oscillation
+    # Too short (0.8m) on tight track → car overshoots corners → oscillates
+    # Too long → car cuts corners / slow to respond
+    # MAX ALLOWED: 1.5 (hard limit in controller_manager.py FloatingPointRange)
+    t_clip_min: 0.3       # default to 1.0 for simulator tracking
+    t_clip_max: 0.5
+    m_l1: 0.3           # how much speed increases lookahead
+    q_l1: -0.167
+
+    speed_lookahead: 0.25
+    lat_err_coeff: 1.0
+
+    # ── Steer scaling based on acceleration ──
+    acc_scaler_for_steer: 1.0
+    dec_scaler_for_steer: 0.9
+
+    # ── High-speed steer downscaling ──
+    start_scale_speed: 7.0
+    end_scale_speed: 8.0
+    downscale_factor: 0.2
+
+    speed_lookahead_for_steer: 0.0
+
+    ## Acceleration Based Velocity Controller Parameters
+    vel_accel_mode: False
+    vel_ctr_p_gain: 1.0
+    vel_ctr_i_gain: 0.0
+    vel_ctr_d_gain: 0.5
+
+    ## Trailing Controller Parameters
+    allow_accel_trailing: False
+    trailing_mode: True #True = Distance, False = Time
+    prioritize_dyn: True
+    trailing_gap: 2.0
+    trailing_p_gain: 1.0
+    trailing_i_gain: 0.0
+    trailing_d_gain: 0.2
+    blind_trailing_speed: 1.5
