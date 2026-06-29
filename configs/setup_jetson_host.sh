@@ -2,8 +2,8 @@
 set -e
 
 # Dynamically find the directory where this script is located
-REPO_DIR=$(dirname "$(realpath "$0")")
-CONFIG_DIR="$REPO_DIR/configs"
+CONFIG_DIR=$(dirname "$(realpath "$0")")
+REPO_DIR=$(dirname "$CONFIG_DIR")
 
 sudo nvpmodel -m 0
 sudo jetson_clocks
@@ -18,13 +18,13 @@ fi
 
 # 2. Setup udev rules
 echo "Copying udev rules..."
-sudo cp "$CONFIG_DIR/99-f1tenth-usb.rules" /etc/udev/rules.d/
+sudo cp "$CONFIG_DIR/jetson_system/99-f1tenth-usb.rules" /etc/udev/rules.d/
 sudo udevadm control --reload-rules
 sudo udevadm trigger
 
 # 3. UDP Buffer Size
 echo "Copying OS UDP configs..."
-sudo cp "$CONFIG_DIR/99-jetson-udp.conf" /etc/sysctl.d/
+sudo cp "$CONFIG_DIR/jetson_system/99-jetson-udp.conf" /etc/sysctl.d/
 sudo sysctl -p /etc/sysctl.d/99-jetson-udp.conf
 
 # 4. Disable USB Autosuspend & Increase USB FS Memory Limit
@@ -61,7 +61,7 @@ chmod +x ~/start_f1tenth_workspace.sh
 
 # 9. Wi-Fi Power Saving
 echo "Copying NetworkManager config..."
-sudo cp "$CONFIG_DIR/default-wifi-powersave-on.conf" /etc/NetworkManager/conf.d/
+sudo cp "$CONFIG_DIR/jetson_system/default-wifi-powersave-on.conf" /etc/NetworkManager/conf.d/
 sudo systemctl restart NetworkManager
 
 # Wait for network connection to be restored before cloning
@@ -81,7 +81,7 @@ echo "Symlinking .tmux.conf and installing TPM..."
 if [ ! -d "$HOME/.tmux/plugins/tpm" ]; then
     git clone https://github.com/tmux-plugins/tpm ~/.tmux/plugins/tpm
 fi
-ln -sf "$REPO_DIR/.tmux.conf" ~/.tmux.conf
+ln -sf "$CONFIG_DIR/.tmux.conf" ~/.tmux.conf
 
 # 11. Enable Real-Time Priority and Memory Locking limits
 echo "Configuring real-time scheduling limits..."
