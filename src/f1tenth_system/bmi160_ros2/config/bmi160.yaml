@@ -1,0 +1,16 @@
+bmi160_node:
+  ros__parameters:
+    # I2C device path (Jetson Orin Nano with DFRobot Gravity on bus 7)
+    i2c_device: "/dev/i2c-7"
+    
+    # I2C address (0x69 = SDO high / default for DFRobot Gravity BMI160)
+    i2c_addr: 0x69
+    
+    # Publish transform frame (optional)
+    publish_tf: false
+    
+    # Calibrate gyroscope on startup
+    calibrate_on_startup: true
+    
+    # Number of samples for gyro calibration
+    calibration_samples: 1000

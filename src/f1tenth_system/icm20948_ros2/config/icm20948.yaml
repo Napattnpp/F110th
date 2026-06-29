@@ -1,0 +1,16 @@
+icm20948_node:
+  ros__parameters:
+    # I2C device path (Jetson Orin Nano typically uses /dev/i2c-1)
+    i2c_device: "/dev/i2c-1"
+    
+    # I2C slave address (0x68 = AD0 pin low, 0x69 = AD0 pin high)
+    i2c_addr: 0x68
+    
+    # Publish transform frame (optional)
+    publish_tf: false
+    
+    # Calibrate gyroscope on startup (recommended on first run)
+    calibrate_on_startup: true
+    
+    # Number of samples for gyro calibration (more = better but slower)
+    calibration_samples: 1000
