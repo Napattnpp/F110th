@@ -223,6 +223,14 @@ def generate_launch_description():
             }.items()
         )
 
+    foxglove_bridge_node = Node(
+        package='foxglove_bridge',
+        executable='foxglove_bridge',
+        name='foxglove_bridge',
+        parameters=[{'port': 8765}],
+        output='screen'
+    )
+
     ld = LaunchDescription([
         racecar_version_arg,
         map_name_arg,
@@ -231,7 +239,8 @@ def generate_launch_description():
         physical_group,
         sim_group,
         sector_slicer,
-        ot_sector_slicer
+        ot_sector_slicer,
+        foxglove_bridge_node
     ])
 
     if global_trajectory_pub is not None:
