@@ -47,3 +47,11 @@ rosbag2_*/
 
 # Documentation folder
 docs/
+
+# Ignore assets contents but keep the directories
+assets/maps/*
+!assets/maps/.gitkeep
+assets/frames/*
+!assets/frames/.gitkeep
+assets/bags/*
+!assets/bags/.gitkeep
