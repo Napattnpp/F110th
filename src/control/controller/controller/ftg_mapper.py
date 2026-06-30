@@ -12,26 +12,26 @@ class FTGMapperNode(Node):
 
         # Reactive Gap Parameters (Mapped from C++ node)
         self.moving_avg_window = 3
-        self.max_dist = 6.0
+        self.max_dist = 8.0 # Look further ahead (was 6.0)
         self.car_width = 0.28
-        self.bubble_radius = 0.22
+        self.bubble_radius = 0.24
         self.min_obs_dist_threshold = 1.2
         self.disparity_threshold = 0.5
         
         self.gap_target_bias = 0.5
-        self.steering_gain = 1.2
+        self.steering_gain = 1.2 # Less aggressive turning (was 1.2)
         
         # Mapping Slow Speeds (Slower than the racing defaults)
-        self.vel_close = 0.5
-        self.vel_mid = 0.7
-        self.vel_far = 0.9
+        self.vel_close = 0.4
+        self.vel_mid = 0.5
+        self.vel_far = 0.7
         
         self.depth_close = 1.5
         self.depth_mid = 3.0
         self.depth_far = 4.5
         
         self.fallback_velocity = 0.4
-        self.steering_smoothing = 0.3 # EMA alpha (0.0 = no smoothing, 1.0 = heavy)
+        self.steering_smoothing = 0.6 # Heavy EMA smoothing for stable, gradual turns (was 0.3)
         self.use_constant_speed = True # Set to False to enable dynamic speed scaling
 
         # Crash Recovery Parameters
@@ -192,8 +192,8 @@ class FTGMapperNode(Node):
         self.angle_increment = msg.angle_increment
         ranges, angles, valid_indices = self.preprocess_lidar(msg.ranges, msg.angle_min, msg.angle_increment)
         
-        # Check for crash (look closely directly in front of car, +/- 10 degrees)
-        front_indices = np.where((angles >= -np.pi/18) & (angles <= np.pi/18))[0]
+        # Check for crash (look directly in front of car, +/- 20 degrees)
+        front_indices = np.where((angles >= -np.pi/9) & (angles <= np.pi/9))[0]
         if len(front_indices) > 0:
             min_front_dist = np.min(ranges[front_indices])
             if min_front_dist < self.crash_distance and self.state == 'NORMAL':

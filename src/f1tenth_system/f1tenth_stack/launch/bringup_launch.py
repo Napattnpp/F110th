@@ -55,10 +55,16 @@ def generate_launch_description():
         'mux.yaml'
     )
 
-    bmi160_config = os.path.join(
-        get_package_share_directory('bmi160_ros2'),
+    # bmi160_config = os.path.join(
+    #     get_package_share_directory('bmi160_ros2'),
+    #     'config',
+    #     'bmi160.yaml'
+    # )
+
+    icm20948_config = os.path.join(
+        get_package_share_directory('icm20948_ros2'),
         'config',
-        'bmi160.yaml'
+        'icm20948.yaml'
     )
 
     odom_to_path_config = os.path.join(
@@ -91,10 +97,16 @@ def generate_launch_description():
         description='Descriptions for ackermann mux configs'
     )
 
-    bmi160_la = DeclareLaunchArgument(
-        'bmi160_config',
-        default_value=bmi160_config,
-        description='Description for BMI160 IMU driver configs'
+    # bmi160_la = DeclareLaunchArgument(
+    #     'bmi160_config',
+    #     default_value=bmi160_config,
+    #     description='Description for BMI160 IMU driver configs'
+    # )
+
+    icm20948_la = DeclareLaunchArgument(
+        'icm20948_config',
+        default_value=icm20948_config,
+        description='Description for ICM20948 IMU driver configs'
     )
 
     odom_to_path_la = DeclareLaunchArgument(
@@ -103,7 +115,7 @@ def generate_launch_description():
         description='Description for odom_to_path configs'
     )
 
-    ld = LaunchDescription([joy_teleop_la, vesc_la, sllidar_s1_la, mux_la, bmi160_la, odom_to_path_la])
+    ld = LaunchDescription([joy_teleop_la, vesc_la, sllidar_s1_la, mux_la, icm20948_la, odom_to_path_la])
 
     joy_node = Node(
         package='joy',
@@ -176,11 +188,19 @@ def generate_launch_description():
         arguments=['0.075', '0.0', '0.125', '0.0', '0.0', '0.0', 'base_link', 'imu_link']
     )
 
-    bmi160_node = Node(
-        package='bmi160_ros2',
-        executable='bmi160_node_exe',
-        name='bmi160_node',
-        parameters=[LaunchConfiguration('bmi160_config')],
+    # bmi160_node = Node(
+    #     package='bmi160_ros2',
+    #     executable='bmi160_node_exe',
+    #     name='bmi160_node',
+    #     parameters=[LaunchConfiguration('bmi160_config')],
+    #     output='screen'
+    # )
+
+    icm20948_node = Node(
+        package='icm20948_ros2',
+        executable='icm20948_node_exe',
+        name='icm20948_node',
+        parameters=[LaunchConfiguration('icm20948_config')],
         output='screen'
     )
 
@@ -209,6 +229,6 @@ def generate_launch_description():
     ld.add_action(static_tf_lidar_node)
     ld.add_action(static_tf_imu_node)
 
-    ld.add_action(bmi160_node)
+    ld.add_action(icm20948_node)
 
     return ld

@@ -147,7 +147,8 @@ def generate_launch_description():
                         os.path.join(get_package_share_directory('slam_toolbox'), 'launch', 'online_async_launch.py')
                     ),
                     launch_arguments={
-                        'params_file': slam_toolbox_config
+                        'slam_params_file': slam_toolbox_config,
+                        'use_sim_time': LaunchConfiguration('sim')
                     }.items()
                 )
             ]

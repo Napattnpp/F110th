@@ -21,7 +21,8 @@
 
   <depend>vesc</depend>
   <depend>ackermann_mux</depend>
-  <depend>bmi160_ros2</depend>
+  <!-- <depend>bmi160_ros2</depend> -->
+  <depend>icm20948_ros2</depend>
   <depend>geometry_msgs</depend>
   <depend>rclpy</depend>
   <depend>std_msgs</depend>

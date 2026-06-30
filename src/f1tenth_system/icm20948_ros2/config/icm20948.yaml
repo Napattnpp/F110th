@@ -1,7 +1,7 @@
 icm20948_node:
   ros__parameters:
     # I2C device path (Jetson Orin Nano typically uses /dev/i2c-1)
-    i2c_device: "/dev/i2c-1"
+    i2c_device: "/dev/i2c-7"
     
     # I2C slave address (0x68 = AD0 pin low, 0x69 = AD0 pin high)
     i2c_addr: 0x68

@@ -7,7 +7,10 @@ import matplotlib
 if 'DISPLAY' not in os.environ or not os.environ['DISPLAY'] or os.environ.get('MPLBACKEND') == 'Agg':
     matplotlib.use('Agg')
 else:
-    matplotlib.use('TkAgg')
+    try:
+        matplotlib.use('TkAgg')
+    except ImportError:
+        matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from scipy.signal import savgol_filter
 from skimage.segmentation import watershed

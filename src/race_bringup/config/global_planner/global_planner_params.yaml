@@ -2,9 +2,8 @@ global_planner:
   ros__parameters:
     rate: 10  # [hz]
     required_laps: 1  # how many laps to drive until calculating global waypoints
-    safety_width: 0.55  # [m] car width + safety margin. Must be < min track width.
-                        # 7thfloor track min width ~0.65m, so keep this below 0.6m.
-    safety_width_sp: 0.55  # [m] same but for shortest path overtaking trajectory
+    safety_width: 0.75  # [m] Increased to prevent corner clipping
+    safety_width_sp: 0.75  # [m] Increased to prevent corner clipping
     occupancy_grid_threshold: 10
     filter_kernel_size: 7  # how much filtering to do to raw map images
                            # NOTE: kernel=9 is too aggressive for narrow tracks

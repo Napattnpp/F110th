@@ -106,7 +106,7 @@ def generate_launch_description():
                     '-load_state_filename', [map_path, '/', map_name, '.pbstream'],
                     '--minloglevel', '2'
                 ],
-                remappings=[('odom', 'early_fusion/odom')],
+                remappings=[('odom', 'early_fusion/odom'), ('imu', '/imu/data')],
                 parameters=[{'use_sim_time': use_sim_time}]
             ),
             # Cartographer occupancy grid node
@@ -159,7 +159,7 @@ def generate_launch_description():
                     '-configuration_basename', 'f110_2d.lua',
                     '--minloglevel', '2'
                 ],
-                remappings=[('odom', 'early_fusion/odom')],
+                remappings=[('odom', 'early_fusion/odom'), ('imu', '/imu/data')],
                 parameters=[{'use_sim_time': use_sim_time}]
             ),
             # Cartographer occupancy grid node
