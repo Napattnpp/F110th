@@ -33,12 +33,16 @@ dependencies = [
     "coverage>=7.6.1",
     "PyYAML>=5.3.1",
     "PyOpenGL>=3.1.9",
-    "PyOpenGL-accelerate>=3.1.9",
+    # Commented out because compilation fails on ARM64/Jetson and it's optional
+    # "PyOpenGL-accelerate>=3.1.9",
     "opencv-python>=4.9.0.80",
     "yamldataclassconfig>=1.5.0,<2",
     "requests>=2.31.0",
-    "pyqtgraph>=0.13.7,<0.14",
-    "pyqt6>=6.7.1,<7",
+    # Commented out because PyQt6 is only needed for the standalone simulator GUI.
+    # ROS 2 simulations run headless and visualize via RViz/Foxglove.
+    # Disabling prevents extremely slow/failed source builds on ARM64/Jetson.
+    # "pyqtgraph>=0.13.7,<0.14",
+    # "pyqt6>=6.7.1,<7",
     "pandas>=2.0.0",
 ]
 

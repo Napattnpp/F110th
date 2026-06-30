@@ -28,6 +28,9 @@ public:
     bool publish_tf = declare_parameter<bool>("publish_tf", false);
     bool calibrate_on_startup = declare_parameter<bool>("calibrate_on_startup", true);
     int calibration_samples = declare_parameter<int>("calibration_samples", 1000);
+    // Dead-zone: gyro_z readings below this threshold (rad/s) are treated as 0.
+    // Prevents residual bias from slowly integrating into yaw while the robot is stationary.
+    gyro_z_deadzone_ = declare_parameter<double>("gyro_z_deadzone", 0.003);
 
     // Create driver
     driver_ = std::make_unique<BMI160Driver>(i2c_device, (uint8_t)i2c_addr);
@@ -133,7 +136,9 @@ private:
     // Complementary filter
     float filt_roll = alpha * (quat_roll + data.gyro_x * dt) + (1.0f - alpha) * accel_roll;
     float filt_pitch = alpha * (quat_pitch + data.gyro_y * dt) + (1.0f - alpha) * accel_pitch;
-    float filt_yaw = quat_yaw + data.gyro_z * dt;
+    // Apply dead-zone to gyro_z: clamp to 0 if below threshold to prevent bias integration.
+    float gyro_z_filtered = (std::abs(data.gyro_z) < static_cast<float>(gyro_z_deadzone_)) ? 0.0f : data.gyro_z;
+    float filt_yaw = quat_yaw + gyro_z_filtered * dt;
 
     // Convert back to quaternion
     float cy = std::cos(filt_yaw * 0.5f);
@@ -182,7 +187,8 @@ private:
     // Set angular velocity (gyro)
     imu_msg.angular_velocity.x = data.gyro_x;
     imu_msg.angular_velocity.y = data.gyro_y;
-    imu_msg.angular_velocity.z = data.gyro_z;
+    // Apply dead-zone to published gyro_z so the EKF also receives a zeroed value at rest.
+    imu_msg.angular_velocity.z = (std::abs(data.gyro_z) < static_cast<float>(gyro_z_deadzone_)) ? 0.0 : data.gyro_z;
 
     imu_msg.angular_velocity_covariance[0] = 0.01;
     imu_msg.angular_velocity_covariance[4] = 0.01;
@@ -236,6 +242,8 @@ private:
   float qw_, qx_, qy_, qz_;
   float yaw_;
   uint64_t last_timestamp_ns_ = 0;
+  // Dead-zone threshold for gyro_z (rad/s)
+  double gyro_z_deadzone_ = 0.0001;
 };
 
 }  // namespace bmi160_ros2

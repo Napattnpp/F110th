@@ -24,6 +24,7 @@ setup(
     entry_points={
         'console_scripts': [
             'controller = controller.controller_manager:main',
+            'ftg_mapper = controller.ftg_mapper:main',
         ],
     },
 )

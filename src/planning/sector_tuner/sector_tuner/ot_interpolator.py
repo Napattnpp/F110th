@@ -33,10 +33,13 @@ class OvertakingInterpolator(Node):
 
         # get initial scaling
         self.sectors_params=self.parameters_to_dict()
+        if 'n_sectors' not in self.sectors_params:
+            self.get_logger().error("Parameter 'n_sectors' is missing! Make sure the map parameter file (e.g., ot_sectors.yaml) is loaded correctly.")
+            raise RuntimeError("Missing required parameter 'n_sectors'")
         self.n_sectors = self.sectors_params['n_sectors']
         self.get_logger().info(str(self.sectors_params))
-        self.yeet_factor = self.sectors_params['yeet_factor']
-        self.spline_len = int(self.sectors_params['spline_len'])
+        self.yeet_factor = self.sectors_params.get('yeet_factor', 1.0)
+        self.spline_len = int(self.sectors_params.get('spline_len', 30))
 
         # SUBSCRIBE
         self.glb_wpnts_name = "/global_waypoints_scaled"

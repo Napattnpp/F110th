@@ -248,6 +248,8 @@ class Controller(Node):
         # get l1 parameres
         bringup_path = get_package_share_directory('race_bringup')
         config_path = os.path.join(bringup_path, 'config', self.racecar_version, 'l1_params.yaml')
+        if not os.path.exists(config_path):
+            config_path = os.path.join(bringup_path, 'config', 'SIM', 'l1_params.yaml')
         with open(config_path, 'r') as f:
             self.l1_params = yaml.safe_load(f)
             self.l1_params = self.l1_params['controller']['ros__parameters']
@@ -281,18 +283,10 @@ class Controller(Node):
 
         # get l1 parameres
         bringup_path = get_package_share_directory('race_bringup')
-        if self.sim:
-            # If the profile name is a physical NUC profile, ignore it and load generic SIM
-            if self.racecar_version.startswith('NUC'):
-                config_path = os.path.join(bringup_path, 'config', 'SIM', 'l1_params.yaml')
-            else:
-                # Try the specific profile directory first (supports SIM1, SIM-1, etc.)
-                config_path = os.path.join(bringup_path, 'config', self.racecar_version, 'l1_params.yaml')
-                if not os.path.exists(config_path):
-                    # Fall back to the generic 'SIM' directory
-                    config_path = os.path.join(bringup_path, 'config', 'SIM', 'l1_params.yaml')
-        else:
-            config_path = os.path.join(bringup_path, 'config', self.racecar_version, 'l1_params.yaml')
+        config_path = os.path.join(bringup_path, 'config', self.racecar_version, 'l1_params.yaml')
+        if not os.path.exists(config_path):
+            # Fall back to the generic 'SIM' directory
+            config_path = os.path.join(bringup_path, 'config', 'SIM', 'l1_params.yaml')
             
         with open(config_path, 'r') as f:
             self.l1_params = yaml.safe_load(f)
@@ -302,15 +296,11 @@ class Controller(Node):
         self.wheelbase = 0.33  # default fallback
         try:
             if self.sim:
-                # If the profile name is a physical NUC profile, ignore it and load generic SIM
-                if self.racecar_version.startswith('NUC'):
+                # Try the specific profile directory first
+                config_path = os.path.join(bringup_path, 'config', self.racecar_version, 'sim_params.yaml')
+                if not os.path.exists(config_path):
+                    # Fall back to the generic 'SIM' directory
                     config_path = os.path.join(bringup_path, 'config', 'SIM', 'sim_params.yaml')
-                else:
-                    # Try the specific profile directory first (supports SIM1, SIM2, etc.)
-                    config_path = os.path.join(bringup_path, 'config', self.racecar_version, 'sim_params.yaml')
-                    if not os.path.exists(config_path):
-                        # Fall back to the generic 'SIM' directory
-                        config_path = os.path.join(bringup_path, 'config', 'SIM', 'sim_params.yaml')
                 
                 with open(config_path, 'r') as f:
                     car_params = yaml.safe_load(f)
@@ -539,8 +529,8 @@ class Controller(Node):
         print(self.waypoint_safety_counter, self.rate, self.state_machine_rate)
         if self.waypoint_safety_counter >= self.rate/self.state_machine_rate* 10: #we can use the same waypoints for 5 cycles
             self.get_logger().warning("[controller_manager] Received no local wpnts. STOPPING!!")
-            speed = 0
-            steering_angle = 0
+            speed = 0.0
+            steering_angle = 0.0
         self.map_controller.flag1 = False
         
         # Publish PID data of the Trailing controller for tuning
@@ -573,8 +563,8 @@ class Controller(Node):
         self.waypoint_safety_counter += 1
         if self.waypoint_safety_counter >= self.rate/self.state_machine_rate* 10: #we can use the same waypoints for 5 cycles
             self.get_logger().warning("[controller_manager] Received no local wpnts. STOPPING!!")
-            speed = 0
-            steering_angle = 0
+            speed = 0.0
+            steering_angle = 0.0
         self.pp_controller.flag1 = False
         
         # Publish PID data of the Trailing controller for tuning
@@ -618,8 +608,8 @@ class Controller(Node):
         ack_msg = AckermannDriveStamped()
         ack_msg.header.stamp = self.get_clock().now().to_msg()
         ack_msg.header.frame_id = 'base_link'
-        ack_msg.drive.steering_angle = steer
-        ack_msg.drive.speed = speed
+        ack_msg.drive.steering_angle = float(steer)
+        ack_msg.drive.speed = float(speed)
         self.drive_pub.publish(ack_msg)
         
     ############################################MSG CREATION############################################

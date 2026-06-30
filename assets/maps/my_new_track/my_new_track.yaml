@@ -1,0 +1,6 @@
+image: /home/jetson/F110th/assets/maps/my_new_track/my_new_track.pgm
+resolution: 0.050000
+origin: [-9.755460, -4.507487, 0.0]
+negate: 0
+occupied_thresh: 0.65
+free_thresh: 0.196

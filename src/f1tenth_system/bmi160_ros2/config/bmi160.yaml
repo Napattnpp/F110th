@@ -14,3 +14,9 @@ bmi160_node:
     
     # Number of samples for gyro calibration
     calibration_samples: 1000
+    
+    # Gyro Z dead-zone (rad/s): angular velocities below this are clamped to 0.
+    # Prevents residual post-calibration bias (~0.00003 rad/s) from slowly
+    # integrating into yaw while the robot is stationary.
+    # 0.0001 rad/s is safe: just above the observed noise floor after calibration (~0.00001 rad/s).
+    gyro_z_deadzone: 0.0001
