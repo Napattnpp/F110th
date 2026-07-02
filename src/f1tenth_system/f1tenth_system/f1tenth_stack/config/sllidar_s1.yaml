@@ -1,0 +1,8 @@
+sllidar_node:
+  ros__parameters:
+    channel_type: "serial"
+    serial_port: "/dev/sensors/rplidar"
+    serial_baudrate: 256000
+    frame_id: "laser"
+    inverted: false
+    angle_compensate: true

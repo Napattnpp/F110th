@@ -1,0 +1,23 @@
+/**:
+  ros__parameters:
+    sensor_type: "icm20948"
+    i2c_device: "/dev/i2c-7"
+    i2c_addr: 0x68
+    frame_id: "imu_link"
+    rate_hz: 200
+
+    accel_range_g: 2
+    gyro_range_dps: 250
+
+    # These values should be filled after running calibrate_gyro
+    gyro_bias_x: 0.0
+    gyro_bias_y: 0.0
+    gyro_bias_z: 0.0
+
+    accel_bias_x: 0.0
+    accel_bias_y: 0.0
+    accel_bias_z: 0.0
+
+    # Covariance diagonals (x, y, z)
+    accel_covariance: [0.0005, 0.0005, 0.0005]
+    gyro_covariance: [0.00001, 0.00001, 0.00001]
