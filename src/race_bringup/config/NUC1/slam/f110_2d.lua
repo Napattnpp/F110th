@@ -42,11 +42,9 @@ TRAJECTORY_BUILDER_2D.min_range = 0.1  -- Ignore reflections from the car's own 
 TRAJECTORY_BUILDER_2D.submaps.num_range_data = 100
 
 -- Occupancy grid tuning (makes walls stickier and harder for noise to clear out)
-TRAJECTORY_BUILDER_2D.submaps.range_data_inserter.probability_grid_range_data_inserter.hit_probability = 0.60 -- Reduced from 0.75 to make walls thinner
-TRAJECTORY_BUILDER_2D.submaps.range_data_inserter.probability_grid_range_data_inserter.miss_probability = 0.45 -- Back to original (0.45) to aggressively clean up noise
+TRAJECTORY_BUILDER_2D.submaps.range_data_inserter.probability_grid_range_data_inserter.hit_probability = 0.65 -- Default: 0.55
+TRAJECTORY_BUILDER_2D.submaps.range_data_inserter.probability_grid_range_data_inserter.miss_probability = 0.45 -- Default: 0.49
 
--- Stop erasing existing walls when the LiDAR shoots over short barriers
-TRAJECTORY_BUILDER_2D.missing_data_ray_length = 2.0
 
 POSE_GRAPH.optimize_every_n_nodes = 20
 

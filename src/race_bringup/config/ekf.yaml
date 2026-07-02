@@ -50,7 +50,7 @@ ekf_filter_node:
                    false, false, false,
                    false, false, false]
 
-    #> Codex: IMU topic from bmi160_ros2 node.
+    #> Codex: IMU topic from icm20948_ros2 node.
     imu0: /imu/data
     imu0_queue_size: 20
     imu0_nodelay: false

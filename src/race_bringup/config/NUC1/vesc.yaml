@@ -2,7 +2,7 @@
   # general parameters shared by all vesc-related nodes
   ros__parameters:
     # erpm (electrical rpm) = speed_to_erpm_gain * speed (meters / second) + speed_to_erpm_offset
-    speed_to_erpm_gain: -3759.0
+    speed_to_erpm_gain: 3759.0
     speed_to_erpm_offset: 0.0
 
     # servo value (0 to 1) =  steering_angle_to_servo_gain * steering angle (radians) + steering_angle_to_servo_offset
@@ -46,7 +46,7 @@ vesc_to_odom_node:
     # HEADING ESTIMATION MODEL
     # - true:  Uses the kinematic bicycle model (wheel speed + steer servo angle)
     #          to calculate angular velocity and yaw. Prone to tire slip.
-    # - false: Subscribes to `/yaw_rad` (published by the bmi160_ros2 driver)
+    # - false: Subscribes to `/yaw_rad` (published by the icm20948_ros2 driver)
     #          and uses it directly as the odometry yaw. (Recommended for EKF).
     # --------------------------------------------------------------------------
     use_servo_cmd_to_calc_angular_velocity: false
