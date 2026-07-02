@@ -36,15 +36,14 @@ MAP_BUILDER.num_background_threads = 3.0
 TRAJECTORY_BUILDER_2D.use_imu_data = false
 
 -- Lidar scan filtering
-TRAJECTORY_BUILDER_2D.max_range = 12.0 -- Restrict max range to ignore distant reflections and speed up matching
+TRAJECTORY_BUILDER_2D.max_range = 6.0 -- Restrict max range to ignore distant reflections and speed up matching
 TRAJECTORY_BUILDER_2D.min_range = 0.1  -- Ignore reflections from the car's own chassis
 
 TRAJECTORY_BUILDER_2D.submaps.num_range_data = 100
 
 -- Occupancy grid tuning (makes walls stickier and harder for noise to clear out)
-TRAJECTORY_BUILDER_2D.submaps.range_data_inserter.probability_grid_range_data_inserter.hit_probability = 0.65 -- Default: 0.55
-TRAJECTORY_BUILDER_2D.submaps.range_data_inserter.probability_grid_range_data_inserter.miss_probability = 0.45 -- Default: 0.49
-
+TRAJECTORY_BUILDER_2D.submaps.range_data_inserter.probability_grid_range_data_inserter.hit_probability = 0.60 -- Reduced from 0.75 to make walls thinner
+TRAJECTORY_BUILDER_2D.submaps.range_data_inserter.probability_grid_range_data_inserter.miss_probability = 0.45 -- Back to original (0.45) to aggressively clean up noise
 
 POSE_GRAPH.optimize_every_n_nodes = 20
 

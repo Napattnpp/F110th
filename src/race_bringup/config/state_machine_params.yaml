@@ -23,3 +23,10 @@ state_machine:
     ftg_threshold_speed: 0.1 # [m/s] speed threshold below which we start a timer for activating FTG
     ftg_timer_sec: 3. # [s] time we have to stay slower than the `ftg_threshold_speed` threshold before we activate FTG
 
+    # Qualifying mode — lap-based auto-switch
+    # Q1 (fast) -> Buffer 1 (slow) -> Q2 (avoidance ON) -> Buffer 2 (slow) -> Q3 (fast)
+    q1_laps:            3    # number of full-speed laps before Q2
+    buf_laps:           1    # number of slow buffer laps on each side of Q2
+    q2_laps:            3    # number of laps with obstacle avoidance active
+    q3_laps:            3    # number of full-speed laps after Q2
+    buffer_speed_scale: 0.5  # fraction of max speed during buffer laps (0.1 – 1.0)

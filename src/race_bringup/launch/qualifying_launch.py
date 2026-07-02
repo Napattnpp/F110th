@@ -64,11 +64,28 @@ def generate_launch_description():
             state_machine_source,
             launch_arguments={
                 'param_file': os.path.join(pkg_bringup, 'config', 'state_machine_params.yaml'),
-                'mode': 'timetrials',
-                'overtake_mode': 'dummy',
+                'mode': 'qualifying',
+                'overtake_mode': 'spliner',
                 'racecar_version': LaunchConfiguration('racecar_version')
             }.items()
         )
+
+    # Perception — needed to detect obstacles during Q2
+    perception_source = get_launch_source('perception', 'perception_launch')
+    perception_launch = None
+    if perception_source is not None:
+        perception_launch = IncludeLaunchDescription(
+            perception_source,
+            launch_arguments={
+                'param_file': os.path.join(pkg_bringup, 'config', 'opponent_tracker_params.yaml')
+            }.items()
+        )
+
+    # Include spline planner
+    spline_planner_source = get_launch_source('spline_planner', 'spline_planner_launch')
+    spline_planner_launch = None
+    if spline_planner_source is not None:
+        spline_planner_launch = IncludeLaunchDescription(spline_planner_source)
 
     actions = [
         racecar_version_arg,
@@ -80,5 +97,9 @@ def generate_launch_description():
         actions.append(controller_launch)
     if state_machine_launch is not None:
         actions.append(state_machine_launch)
+    if perception_launch is not None:
+        actions.append(perception_launch)
+    if spline_planner_launch is not None:
+        actions.append(spline_planner_launch)
 
     return LaunchDescription(actions)
