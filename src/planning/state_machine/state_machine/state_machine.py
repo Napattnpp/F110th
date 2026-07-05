@@ -19,7 +19,7 @@ try:
 except:
     pass
 
-from state_machine.transitions import dummy_transition, timetrials_transition, head_to_head_transition
+from state_machine.transitions import dummy_transition, timetrials_transition, head_to_head_transition, qualifying_transition
 from state_machine.state_types import StateType
 from state_machine.states import DefaultStateLogic
 from race_bringup.parameter_event_handler import ParameterEventHandler
@@ -100,6 +100,14 @@ class StateMachine(Node):
         self.x_viz = 0
         self.y_viz = 0
 
+        # Lap counter (used by qualifying mode)
+        self.lap_count = 0
+        self._prev_s = None           # previous cur_s for wrap-around detection
+        self._lap_wrap_threshold = 0  # set after track_length is known
+
+        # Speed scale for qualifying buffer laps (1.0 = full speed)
+        self.qual_speed_scale = 1.0
+
         # choose how to transition between states
         if self.params.mode == 'dummy':
             self.state_transition = dummy_transition
@@ -107,6 +115,8 @@ class StateMachine(Node):
             self.state_transition = timetrials_transition
         elif self.params.mode == 'head_to_head':
             self.state_transition = head_to_head_transition
+        elif self.params.mode == 'qualifying':
+            self.state_transition = qualifying_transition
         else:
             raise NotImplementedError(f"Mode {self.params.mode} not recognized")
                 
@@ -153,6 +163,19 @@ class StateMachine(Node):
     def car_state_frenet_cb(self, msg: Odometry):
         self.cur_s = msg.pose.pose.position.x
         self.cur_d = msg.pose.pose.position.y
+
+        # Lap counting: detect wrap-around when cur_s jumps backwards past the
+        # start/finish line.  A drop of more than half the track length is
+        # treated as a lap completion regardless of absolute position.
+        if self._prev_s is not None and self.track_length > 0:
+            drop = self._prev_s - self.cur_s
+            if drop > self.track_length * 0.5:
+                self.lap_count += 1
+                self.get_logger().info(
+                    f"[qualifying] Lap {self.lap_count} completed (s: {self._prev_s:.2f} "
+                    f"-> {self.cur_s:.2f}, track_length: {self.track_length:.2f})"
+                )
+        self._prev_s = self.cur_s
 
     def avoidance_cb(self, data: OTWpntArray):
         """Subscribes to spliner waypoints"""
@@ -454,6 +477,11 @@ class StateMachine(Node):
         # set stamp to now         
         loc_wpnts.header.stamp = self.get_clock().now().to_msg()
         loc_wpnts.header.frame_id = "map"
+
+        # Apply speed scaling during qualifying buffer laps
+        if self.params.mode == 'qualifying' and self.qual_speed_scale != 1.0:
+            for wpnt in loc_wpnts.wpnts:
+                wpnt.vx_mps *= self.qual_speed_scale
 
         for i, wpnt in enumerate(loc_wpnts.wpnts):
             mrk = Marker()

@@ -1,0 +1,10 @@
+LU_table: NUC1_hangar_pacejka
+ctrl_algo: PP
+localize: true
+localize_method: amcl
+map_name: track11
+overtake_mode: spliner
+profile_name: sim
+racecar_version: NUC1
+sim: true
+slam_method: cartographer

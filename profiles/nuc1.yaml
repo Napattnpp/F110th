@@ -1,0 +1,10 @@
+profile_name: "nuc1"
+racecar_version: "NUC1"
+sim: false
+slam_method: "slam_toolbox"
+localize: true
+localize_method: "amcl"
+map_name: "track11"
+ctrl_algo: "PP"
+LU_table: "NUC1_hangar_pacejka_lookup_table"
+overtake_mode: "spliner"

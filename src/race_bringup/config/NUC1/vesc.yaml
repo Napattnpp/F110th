@@ -31,26 +31,9 @@ vesc_to_odom_node:
   ros__parameters:
     odom_frame: odom
     base_frame: base_link
-
-    # --------------------------------------------------------------------------
-    # TF BROADCAST SWITCH
-    # - Set to true ONLY if you are running the vesc_to_odom node standalone 
-    #   without any EKF (robot_localization) node.
-    # - Must be set to false when EKF is running (ekf_node = True), because EKF
-    #   is responsible for broadcasting the odom -> base_link transform.
-    #   Having both active will cause TF flickering and jumping in RViz.
-    # --------------------------------------------------------------------------
     publish_tf: false
-    
-    # --------------------------------------------------------------------------
-    # HEADING ESTIMATION MODEL
-    # - true:  Uses the kinematic bicycle model (wheel speed + steer servo angle)
-    #          to calculate angular velocity and yaw. Prone to tire slip.
-    # - false: Subscribes to `/yaw_rad` (published by the icm20948_ros2 driver)
-    #          and uses it directly as the odometry yaw. (Recommended for EKF).
-    # --------------------------------------------------------------------------
-    use_servo_cmd_to_calc_angular_velocity: false
-
+    # "servo": uses servo command to calc angular velocity, "imu": uses raw IMU yaw, "none": no heading
+    heading_source: none
     # car wheelbase is about 29.5cm
     wheelbase: 0.300
 

@@ -24,25 +24,37 @@ def get_launch_source(package_name, base_name):
 def generate_launch_description():
     pkg_bringup = get_package_share_directory('race_bringup')
 
+    try:
+        from race_bringup.profile_loader import load_active_profile
+        profile = load_active_profile()
+    except ImportError:
+        profile = {}
+
     # Arguments
     racecar_version_arg = DeclareLaunchArgument(
         'racecar_version',
-        default_value='NUC1',
+        default_value=profile.get('racecar_version', 'NUC1'),
         description='NUC version (e.g., NUC1)'
     )
     map_name_arg = DeclareLaunchArgument(
         'map_name',
+        default_value=profile.get('map_name', 'latest'),
         description='Name of the map to be created'
     )
     sim_arg = DeclareLaunchArgument(
         'sim',
-        default_value='False',
+        default_value=str(profile.get('sim', False)),
         description='Whether to run in simulation mode'
     )
     slam_method_arg = DeclareLaunchArgument(
         'slam_method',
-        default_value='cartographer',
+        default_value=profile.get('slam_method', 'cartographer'),
         description="SLAM method: 'cartographer' / 'slam_toolbox'"
+    )
+    run_ftg_arg = DeclareLaunchArgument(
+        'run_ftg',
+        default_value='True',
+        description='Whether to run ftg_mapper node'
     )
 
     # Configuration files path
@@ -91,8 +103,19 @@ def generate_launch_description():
                     'sllidar_s1_config': sllidar_s1_config,
                     'mux_config': mux_config
                 }.items()
-            )
         )
+    )
+        
+    # ftg_mapper node to drive around during mapping (optional)
+    physical_actions.append(
+        Node(
+            package='controller',
+            executable='ftg_mapper',
+            name='ftg_mapper',
+            output='screen',
+            condition=IfCondition(LaunchConfiguration('run_ftg'))
+        )
+    )
         
     # State estimation launch
     state_estimation_source = get_launch_source('state_estimation', 'state_estimation_launch')
@@ -237,6 +260,7 @@ def generate_launch_description():
         map_name_arg,
         sim_arg,
         slam_method_arg,
+        run_ftg_arg,
         physical_group,
         sim_group,
         sector_slicer,

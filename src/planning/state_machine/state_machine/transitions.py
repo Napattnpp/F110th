@@ -24,6 +24,46 @@ def dummy_transition(state_machine: StateMachine)->str:
 def timetrials_transition(state_machine: StateMachine)->str:
     return StateType.GB_TRACK
 
+
+def qualifying_transition(state_machine: StateMachine) -> str:
+    """Transition for qualifying mode.
+
+    Divides the run into 5 phases based on lap count:
+      Q1        : laps 1..q1_laps                   → GB_TRACK, full speed
+      Buffer 1  : laps q1_laps+1..q1_laps+buf_laps  → GB_TRACK, slow speed
+      Q2        : next q2_laps laps                 → head_to_head logic, full speed
+      Buffer 2  : next buf_laps laps                → GB_TRACK, slow speed
+      Q3        : remaining laps                    → GB_TRACK, full speed
+    """
+    p = state_machine.params
+    lap = state_machine.lap_count
+
+    q1_end    = p.q1_laps
+    buf1_end  = q1_end + p.buf_laps
+    q2_end    = buf1_end + p.q2_laps
+    buf2_end  = q2_end + p.buf_laps
+
+    if lap <= q1_end:
+        # Q1 — full speed, no avoidance
+        state_machine.qual_speed_scale = 1.0
+        return StateType.GB_TRACK
+    elif lap <= buf1_end:
+        # Buffer 1 — slow down, no avoidance
+        state_machine.qual_speed_scale = p.buffer_speed_scale
+        return StateType.GB_TRACK
+    elif lap <= q2_end:
+        # Q2 — full speed, obstacle avoidance active
+        state_machine.qual_speed_scale = 1.0
+        return head_to_head_transition(state_machine)
+    elif lap <= buf2_end:
+        # Buffer 2 — slow down, no avoidance
+        state_machine.qual_speed_scale = p.buffer_speed_scale
+        return StateType.GB_TRACK
+    else:
+        # Q3 — full speed, no avoidance
+        state_machine.qual_speed_scale = 1.0
+        return StateType.GB_TRACK
+
 def head_to_head_transition(state_machine: StateMachine)->str:
     match state_machine.state:
         case StateType.GB_TRACK:

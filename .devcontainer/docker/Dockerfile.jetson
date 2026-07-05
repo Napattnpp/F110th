@@ -60,6 +60,8 @@ RUN apt-get update && apt-get install -y \
     ros-$ROS_DISTRO-foxglove-bridge \
     ros-$ROS_DISTRO-tf-transformations \
     ros-$ROS_DISTRO-robot-localization \
+    ros-$ROS_DISTRO-imu-filter-madgwick \
+    ros-$ROS_DISTRO-laser-proc \
     gfortran \
     libxcb-cursor0 \
     && rm -rf /var/lib/apt/lists/*

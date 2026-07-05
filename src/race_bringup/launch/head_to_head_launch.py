@@ -22,31 +22,52 @@ def get_launch_source(package_name, base_name):
 def generate_launch_description():
     pkg_bringup = get_package_share_directory('race_bringup')
 
+    try:
+        from race_bringup.profile_loader import load_active_profile
+        profile = load_active_profile()
+    except ImportError:
+        profile = {}
+
     # Arguments
     racecar_version_arg = DeclareLaunchArgument(
         'racecar_version',
-        default_value='NUC1',
+        default_value=profile.get('racecar_version', 'NUC1'),
         description='NUC version (e.g. NUC1)'
     )
     lu_table_arg = DeclareLaunchArgument(
         'LU_table',
-        default_value='NUC1_hangar_pacejka',
+        default_value=profile.get('LU_table', 'NUC1_hangar_pacejka'),
         description='LU table parameter'
     )
     overtake_mode_arg = DeclareLaunchArgument(
         'overtake_mode',
-        default_value='spliner',
+        default_value=profile.get('overtake_mode', 'spliner'),
         description='Overtake mode: spliner / graph_based'
     )
     ctrl_algo_arg = DeclareLaunchArgument(
         'ctrl_algo',
-        default_value='MAP',
+        default_value=profile.get('ctrl_algo', 'MAP'),
         description='Control algorithm: MAP / PP'
     )
     measure_arg = DeclareLaunchArgument(
         'measure',
         default_value='False',
         description='Measure execution time'
+    )
+    launch_base_arg = DeclareLaunchArgument(
+        'launch_base',
+        default_value='True',
+        description='Whether to also launch base_launch.py'
+    )
+    map_name_arg = DeclareLaunchArgument(
+        'map_name',
+        default_value=profile.get('map_name', 'latest'),
+        description='Map name in race_bringup/maps'
+    )
+    sim_arg = DeclareLaunchArgument(
+        'sim',
+        default_value=str(profile.get('sim', False)),
+        description='True/False if you want to run simulation'
     )
 
     # Include controller manager
@@ -87,14 +108,41 @@ def generate_launch_description():
         }.items()
     )
 
-    return LaunchDescription([
+    # Include base system launch (sensors, simulator, etc.) conditionally
+    base_launch = None
+    base_launch_source = get_launch_source('race_bringup', 'base_launch')
+    if base_launch_source is not None:
+        base_launch = GroupAction(
+            condition=IfCondition(LaunchConfiguration('launch_base')),
+            actions=[
+                IncludeLaunchDescription(
+                    base_launch_source,
+                    launch_arguments={
+                        'racecar_version': LaunchConfiguration('racecar_version'),
+                        'map_name': LaunchConfiguration('map_name'),
+                        'sim': LaunchConfiguration('sim')
+                    }.items()
+                )
+            ]
+        )
+
+    actions = [
         racecar_version_arg,
         lu_table_arg,
         overtake_mode_arg,
         ctrl_algo_arg,
         measure_arg,
+        launch_base_arg,
+        map_name_arg,
+        sim_arg,
+    ]
+    if base_launch is not None:
+        actions.append(base_launch)
+    actions.extend([
         controller_launch,
         state_machine_launch,
         spline_planner_group,
         perception_launch
     ])
+
+    return LaunchDescription(actions)

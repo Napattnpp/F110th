@@ -34,8 +34,6 @@ x-common-settings: &common-settings
     - .:/home/${USER}/F110th
     # CycloneDDS configuration override (disables shared memory to prevent RouDi timeouts)
     - ./.devcontainer/docker/cyclonedds.xml:/cyclonedds.xml:ro
-    # Dedicated log volume (persists outside the colcon build output)
-    - ~/f110th_logs:/logs
     # Global Tmux configuration
     - ./configs/.tmux.conf:/home/${USER}/.tmux.conf:ro
   command: /bin/bash
@@ -69,8 +67,6 @@ services:
       - /tmp/.X11-unix:/tmp/.X11-unix
       # Source code
       - .:/home/${USER}/F110th
-      # Logs
-      - ~/f110th_logs:/logs
 
   # --------------------------------------------------------------------------
   # general — x86 / ARM laptop (development & simulation)

@@ -30,30 +30,36 @@ def package_exists(package_name):
 def generate_launch_description():
     pkg_bringup = get_package_share_directory('race_bringup')
 
+    try:
+        from race_bringup.profile_loader import load_active_profile
+        profile = load_active_profile()
+    except ImportError:
+        profile = {}
+
     # Arguments
     racecar_version_arg = DeclareLaunchArgument(
         'racecar_version',
-        default_value=EnvironmentVariable('RACECAR_VERSION', default_value='NUC1'),
+        default_value=profile.get('racecar_version', 'NUC1'),
         description='NUC version (e.g. NUC1)'
     )
     map_name_arg = DeclareLaunchArgument(
         'map_name',
-        default_value='latest',
+        default_value=profile.get('map_name', 'latest'),
         description='Map name in race_bringup/maps'
     )
     sim_arg = DeclareLaunchArgument(
         'sim',
-        default_value='False',
+        default_value=str(profile.get('sim', False)),
         description='True/False if you want to run simulation'
     )
     localize_arg = DeclareLaunchArgument(
         'localize',
-        default_value='True',
+        default_value=str(profile.get('localize', True)),
         description='Whether to run absolute map-based localization node'
     )
     localize_method_arg = DeclareLaunchArgument(
         'localize_method',
-        default_value='amcl',
+        default_value=profile.get('localize_method', 'amcl'),
         description="Localization method: 'amcl' / 'cartographer'"
     )
 

@@ -84,24 +84,17 @@ docker_launch: ## Launch the container in detached mode
 	docker compose --profile $(SERVICE) up -d
 	@echo "Container started. Attach with: make attach"
 
-docker_attach: ## Attach to the running container and sync dynamic X11 forwarding credentials
-	@if [ "$(HOST_OS)" = "Darwin" ]; then \
-		if ! pgrep -x "Xquartz" >/dev/null 2>&1; then \
-			open -a XQuartz; \
-			sleep 2; \
-		fi; \
-	else \
-		if [ -n "$$DISPLAY" ]; then \
-			true > /tmp/.docker.xauth 2>/dev/null || true; \
-			if command -v xauth >/dev/null 2>&1; then \
-				if [ -n "$(ORIGINAL_XAUTHORITY)" ]; then \
-					XAUTHORITY="$(ORIGINAL_XAUTHORITY)" xauth nlist "$$DISPLAY" | sed -e 's/^..../ffff/' | xauth -f /tmp/.docker.xauth nmerge - >/dev/null 2>&1 || true; \
-				else \
-					env -u XAUTHORITY xauth nlist "$$DISPLAY" | sed -e 's/^..../ffff/' | xauth -f /tmp/.docker.xauth nmerge - >/dev/null 2>&1 || true; \
-				fi; \
+docker_attach: ## Attach to the running container and sync X11 forwarding credentials (Linux only)
+	@if [ "$(HOST_OS)" != "Darwin" ] && [ -n "$$DISPLAY" ]; then \
+		true > /tmp/.docker.xauth 2>/dev/null || true; \
+		if command -v xauth >/dev/null 2>&1; then \
+			if [ -n "$(ORIGINAL_XAUTHORITY)" ]; then \
+				XAUTHORITY="$(ORIGINAL_XAUTHORITY)" xauth nlist "$$DISPLAY" | sed -e 's/^..../ffff/' | xauth -f /tmp/.docker.xauth nmerge - >/dev/null 2>&1 || true; \
+			else \
+				env -u XAUTHORITY xauth nlist "$$DISPLAY" | sed -e 's/^..../ffff/' | xauth -f /tmp/.docker.xauth nmerge - >/dev/null 2>&1 || true; \
 			fi; \
-			chmod a+r /tmp/.docker.xauth 2>/dev/null || true; \
 		fi; \
+		chmod a+r /tmp/.docker.xauth 2>/dev/null || true; \
 	fi
 	docker compose exec -e DISPLAY=$(DISPLAY) -e XAUTHORITY="$(XAUTHORITY_ENV)" -e LIBGL_ALWAYS_INDIRECT="$(LIBGL_ENV)" -u $(USER) $(SERVICE) /bin/bash
 
@@ -124,6 +117,9 @@ docker_prune: stop ## Stop containers, remove volumes, and delete build outputs 
 	@echo "Removing build outputs..."
 	rm -rf out/
 	@echo "Environment fully cleaned."
+
+.env:
+	@# Ignore if missing (setup.sh will generate it)
 
 .DEFAULT:
 	@echo "Unknown target: $@"

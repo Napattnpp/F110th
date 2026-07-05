@@ -203,6 +203,55 @@ class StateMachineParams:
         node.set_descriptor("ftg_threshold_speed", descriptor=descriptor)
         self.ftg_threshold_speed: float = node.get_parameter("ftg_threshold_speed").value
 
+        # --- Qualifying mode parameters ---
+        descriptor = ParameterDescriptor(
+            description="Number of fast laps in Q1 (no avoidance) for qualifying mode\n",
+            read_only=False,
+            type=ParameterType.PARAMETER_INTEGER,
+            integer_range=[IntegerRange(from_value=1, to_value=30, step=1)]
+        )
+        node.declare_parameter("q1_laps", 3, descriptor=descriptor)
+        self.q1_laps: int = node.get_parameter("q1_laps").value
+
+        descriptor = ParameterDescriptor(
+            description="Number of slow buffer laps on each side of Q2 for qualifying mode\n",
+            read_only=False,
+            type=ParameterType.PARAMETER_INTEGER,
+            integer_range=[IntegerRange(from_value=0, to_value=5, step=1)]
+        )
+        node.declare_parameter("buf_laps", 1, descriptor=descriptor)
+        self.buf_laps: int = node.get_parameter("buf_laps").value
+
+        descriptor = ParameterDescriptor(
+            description="Number of laps with obstacle avoidance ON (Q2) for qualifying mode\n",
+            read_only=False,
+            type=ParameterType.PARAMETER_INTEGER,
+            integer_range=[IntegerRange(from_value=1, to_value=30, step=1)]
+        )
+        node.declare_parameter("q2_laps", 3, descriptor=descriptor)
+        self.q2_laps: int = node.get_parameter("q2_laps").value
+
+        descriptor = ParameterDescriptor(
+            description="Number of fast laps in Q3 (no avoidance) for qualifying mode\n",
+            read_only=False,
+            type=ParameterType.PARAMETER_INTEGER,
+            integer_range=[IntegerRange(from_value=1, to_value=30, step=1)]
+        )
+        node.declare_parameter("q3_laps", 3, descriptor=descriptor)
+        self.q3_laps: int = node.get_parameter("q3_laps").value
+
+        descriptor = ParameterDescriptor(
+            description="Fraction of max speed published during buffer laps in qualifying mode (0.0–1.0)\n",
+            read_only=False,
+            type=ParameterType.PARAMETER_DOUBLE,
+            floating_point_range=[FloatingPointRange(
+                from_value=0.1,
+                to_value=1.0,
+                step=0.05)]
+        )
+        node.declare_parameter("buffer_speed_scale", 0.5, descriptor=descriptor)
+        self.buffer_speed_scale: float = node.get_parameter("buffer_speed_scale").value
+
     def parameters_callback(self, parameters: List[Parameter]) -> SetParametersResult:
         for param in parameters:
             match param.name:

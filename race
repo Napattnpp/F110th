@@ -1,0 +1,276 @@
+#!/usr/bin/env python3
+import os
+import sys
+import yaml
+import shutil
+import argparse
+import subprocess
+
+PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+PROFILES_DIR = os.path.join(PROJECT_ROOT, "profiles")
+ACTIVE_CONFIG_PATH = os.path.join(PROFILES_DIR, "active_profile.yaml")
+
+def load_yaml(path):
+    if not os.path.exists(path):
+        return {}
+    try:
+        with open(path, "r") as f:
+            return yaml.safe_load(f) or {}
+    except Exception as e:
+        print(f"Error loading {path}: {e}")
+        return {}
+
+def save_yaml(data, path):
+    try:
+        with open(path, "w") as f:
+            yaml.safe_dump(data, f, default_flow_style=False)
+    except Exception as e:
+        print(f"Error saving to {path}: {e}")
+
+def get_active_profile():
+    return load_yaml(ACTIVE_CONFIG_PATH)
+
+def run_command(cmd, dry_run=False):
+    print(f"\n[Running Command]: {' '.join(cmd)}")
+    if dry_run:
+        print("[DRY-RUN]: Command not executed.")
+        return 0
+    try:
+        # We run the command inside bash to source the ROS workspace if needed, 
+        # but since we are executing in the container or host, running directly is fine.
+        process = subprocess.Popen(cmd, stdout=sys.stdout, stderr=sys.stderr)
+        process.communicate()
+        return process.returncode
+    except KeyboardInterrupt:
+        print("\nCommand interrupted by user.")
+        return 130
+    except Exception as e:
+        print(f"Failed to run command: {e}")
+        return 1
+
+# Commands
+def handle_profile_list(args):
+    if not os.path.exists(PROFILES_DIR):
+        print("No profiles directory found.")
+        return
+    print("Available Profiles:")
+    for f in sorted(os.listdir(PROFILES_DIR)):
+        if f.endswith(".yaml"):
+            name = f[:-5]
+            if name == "active_profile":
+                continue
+            active_marker = "*" if get_active_profile().get("profile_name") == name else " "
+            print(f" {active_marker} {name}")
+
+def handle_profile_switch(args):
+    if args.name == "active_profile":
+        print("Cannot switch directly to 'active_profile' profile.")
+        return
+    profile_path = os.path.join(PROFILES_DIR, f"{args.name}.yaml")
+    if not os.path.exists(profile_path):
+        print(f"Profile '{args.name}' does not exist at {profile_path}")
+        return
+    
+    data = load_yaml(profile_path)
+    data["profile_name"] = args.name
+    save_yaml(data, ACTIVE_CONFIG_PATH)
+    print(f"Switched active profile to '{args.name}'.")
+    handle_profile_show(args)
+
+def handle_profile_show(args):
+    profile = get_active_profile()
+    if not profile:
+        print("No active profile configured.")
+        return
+    print("Active Profile Configuration:")
+    print(yaml.safe_dump(profile, default_flow_style=False))
+
+def handle_mapping(args):
+    profile = get_active_profile()
+    map_name = args.map or profile.get("map_name", "latest")
+    sim = args.sim if args.sim is not None else str(profile.get("sim", False))
+    racecar = args.racecar or profile.get("racecar_version", "NUC1")
+    slam = args.slam or profile.get("slam_method", "cartographer")
+    run_ftg = args.run_ftg or "True"
+
+    cmd = [
+        "ros2", "launch", "race_bringup", "mapping_launch.py",
+        f"map_name:={map_name}",
+        f"sim:={sim}",
+        f"racecar_version:={racecar}",
+        f"slam_method:={slam}",
+        f"run_ftg:={run_ftg}"
+    ]
+    sys.exit(run_command(cmd, args.dry_run))
+
+def handle_base(args):
+    profile = get_active_profile()
+    map_name = args.map or profile.get("map_name", "latest")
+    sim = args.sim if args.sim is not None else str(profile.get("sim", False))
+    racecar = args.racecar or profile.get("racecar_version", "NUC1")
+    localize = args.localize if args.localize is not None else str(profile.get("localize", True))
+
+    cmd = [
+        "ros2", "launch", "race_bringup", "base_launch.py",
+        f"map_name:={map_name}",
+        f"sim:={sim}",
+        f"racecar_version:={racecar}",
+        f"localize:={localize}"
+    ]
+    sys.exit(run_command(cmd, args.dry_run))
+
+def handle_qualifying(args):
+    profile = get_active_profile()
+    map_name = args.map or profile.get("map_name", "latest")
+    sim = args.sim if args.sim is not None else str(profile.get("sim", False))
+    racecar = args.racecar or profile.get("racecar_version", "NUC1")
+    ctrl = args.ctrl or profile.get("ctrl_algo", "MAP")
+    table = args.table or profile.get("LU_table", "NUC1_hangar_pacejka")
+    launch_base = args.launch_base
+
+    cmd = [
+        "ros2", "launch", "race_bringup", "qualifying_launch.py",
+        f"map_name:={map_name}",
+        f"sim:={sim}",
+        f"racecar_version:={racecar}",
+        f"ctrl_algo:={ctrl}",
+        f"LU_table:={table}",
+        f"launch_base:={launch_base}"
+    ]
+    sys.exit(run_command(cmd, args.dry_run))
+
+def handle_h2h(args):
+    profile = get_active_profile()
+    map_name = args.map or profile.get("map_name", "latest")
+    sim = args.sim if args.sim is not None else str(profile.get("sim", False))
+    racecar = args.racecar or profile.get("racecar_version", "NUC1")
+    ctrl = args.ctrl or profile.get("ctrl_algo", "MAP")
+    table = args.table or profile.get("LU_table", "NUC1_hangar_pacejka")
+    overtake = args.overtake or profile.get("overtake_mode", "spliner")
+    launch_base = args.launch_base
+
+    cmd = [
+        "ros2", "launch", "race_bringup", "head_to_head_launch.py",
+        f"map_name:={map_name}",
+        f"sim:={sim}",
+        f"racecar_version:={racecar}",
+        f"ctrl_algo:={ctrl}",
+        f"LU_table:={table}",
+        f"overtake_mode:={overtake}",
+        f"launch_base:={launch_base}"
+    ]
+    sys.exit(run_command(cmd, args.dry_run))
+
+def handle_ftg(args):
+    cmd = ["ros2", "run", "controller", "ftg_mapper"]
+    sys.exit(run_command(cmd, args.dry_run))
+
+def handle_finish_map(args):
+    script_path = os.path.join(PROJECT_ROOT, "scripts", "finish_map.sh")
+    cmd = [script_path, args.name]
+    sys.exit(run_command(cmd, args.dry_run))
+
+def handle_edit_map(args):
+    profile = get_active_profile()
+    map_name = args.map or profile.get("map_name", "latest")
+    cmd = [
+        "ros2", "launch", "map_editor", "map_editor_launch.py",
+        f"map_name:={map_name}",
+        "map_editor_mapping:=False",
+        "rviz:=False"
+    ]
+    sys.exit(run_command(cmd, args.dry_run))
+
+def main():
+    parser = argparse.ArgumentParser(description="F1TENTH Workflow Profile Manager CLI")
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    # profile
+    p_parser = subparsers.add_parser("profile", help="Manage configuration profiles")
+    p_sub = p_parser.add_subparsers(dest="subcommand", required=True)
+    p_sub.add_parser("list", help="List available profiles")
+    
+    switch_p = p_sub.add_parser("switch", help="Switch active profile")
+    switch_p.add_argument("name", type=str, help="Profile name (e.g. sim, nuc1)")
+    
+    p_sub.add_parser("show", help="Show active configuration")
+
+    # mapping
+    m_parser = subparsers.add_parser("mapping", help="Launch mapping session")
+    m_parser.add_argument("--map", type=str, help="Map name to create")
+    m_parser.add_argument("--sim", type=str, choices=["True", "False"], help="Run in simulation")
+    m_parser.add_argument("--racecar", type=str, help="Racecar version")
+    m_parser.add_argument("--slam", type=str, choices=["cartographer", "slam_toolbox"], help="SLAM method")
+    m_parser.add_argument("--run-ftg", type=str, choices=["True", "False"], help="Auto run ftg_mapper")
+    m_parser.add_argument("--dry-run", action="store_true", help="Print command without executing")
+
+    # base
+    b_parser = subparsers.add_parser("base", help="Launch base system only")
+    b_parser.add_argument("--map", type=str, help="Map name")
+    b_parser.add_argument("--sim", type=str, choices=["True", "False"], help="Run in simulation")
+    b_parser.add_argument("--racecar", type=str, help="Racecar version")
+    b_parser.add_argument("--localize", type=str, choices=["True", "False"], help="Enable localization")
+    b_parser.add_argument("--dry-run", action="store_true", help="Print command without executing")
+
+    # qualifying
+    q_parser = subparsers.add_parser("qualifying", help="Launch full qualifying stack")
+    q_parser.add_argument("--map", type=str, help="Map name")
+    q_parser.add_argument("--sim", type=str, choices=["True", "False"], help="Run in simulation")
+    q_parser.add_argument("--racecar", type=str, help="Racecar version")
+    q_parser.add_argument("--ctrl", type=str, help="Control algorithm (PP/MAP)")
+    q_parser.add_argument("--table", type=str, help="Lookup table parameter")
+    q_parser.add_argument("--launch-base", type=str, choices=["True", "False"], default="True", help="Launch base system too")
+    q_parser.add_argument("--dry-run", action="store_true", help="Print command without executing")
+
+    # h2h
+    h_parser = subparsers.add_parser("h2h", help="Launch full head-to-head stack")
+    h_parser.add_argument("--map", type=str, help="Map name")
+    h_parser.add_argument("--sim", type=str, choices=["True", "False"], help="Run in simulation")
+    h_parser.add_argument("--racecar", type=str, help="Racecar version")
+    h_parser.add_argument("--ctrl", type=str, help="Control algorithm (PP/MAP)")
+    h_parser.add_argument("--table", type=str, help="Lookup table parameter")
+    h_parser.add_argument("--overtake", type=str, choices=["spliner", "graph_based"], help="Overtake planner mode")
+    h_parser.add_argument("--launch-base", type=str, choices=["True", "False"], default="True", help="Launch base system too")
+    h_parser.add_argument("--dry-run", action="store_true", help="Print command without executing")
+
+    # ftg
+    ftg_parser = subparsers.add_parser("ftg", help="Run Follow the Gap controller node standalone")
+    ftg_parser.add_argument("--dry-run", action="store_true", help="Print command without executing")
+
+    # finish-map
+    fm_parser = subparsers.add_parser("finish-map", help="Finish and save mapping session")
+    fm_parser.add_argument("name", type=str, help="Saved map name")
+    fm_parser.add_argument("--dry-run", action="store_true", help="Print command without executing")
+
+    # edit-map
+    em_parser = subparsers.add_parser("edit-map", help="Launch map editor")
+    em_parser.add_argument("--map", type=str, help="Map name")
+    em_parser.add_argument("--dry-run", action="store_true", help="Print command without executing")
+
+    args = parser.parse_args()
+
+    # Routing
+    if args.command == "profile":
+        if args.subcommand == "list":
+            handle_profile_list(args)
+        elif args.subcommand == "switch":
+            handle_profile_switch(args)
+        elif args.subcommand == "show":
+            handle_profile_show(args)
+    elif args.command == "mapping":
+        handle_mapping(args)
+    elif args.command == "base":
+        handle_base(args)
+    elif args.command == "qualifying":
+        handle_qualifying(args)
+    elif args.command == "h2h":
+        handle_h2h(args)
+    elif args.command == "ftg":
+        handle_ftg(args)
+    elif args.command == "finish-map":
+        handle_finish_map(args)
+    elif args.command == "edit-map":
+        handle_edit_map(args)
+
+if __name__ == "__main__":
+    main()
