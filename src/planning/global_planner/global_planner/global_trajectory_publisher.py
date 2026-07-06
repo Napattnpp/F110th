@@ -79,8 +79,9 @@ class GlobalRepublisher(Node):
         else:
             self.get_logger().info(f"global_trajectory_publisher did not find any map_path param {map_path}")
         
-        # Publish at 0.1 Hz
-        self.create_timer(10, self.global_republisher)
+        # Publish immediately and then at 1 Hz
+        self.global_republisher()
+        self.create_timer(3.0, self.global_republisher)
         
     def glb_wpnts_cb(self, msg):
         self.glb_wpnts = msg

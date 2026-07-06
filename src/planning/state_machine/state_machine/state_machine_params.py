@@ -210,7 +210,10 @@ class StateMachineParams:
             type=ParameterType.PARAMETER_INTEGER,
             integer_range=[IntegerRange(from_value=1, to_value=30, step=1)]
         )
-        node.declare_parameter("q1_laps", 3, descriptor=descriptor)
+        if node.has_parameter("q1_laps"):
+            node.set_descriptor("q1_laps", descriptor=descriptor)
+        else:
+            node.declare_parameter("q1_laps", 3, descriptor=descriptor)
         self.q1_laps: int = node.get_parameter("q1_laps").value
 
         descriptor = ParameterDescriptor(
@@ -219,7 +222,10 @@ class StateMachineParams:
             type=ParameterType.PARAMETER_INTEGER,
             integer_range=[IntegerRange(from_value=0, to_value=5, step=1)]
         )
-        node.declare_parameter("buf_laps", 1, descriptor=descriptor)
+        if node.has_parameter("buf_laps"):
+            node.set_descriptor("buf_laps", descriptor=descriptor)
+        else:
+            node.declare_parameter("buf_laps", 1, descriptor=descriptor)
         self.buf_laps: int = node.get_parameter("buf_laps").value
 
         descriptor = ParameterDescriptor(
@@ -228,7 +234,10 @@ class StateMachineParams:
             type=ParameterType.PARAMETER_INTEGER,
             integer_range=[IntegerRange(from_value=1, to_value=30, step=1)]
         )
-        node.declare_parameter("q2_laps", 3, descriptor=descriptor)
+        if node.has_parameter("q2_laps"):
+            node.set_descriptor("q2_laps", descriptor=descriptor)
+        else:
+            node.declare_parameter("q2_laps", 3, descriptor=descriptor)
         self.q2_laps: int = node.get_parameter("q2_laps").value
 
         descriptor = ParameterDescriptor(
@@ -237,7 +246,10 @@ class StateMachineParams:
             type=ParameterType.PARAMETER_INTEGER,
             integer_range=[IntegerRange(from_value=1, to_value=30, step=1)]
         )
-        node.declare_parameter("q3_laps", 3, descriptor=descriptor)
+        if node.has_parameter("q3_laps"):
+            node.set_descriptor("q3_laps", descriptor=descriptor)
+        else:
+            node.declare_parameter("q3_laps", 3, descriptor=descriptor)
         self.q3_laps: int = node.get_parameter("q3_laps").value
 
         descriptor = ParameterDescriptor(
@@ -249,7 +261,10 @@ class StateMachineParams:
                 to_value=1.0,
                 step=0.05)]
         )
-        node.declare_parameter("buffer_speed_scale", 0.5, descriptor=descriptor)
+        if node.has_parameter("buffer_speed_scale"):
+            node.set_descriptor("buffer_speed_scale", descriptor=descriptor)
+        else:
+            node.declare_parameter("buffer_speed_scale", 0.5, descriptor=descriptor)
         self.buffer_speed_scale: float = node.get_parameter("buffer_speed_scale").value
 
     def parameters_callback(self, parameters: List[Parameter]) -> SetParametersResult:

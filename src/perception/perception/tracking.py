@@ -465,6 +465,11 @@ class StaticDynamic(Node):
             Odometry, '/car_state/odom', self.carStateGlobCallback, 10)
         self.scan_sub = self.create_subscription(
             LaserScan, '/scan', self.scansCallback, 10)
+        
+        # Fake obstacles subscriber
+        self.fake_obstacles = []
+        self.fake_obs_sub = self.create_subscription(
+            ObstacleArray, '/perception/fake_obstacles', self.fake_obs_callback, 10)
 
         # ------------ Publishers ------------
         self.static_dynamic_marker_pub = self.create_publisher(
@@ -1103,10 +1108,20 @@ class StaticDynamic(Node):
                 obs_msg.d_left = obs_msg.d_center+obs_msg.size/2
 
                 obstacle_array.append(obs_msg)
+                
+        # Append fake obstacles
+        if hasattr(self, 'fake_obstacles'):
+            obstacle_array.extend(self.fake_obstacles)
+            
         obstaclearray_temp.obstacles = obstacle_array
         self.estimated_obstacles_pub.publish(obstaclearray_temp)
         obstaclearray_temp.obstacles = raw_opponent_array
         self.raw_opponent_pub.publish(obstaclearray_temp)
+
+    def fake_obs_callback(self, msg: ObstacleArray):
+        """Callback to store fake obstacles from state machine."""
+        self.fake_obstacles = msg.obstacles
+
 
 def main():
     rclpy.init()

@@ -11,8 +11,9 @@ from rclpy.parameter import Parameter
 from ament_index_python import get_package_share_directory
 from std_msgs.msg import String
 from nav_msgs.msg import Odometry
-from geometry_msgs.msg import PoseStamped
-from f110_msgs.msg import WpntArray, OTWpntArray, ObstacleArray
+from geometry_msgs.msg import PoseStamped, Point
+from f110_msgs.msg import WpntArray, OTWpntArray, ObstacleArray, Obstacle
+import random
 from visualization_msgs.msg import Marker, MarkerArray
 try:
     from vesc_msgs.msg import VescStateStamped
@@ -65,6 +66,7 @@ class StateMachine(Node):
         
         self.cur_s = None
         self.cur_d = None
+        self._prev_s = None
         self.create_subscription(Odometry, '/car_state/frenet/odom',self.car_state_frenet_cb, 10) # car frenet coordinates
         while self.cur_s is None:
             self.get_logger().info("Waiting for car state frenet message", throttle_duration_sec=0.5)
@@ -77,11 +79,12 @@ class StateMachine(Node):
                 self.get_logger().info("Waiting for car state pose message", throttle_duration_sec=0.5)
                 rclpy.spin_once(self)
 
+            if self.params.mode=="head_to_head" and self.params.overtake_mode == "spliner":
+                self.last_valid_avoidance_wpnts = None
+                self.splini_ttl_counter = 0
+                self.avoidance_wpnts = None
 
-            self.last_valid_avoidance_wpnts = None
-            self.splini_ttl_counter = 0
-            self.avoidance_wpnts = None
-            self.create_subscription(OTWpntArray, '/planner/avoidance/otwpnts', self.avoidance_cb, 10)
+                self.create_subscription(OTWpntArray, '/planner/avoidance/otwpnts', self.avoidance_cb, 10)
 
             self.obstacles = []
             self.create_subscription(ObstacleArray, "/perception/obstacles", self.obstacles_cb, 10)
@@ -94,6 +97,10 @@ class StateMachine(Node):
 
         # INITIALIZATIONS        
         self.waypoints_dist = 0.1
+        
+        # Fake obstacle generation parameters
+        self.fake_obs_lap = -1
+        self.fake_obstacles = []
         self.state = StateType(self.params.initial_state)
         self.local_waypoints = WpntArray()
         self.first_visualization = True
@@ -128,6 +135,7 @@ class StateMachine(Node):
         self.state_marker_pub = self.create_publisher(Marker, 'state_marker', 10)
         self.loc_wpnt_pub = self.create_publisher(WpntArray, 'local_waypoints', 10)
         self.vis_loc_wpnt_pub = self.create_publisher(MarkerArray, 'local_waypoints/markers', 10)
+        self.fake_obs_pub = self.create_publisher(ObstacleArray, '/perception/fake_obstacles', 10)
         
         # main loop
         self.main_loop = self.create_timer(1/self.params.rate_hz, self.main_loop_callback)
@@ -365,22 +373,16 @@ class StateMachine(Node):
 
         # Handle wrapping
         if self.last_valid_avoidance_wpnts is not None:
-            if self.last_valid_avoidance_wpnts[-1].s_m > self.last_valid_avoidance_wpnts[0].s_m:
-                splini_idxs = [
-                    s
-                    for s in range(
-                        int(self.last_valid_avoidance_wpnts[0].s_m / self.waypoints_dist + 0.5),
-                        int(self.last_valid_avoidance_wpnts[-1].s_m / self.waypoints_dist + 0.5),
-                    )
-                ]
+            if len(self.last_valid_avoidance_wpnts) == 0:
+                splini_idxs = [] # Avoid index error if empty
+            elif self.last_valid_avoidance_wpnts[-1].s_m > self.last_valid_avoidance_wpnts[0].s_m:
+                start_s = int(self.last_valid_avoidance_wpnts[0].s_m / self.waypoints_dist + 0.5)
+                end_s = int(self.last_valid_avoidance_wpnts[-1].s_m / self.waypoints_dist + 0.5)
+                splini_idxs = [s % self.num_glb_wpnts for s in range(start_s, end_s)]
             else:
-                splini_idxs = [
-                    int(s % (self.track_length / self.waypoints_dist) + 0.5)
-                    for s in range(
-                        int(self.last_valid_avoidance_wpnts[0].s_m / self.waypoints_dist + 0.5),
-                        int((self.track_length + self.last_valid_avoidance_wpnts[-1].s_m) / self.waypoints_dist + 0.5),
-                    )
-                ]
+                start_s = int(self.last_valid_avoidance_wpnts[0].s_m / self.waypoints_dist + 0.5)
+                end_s = int((self.track_length + self.last_valid_avoidance_wpnts[-1].s_m) / self.waypoints_dist + 0.5)
+                splini_idxs = [s % self.num_glb_wpnts for s in range(start_s, end_s)]
 
             # with self.lock:  # was needed in ROS1 but hopefuly in ROS2 were fine
             for i, s in enumerate(splini_idxs):
@@ -480,8 +482,23 @@ class StateMachine(Node):
 
         # Apply speed scaling during qualifying buffer laps
         if self.params.mode == 'qualifying' and self.qual_speed_scale != 1.0:
+            from f110_msgs.msg import Wpnt
+            scaled_wpnts = []
             for wpnt in loc_wpnts.wpnts:
-                wpnt.vx_mps *= self.qual_speed_scale
+                new_wpnt = Wpnt()
+                new_wpnt.id = wpnt.id
+                new_wpnt.s_m = wpnt.s_m
+                new_wpnt.d_m = wpnt.d_m
+                new_wpnt.x_m = wpnt.x_m
+                new_wpnt.y_m = wpnt.y_m
+                new_wpnt.d_right = wpnt.d_right
+                new_wpnt.d_left = wpnt.d_left
+                new_wpnt.psi_rad = wpnt.psi_rad
+                new_wpnt.kappa_radpm = wpnt.kappa_radpm
+                new_wpnt.vx_mps = wpnt.vx_mps * self.qual_speed_scale
+                new_wpnt.ax_mps2 = wpnt.ax_mps2
+                scaled_wpnts.append(new_wpnt)
+            loc_wpnts.wpnts = scaled_wpnts
 
         for i, wpnt in enumerate(loc_wpnts.wpnts):
             mrk = Marker()
@@ -570,6 +587,9 @@ class StateMachine(Node):
     def main_loop_callback(self):
         self.get_logger().debug(f"Current state: {self.state}")
         # transition logic
+        if self.cur_s is not None:
+            self._handle_fake_obstacles()
+            
         if self.params.force_state:
             self.state = self.params.force_state_choice
         else:
@@ -589,6 +609,47 @@ class StateMachine(Node):
                 self.last_valid_avoidance_wpnts = None
                 self.avoidance_wpnts = WpntArray()
                 self.splini_ttl_counter = -1
+
+    def _handle_fake_obstacles(self):
+        """Generates and publishes fake obstacles during Q2."""
+        q1_end = self.params.q1_laps + self.params.buf_laps
+        q2_end = q1_end + self.params.q2_laps
+        
+        # Determine if we are in Q2
+        if q1_end < self.lap_count <= q2_end and self.track_length > 0:
+            if self.lap_count > self.fake_obs_lap:
+                self.fake_obs_lap = self.lap_count
+                self.fake_obstacles = []
+                # Generate 2 new random obstacles ahead of the car
+                for _ in range(2):
+                    obs = Obstacle()
+                    # Ensure they spawn at least 15m away
+                    rand_offset = random.uniform(15.0, min(60.0, self.track_length / 2))
+                    obs.s_center = (self.cur_s + rand_offset) % self.track_length
+                    obs.s_start = obs.s_center - 0.3
+                    obs.s_end = obs.s_center + 0.3
+                    obs.d_center = 0.0
+                    obs.d_left = 0.4
+                    obs.d_right = -0.4
+                    obs.vs = 0.0
+                    obs.vd = 0.0
+                    self.fake_obstacles.append(obs)
+            
+            # Publish them
+            msg = ObstacleArray()
+            msg.header.stamp = self.get_clock().now().to_msg()
+            msg.header.frame_id = "map"
+            msg.obstacles = self.fake_obstacles
+            self.fake_obs_pub.publish(msg)
+        else:
+            # Not in Q2, publish empty array to clear
+            if self.fake_obs_lap != -1:
+                self.fake_obs_lap = -1
+                self.fake_obstacles = []
+                msg = ObstacleArray()
+                msg.header.stamp = self.get_clock().now().to_msg()
+                msg.header.frame_id = "map"
+                self.fake_obs_pub.publish(msg)
 
 # defined as entry point in setup.py:
 def main(args=None):

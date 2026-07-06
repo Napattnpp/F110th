@@ -58,11 +58,12 @@ RUN apt-get update && apt-get install -y \
     ros-$ROS_DISTRO-robot-localization \
     ros-$ROS_DISTRO-imu-filter-madgwick \
     ros-$ROS_DISTRO-laser-proc \
+    ros-$ROS_DISTRO-diagnostic-updater \
     libxcb-cursor0 \
     && rm -rf /var/lib/apt/lists/*
 
 # Install additional Python packages
-RUN python3 -m pip install uv && python3 -m uv pip install --system smbus2 transforms3d tqdm "numpy<2" scikit-image trajectory-planning-helpers casadi scikit-learn git+https://github.com/f1tenth/f1tenth_gym.git@dev-humble
+RUN python3 -m pip install uv && python3 -m uv pip install --system smbus2 transforms3d tqdm "numpy<2" scikit-image trajectory-planning-helpers casadi scikit-learn filterpy git+https://github.com/f1tenth/f1tenth_gym.git@dev-humble
 
 # 5. Micro ROS (general image only)
 SHELL ["/bin/bash", "-c"]

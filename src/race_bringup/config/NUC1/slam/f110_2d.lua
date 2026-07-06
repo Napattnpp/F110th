@@ -34,30 +34,19 @@ MAP_BUILDER.use_trajectory_builder_2d = true
 MAP_BUILDER.use_trajectory_builder_3d = false
 MAP_BUILDER.num_background_threads = 3.0
 TRAJECTORY_BUILDER_2D.use_imu_data = false
+TRAJECTORY_BUILDER_2D.max_range = 12.0
+TRAJECTORY_BUILDER_2D.min_range = 0.1
 
--- Lidar scan filtering
-TRAJECTORY_BUILDER_2D.max_range = 6.0 -- Restrict max range to ignore distant reflections and speed up matching
-TRAJECTORY_BUILDER_2D.min_range = 0.1  -- Ignore reflections from the car's own chassis
-
+-- might be able to optimize these parameters
+-- see: http://google-cartographer-ros.readthedocs.io/en/latest/tuning.html
 TRAJECTORY_BUILDER_2D.submaps.num_range_data = 100
-
--- Occupancy grid tuning (makes walls stickier and harder for noise to clear out)
-TRAJECTORY_BUILDER_2D.submaps.range_data_inserter.probability_grid_range_data_inserter.hit_probability = 0.60 -- Reduced from 0.75 to make walls thinner
-TRAJECTORY_BUILDER_2D.submaps.range_data_inserter.probability_grid_range_data_inserter.miss_probability = 0.45 -- Back to original (0.45) to aggressively clean up noise
-
 POSE_GRAPH.optimize_every_n_nodes = 20
 
--- Reduce constraint search density to lighten the pose graph on Jetson
-POSE_GRAPH.constraint_builder.sampling_ratio = 0.3
-POSE_GRAPH.constraint_builder.min_score = 0.65
-POSE_GRAPH.constraint_builder.global_localization_min_score = 0.70
+TRAJECTORY_BUILDER_2D.ceres_scan_matcher.rotation_weight = 0.2 * TRAJECTORY_BUILDER_2D.ceres_scan_matcher.rotation_weight
 
--- Trust the scan matcher more (scale factor 1.5 instead of 0.2) to correct for wheel slip
-TRAJECTORY_BUILDER_2D.ceres_scan_matcher.rotation_weight = 1.5 * TRAJECTORY_BUILDER_2D.ceres_scan_matcher.rotation_weight
-TRAJECTORY_BUILDER_2D.ceres_scan_matcher.translation_weight = 1.5 * TRAJECTORY_BUILDER_2D.ceres_scan_matcher.translation_weight
+TRAJECTORY_BUILDER_2D.ceres_scan_matcher.translation_weight = 0.2 * TRAJECTORY_BUILDER_2D.ceres_scan_matcher.translation_weight
 
--- Use odometry in pose graph optimization to prevent drift/smearing
-POSE_GRAPH.optimization_problem.odometry_rotation_weight = 1e5
-POSE_GRAPH.optimization_problem.odometry_translation_weight = 1e5
+POSE_GRAPH.optimization_problem.odometry_rotation_weight = 0
+POSE_GRAPH.optimization_problem.odometry_translation_weight = 0
 
 return options

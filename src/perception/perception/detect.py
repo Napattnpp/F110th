@@ -179,13 +179,13 @@ class Detect(Node):
         self.car_s = 0
 
         # raw scans from the lidar
-        self.scans: LaserScan = LaserScan()
+        self.scans = None
 
         self.current_stamp = None
         self.tracked_obstacles = []
 
         self.tf_buffer = Buffer(rclpy.duration.Duration(seconds=5))
-        self.tf_listener = TransformListener(self.tf_buffer, self, spin_thread=True)
+        self.tf_listener = TransformListener(self.tf_buffer, self)
         self.path_needs_update = False
 
         # self.converter = self.initialize_converter()
@@ -648,7 +648,7 @@ class Detect(Node):
         try:
             transform = self.tf_buffer.lookup_transform(target_frame='map', 
                                                         source_frame=self.scans.header.frame_id, 
-                                                        time=self.scans.header.stamp, 
+                                                        time=rclpy.time.Time(), 
                                                         timeout=rclpy.duration.Duration(seconds=0.03))
         except Exception as e:
             self.get_logger().warn(f"Could not transform between 'map' and '{scans.header.frame_id}': {e}")

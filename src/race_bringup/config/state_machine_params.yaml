@@ -29,4 +29,4 @@ state_machine:
     buf_laps:           1    # number of slow buffer laps on each side of Q2
     q2_laps:            3    # number of laps with obstacle avoidance active
     q3_laps:            3    # number of full-speed laps after Q2
-    buffer_speed_scale: 0.5  # fraction of max speed during buffer laps (0.1 – 1.0)
+    buffer_speed_scale: 0.9  # fraction of max speed during buffer laps (0.1 – 1.0)

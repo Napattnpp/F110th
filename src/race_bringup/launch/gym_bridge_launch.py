@@ -69,14 +69,15 @@ def launch_setup(context, *args, **kwargs):
     config = os.path.join(package_share, 'config', sim_profile, 'sim.yaml')
     with open(config, 'r') as config_file:
         config_dict = yaml.safe_load(config_file)
-    has_opp = config_dict['bridge']['ros__parameters']['num_agent'] > 1
-    teleop = config_dict['bridge']['ros__parameters']['kb_teleop']
-    use_sim_time = config_dict['bridge']['ros__parameters']['use_sim_time']
+    bridge_params = config_dict.get('bridge', config_dict.get('/**'))['ros__parameters']
+    has_opp = bridge_params['num_agent'] > 1
+    teleop = bridge_params['kb_teleop']
+    use_sim_time = bridge_params['use_sim_time']
     map_yaml_path_str = LaunchConfiguration('map_yaml_path').perform(context)
     if map_yaml_path_str:
         map_yaml_path = pathlib.Path(map_yaml_path_str)
     else:
-        map_path = config_dict['bridge']['ros__parameters']['map_path']
+        map_path = bridge_params['map_path']
         map_yaml_path = _resolve_map_yaml_path(map_path, package_share)
     foxglove_config = config_dict.get('foxglove', {})
     if 'ros__parameters' in foxglove_config:
@@ -124,7 +125,7 @@ def launch_setup(context, *args, **kwargs):
 
     with open(map_yaml_path, 'r') as file:
         map_yaml = yaml.safe_load(file)
-    scale = config_dict['bridge']['ros__parameters']['scale']
+    scale = bridge_params['scale']
     map_yaml['resolution'] *= scale
     origin = map_yaml['origin']
     scaled_origin = (
@@ -183,11 +184,11 @@ def launch_setup(context, *args, **kwargs):
 
 
     ego_xacro = None
-    if config_dict['bridge']['ros__parameters']['vehicle_params'] == 'f1tenth':
+    if bridge_params['vehicle_params'] == 'f1tenth':
         ego_xacro = "ego_racecar.xacro"
-    elif config_dict['bridge']['ros__parameters']['vehicle_params'] == 'fullscale':
+    elif bridge_params['vehicle_params'] == 'fullscale':
         ego_xacro = "ego_racecar_fullscale.xacro"
-    elif config_dict['bridge']['ros__parameters']['vehicle_params'] == 'f1fifth':
+    elif bridge_params['vehicle_params'] == 'f1fifth':
         ego_xacro = "ego_racecar_f1fifth.xacro"
     else:
         raise ValueError('vehicle_params should be either f1tenth, fullscale, or f1fifth.')

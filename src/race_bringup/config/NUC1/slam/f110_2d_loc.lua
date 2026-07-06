@@ -34,12 +34,8 @@ MAP_BUILDER.use_trajectory_builder_2d = true
 MAP_BUILDER.use_trajectory_builder_3d = false
 MAP_BUILDER.num_background_threads = 4.0
 TRAJECTORY_BUILDER_2D.use_imu_data = false
-
--- Lidar scan filtering
-TRAJECTORY_BUILDER_2D.max_range = 12.0 -- Ignore distant reflections to match the mapping resolution and speed up matching
-TRAJECTORY_BUILDER_2D.min_range = 0.05 -- Ignore chassis reflections
-
--- Trimmer to discard old submaps, keeping memory usage constant in pure localization mode
+TRAJECTORY_BUILDER_2D.max_range = 12.0
+TRAJECTORY_BUILDER_2D.min_range = 0.05
 TRAJECTORY_BUILDER.pure_localization_trimmer = {
     max_submaps_to_keep = 5,
 }
@@ -47,27 +43,17 @@ TRAJECTORY_BUILDER.pure_localization_trimmer = {
 -- might be able to optimize these parameters
 -- see: http://google-cartographer-ros.readthedocs.io/en/latest/tuning.html
 TRAJECTORY_BUILDER_2D.submaps.num_range_data = 80
-
--- Occupancy grid tuning (matches mapping grid settings to maintain wall definitions)
-TRAJECTORY_BUILDER_2D.submaps.range_data_inserter.probability_grid_range_data_inserter.hit_probability = 0.65
-TRAJECTORY_BUILDER_2D.submaps.range_data_inserter.probability_grid_range_data_inserter.miss_probability = 0.45
-
 POSE_GRAPH.optimize_every_n_nodes = 5
 POSE_GRAPH.global_sampling_ratio = 0.05
 POSE_GRAPH.constraint_builder.sampling_ratio = 0.05
-POSE_GRAPH.constraint_builder.min_score = 0.65
-POSE_GRAPH.constraint_builder.global_localization_min_score = 0.70
 
--- Trust the scan matcher more (scale factor 1.5 instead of 0.2) to correct for wheel slip
-TRAJECTORY_BUILDER_2D.ceres_scan_matcher.rotation_weight = 1.5 * TRAJECTORY_BUILDER_2D.ceres_scan_matcher.rotation_weight
-TRAJECTORY_BUILDER_2D.ceres_scan_matcher.translation_weight = 1.5 * TRAJECTORY_BUILDER_2D.ceres_scan_matcher.translation_weight
+TRAJECTORY_BUILDER_2D.ceres_scan_matcher.rotation_weight = 0.2 * TRAJECTORY_BUILDER_2D.ceres_scan_matcher.rotation_weight
 
--- Trust scan matcher over odometry in pose graph optimization to prevent EKF/odom drift from warping the pose
-POSE_GRAPH.optimization_problem.odometry_rotation_weight = 0.0
-POSE_GRAPH.optimization_problem.odometry_translation_weight = 0.0
+TRAJECTORY_BUILDER_2D.ceres_scan_matcher.translation_weight = 0.2 * TRAJECTORY_BUILDER_2D.ceres_scan_matcher.translation_weight
+
+POSE_GRAPH.optimization_problem.odometry_rotation_weight = 0
+POSE_GRAPH.optimization_problem.odometry_translation_weight = 0
 --POSE_GRAPH.optimization_problem.local_slam_pose_rotation_weight = 1.25 * POSE_GRAPH.optimization_problem.local_slam_pose_rotation_weight
 
 
 return options
-
-
