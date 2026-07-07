@@ -102,7 +102,7 @@ def extract_centerline(skeleton, cent_length: float, map_resolution: float, map_
 
         line_length *= map_resolution  # length in meters not cells
         # line length should be around the length of the centerline otherwise keep length infinity
-        if np.abs(cent_length / line_length - 1.0) < 0.15:
+        if np.abs(cent_length / line_length - 1.0) < 0.80:
             line_lengths[i] = line_length
         elif map_editor_mode or cent_length == 0.0:
             line_lengths[i] = line_length

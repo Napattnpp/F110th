@@ -109,7 +109,7 @@ def generate_launch_description():
             IncludeLaunchDescription(
                 bringup_source,
                 launch_arguments={
-                    'joy_teleop_config': joy_teleop_config,
+                    'joy_config': joy_teleop_config,
                     'vesc_config': vesc_config,
                     'sllidar_s1_config': sllidar_s1_config,
                     'mux_config': mux_config

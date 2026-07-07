@@ -53,7 +53,7 @@ def generate_launch_description():
     )
     run_ftg_arg = DeclareLaunchArgument(
         'run_ftg',
-        default_value='True',
+        default_value='False',
         description='Whether to run ftg_mapper node'
     )
 
@@ -98,7 +98,7 @@ def generate_launch_description():
             IncludeLaunchDescription(
                 bringup_source,
                 launch_arguments={
-                    'joy_teleop_config': joy_teleop_config,
+                    'joy_config': joy_teleop_config,
                     'vesc_config': vesc_config,
                     'sllidar_s1_config': sllidar_s1_config,
                     'mux_config': mux_config

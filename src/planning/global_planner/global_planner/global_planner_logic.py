@@ -213,6 +213,8 @@ class GlobalPlannerLogic:
                     self.loginfo(f"Approximate centerline length: {round(cent_length, 4)}m; ")
                     if self.compute_global_trajectory(cent_length=cent_length):
                         self.loginfo("Successfully computed global waypoints.")
+                        import subprocess
+                        subprocess.Popen(args=[self.script_path, self.map_name], shell=False).wait()
                         return (True, self.map_name)
                     else:
                         self.logwarn("Was unable to compute global waypoints!")
@@ -636,9 +638,7 @@ class GlobalPlannerLogic:
         save_map_to_directory(self.map_dir, self.map_name)
         save_map_to_directory(self.map_dir, 'pf_map')
 
-        # Call ROS service to save PB stream
-        pbstream_path = os.path.join(self.map_dir, self.map_name + ".pbstream")
-        subprocess.Popen(args=[self.script_path, pbstream_path], shell=False).wait()
+        # PB stream will be saved later if trajectory successfully computes
 
         self.loginfo(f'PNG and YAML file created and saved in the {self.map_dir} folder')
 
