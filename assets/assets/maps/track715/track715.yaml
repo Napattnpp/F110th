@@ -1,6 +1,0 @@
-image: /home/jetson/F110th/assets/assets/maps/track715/track715.pgm
-resolution: 0.050000
-origin: [-6.900000, -1.366927, 0.0]
-negate: 0
-occupied_thresh: 0.65
-free_thresh: 0.196

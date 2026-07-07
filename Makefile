@@ -71,8 +71,8 @@ colcon_build: ## Build the workspace locally (creates directories if missing)
 	@echo "Build complete. Run: source out/install/setup.bash"
 
 clean: ## Remove colcon build output directory (out/)
-	@echo "Removing out/ ..."
-	rm -rf out/
+	@echo "Removing out/ build contents..."
+	rm -rf out/build out/install out/logs
 	@echo "Colcon build output removed."
 
 docker_build: ## Build the Docker image for your detected platform (SERVICE override: make build SERVICE=jetson)

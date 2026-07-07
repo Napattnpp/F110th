@@ -18,7 +18,7 @@ x-common-settings: &common-settings
     - DISPLAY=${DISPLAY}
     - XAUTHORITY=${XAUTHORITY}
     - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-21}
-    - RMW_IMPLEMENTATION=${RMW_IMPLEMENTATION:-rmw_cyclonedds_cpp}
+    - RMW_IMPLEMENTATION=${RMW_IMPLEMENTATION:-rmw_zenoh_cpp}
     - CYCLONEDDS_URI=file:///cyclonedds.xml
     - RACECAR_VERSION=${RACECAR_VERSION:-NUC1}
     - USER=${USER}
@@ -32,6 +32,8 @@ x-common-settings: &common-settings
     - ${XAUTHORITY:-/tmp/.docker.xauth}:${XAUTHORITY:-/tmp/.docker.xauth}
     # Source code (repo root → workspace inside container)
     - .:/home/${USER}/F110th
+    # Fast build outputs volume (prevents slow macOS host sync)
+    - f110th_build_cache:/home/${USER}/F110th/out
     # CycloneDDS configuration override (disables shared memory to prevent RouDi timeouts)
     - ./.devcontainer/docker/cyclonedds.xml:/cyclonedds.xml:ro
     # Global Tmux configuration
@@ -55,6 +57,13 @@ services:
     image: ${DOCKERHUB_USER:-napattnpp}/${IMAGE_NAME:-f110th_img}:humble-jetson
     profiles: ["jetson"]
     runtime: nvidia
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [ gpu ]
     <<: *common-settings
     volumes:
       # Hardware & device access
@@ -67,6 +76,8 @@ services:
       - /tmp/.X11-unix:/tmp/.X11-unix
       # Source code
       - .:/home/${USER}/F110th
+      # Fast build outputs volume (prevents slow filesystem sync)
+      - f110th_build_cache:/home/${USER}/F110th/out
 
   # --------------------------------------------------------------------------
   # general — x86 / ARM laptop (development & simulation)
@@ -81,3 +92,7 @@ services:
     image: ${DOCKERHUB_USER:-napattnpp}/${IMAGE_NAME:-f110th_img}:humble-general
     profiles: ["general"]
     <<: *common-settings
+
+# Declare named volumes
+volumes:
+  f110th_build_cache:

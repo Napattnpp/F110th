@@ -2,10 +2,18 @@ import cv2
 import numpy as np
 from skimage.morphology import skeletonize
 
-img_path = '/home/jetson/F110th/assets/maps/track715/track715.png'
+import sys
+import os
+
+# Default path relative to this script
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+default_img_path = os.path.abspath(os.path.join(SCRIPT_DIR, '../assets/maps/track715/track715.png'))
+
+img_path = sys.argv[1] if len(sys.argv) > 1 else default_img_path
 raw_img = cv2.imread(img_path, 0)
 if raw_img is None:
-    print("Map not found")
+    print(f"Map not found at: {img_path}")
+    print("Usage: python3 scripts/test_map.py [path_to_map.png]")
     exit(1)
 
 filtered_map = np.where(raw_img >= 250, 255, 0).astype(np.uint8)

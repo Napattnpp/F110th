@@ -27,8 +27,5 @@
                 "timonwong.shellcheck"
             ]
         }
-    },
-    "containerEnv": {
-        "DISPLAY": ":501"
     }
 }

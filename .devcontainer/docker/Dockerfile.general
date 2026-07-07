@@ -38,6 +38,7 @@ RUN apt-get update && apt-get install -y \
     ros-$ROS_DISTRO-turtlesim \
     ros-$ROS_DISTRO-rqt \
     ros-$ROS_DISTRO-rmw-cyclonedds-cpp \
+    ros-$ROS_DISTRO-rmw-zenoh-cpp \
     ros-$ROS_DISTRO-rqt-common-plugins \
     ros-$ROS_DISTRO-slam-toolbox \
     ros-$ROS_DISTRO-cartographer \
@@ -83,7 +84,9 @@ SHELL ["/bin/sh", "-c"]
 # 6. Create non-root user matching the host UID/GID
 RUN groupadd -f -g ${GID} ${USER} \
     && useradd -ms /bin/bash -u ${UID} -g ${GID} ${USER} \
-    && echo "${USER} ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+    && echo "${USER} ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers \
+    && mkdir -p /home/${USER}/F110th/out \
+    && chown -R ${UID}:${GID} /home/${USER}/F110th
 
 # 7. Configure user environment
 USER ${USER}

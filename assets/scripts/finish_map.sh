@@ -1,1 +1,0 @@
-/home/jetson/F110th/scripts/finish_map.sh
