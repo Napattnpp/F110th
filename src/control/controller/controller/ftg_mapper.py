@@ -35,8 +35,8 @@ class FTGMapperNode(Node):
         self.use_constant_speed = True # Set to False to enable dynamic speed scaling
 
         # Crash Recovery Parameters
-        self.recovery_speed = -0.6
-        self.recovery_duration = 1.5
+        self.recovery_speed = -0.5
+        self.recovery_duration = 1.3
         self.crash_distance = 0.25 # meters
         self.crash_fov_angle_deg = 25.0 # Field of Perception for crash detection (np.pi/9)
         self.forward_clearance_fov_deg = 15.0 # FOV for forward clearance speed scaling (np.pi/12)
