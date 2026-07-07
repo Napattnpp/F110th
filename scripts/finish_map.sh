@@ -12,7 +12,11 @@ fi
 
 MAP_NAME=$1
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+# Try to find the workspace root (where 'src' or 'assets' lives)
+PROJECT_ROOT="${SCRIPT_DIR}"
+while [ ! -d "${PROJECT_ROOT}/src" ] && [ "${PROJECT_ROOT}" != "/" ]; do
+    PROJECT_ROOT="$(dirname "${PROJECT_ROOT}")"
+done
 TARGET_DIR="${PROJECT_ROOT}/assets/maps/${MAP_NAME}"
 
 echo "Creating map directory in assets: ${TARGET_DIR}"
