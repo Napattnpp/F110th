@@ -11,15 +11,15 @@ class FTGMapperNode(Node):
         super().__init__('ftg_mapper_node')
 
         # Reactive Gap Parameters (Mapped from C++ node)
-        self.moving_avg_window = 3
+        self.moving_avg_window = 5
         self.max_dist = 8.0 # Look further ahead (was 6.0)
         self.car_width = 0.25
-        self.bubble_radius = 0.30
+        self.bubble_radius = 0.28
         self.min_obs_dist_threshold = 1.2
-        self.disparity_threshold = 0.5
+        self.disparity_threshold = 0.4
         
         self.gap_target_bias = 0.5
-        self.steering_gain = 1.8 # Less aggressive turning (was 1.2)
+        self.steering_gain = 1.0 # Less aggressive turning (was 1.2)
         
         # Mapping Slow Speeds (Slower than the racing defaults)
         self.vel_close = 0.4
@@ -42,7 +42,7 @@ class FTGMapperNode(Node):
         self.forward_clearance_fov_deg = 15.0 # FOV for forward clearance speed scaling (np.pi/12)
         
         # Hardcoded constraints
-        self.gap_width_threshold_factor = 0.8 # Multiplier for car_width to consider a gap valid
+        self.gap_width_threshold_factor = 0.2 # Multiplier for car_width to consider a gap valid
         self.max_steer_rad = 0.52 # ~30 deg for angle slowdown
 
         # State
