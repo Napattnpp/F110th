@@ -18,6 +18,9 @@ fi
 if ! grep -q "export LIBGL_ALWAYS_INDIRECT=" ~/.bashrc; then
     echo -e '\n# Fix OpenGL rendering issues over SSH X11 forwarding\nexport LIBGL_ALWAYS_INDIRECT=1' >> ~/.bashrc
 fi
+if ! grep -q "alias fixdisplay=" ~/.bashrc; then
+    echo -e '\n# Fix broken X11 forwarding in re-attached tmux sessions\nalias fixdisplay="export DISPLAY=\\$(tmux show-env | grep \\"^DISPLAY=\\" | cut -d= -f2)"' >> ~/.bashrc
+fi
 
 # 2. Setup udev rules
 echo "Copying udev rules..."
