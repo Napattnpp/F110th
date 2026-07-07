@@ -4,7 +4,7 @@
     i2c_device: "/dev/i2c-7"
     i2c_addr: 0x68
     frame_id: "imu_link"
-    rate_hz: 200
+    rate_hz: 80
 
     accel_range_g: 2
     gyro_range_dps: 250
@@ -12,14 +12,14 @@
     auto_calibrate_gyro: true
 
     # These values should be filled after running calibrate_gyro
-    gyro_bias_x: 0.0
-    gyro_bias_y: 0.0
-    gyro_bias_z: 0.0
+    gyro_bias_x: 0.0276527
+    gyro_bias_y: 0.0123363
+    gyro_bias_z: 0.00416465
 
     accel_bias_x: 0.0
     accel_bias_y: 0.0
     accel_bias_z: 0.0
 
     # Covariance diagonals (x, y, z)
-    accel_covariance: [0.0005, 0.0005, 0.0005]
-    gyro_covariance: [0.00001, 0.00001, 0.00001]
+    accel_covariance: [0.00097615, 0.00124213, 0.00136605]
+    gyro_covariance: [0.00000835, 0.00000657, 0.00000622]
