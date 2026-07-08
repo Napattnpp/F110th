@@ -334,8 +334,11 @@ class MapCleanerApp:
         
         # Disable matplotlib's default key handlers completely
         # This prevents matplotlib from intercepting 's' to save the figure
-        if self.fig.canvas.manager.toolbar is not None:
-            self.fig.canvas.manager.toolbar.hide()  # Hide toolbar (Qt backend)
+        if getattr(self.fig.canvas.manager, 'toolbar', None) is not None:
+            if hasattr(self.fig.canvas.manager.toolbar, 'hide'):
+                self.fig.canvas.manager.toolbar.hide()  # Hide toolbar (Qt backend)
+            elif hasattr(self.fig.canvas.manager.toolbar, 'pack_forget'):
+                self.fig.canvas.manager.toolbar.pack_forget()  # Hide toolbar (Tkinter backend)
         
         # Remove ALL default matplotlib key press handlers
         for cid in list(self.fig.canvas.callbacks.callbacks['key_press_event'].keys()):

@@ -2,7 +2,7 @@ ekf_filter_node:
   ros__parameters:
     #> Codex: 2D car model for flat-ground F1TENTH driving.
     two_d_mode: true
-    frequency: 50.0
+    frequency: 30.0
     sensor_timeout: 0.1
     transform_time_offset: 0.0
     transform_timeout: 0.0

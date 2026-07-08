@@ -159,6 +159,11 @@ class GlobalPlannerLogic:
             self.fig.suptitle('Filtered map')
             self.btn_compute = Button(self.axfinish, 'Map ready; compute global trajectory')
             self.ready_to_plan: bool = False
+            
+            def finish_cb(event):
+                self.ready_to_plan = True
+                
+            self.btn_compute.on_clicked(finish_cb)
         else:
             self.ready_to_plan = True
 
@@ -187,9 +192,6 @@ class GlobalPlannerLogic:
             self.loginfo("Map and pose received.")
 
         # Button callback
-        def finish_cb(event):
-            self.ready_to_plan = True
-
         def wait_for_input_and_save() -> tuple[bool, str]:
             """
             Waits for user input and saves the map.
@@ -197,7 +199,6 @@ class GlobalPlannerLogic:
             Returns:
                 A tuple of bool and str indicating the success status and the name of the saved map.
             """
-            self.btn_compute.on_clicked(finish_cb)
             # Filter and plot map
             filtered_map = self.filter_map_occupancy_grid()
             self.ax1.imshow(filtered_map, cmap='gray')
@@ -208,18 +209,20 @@ class GlobalPlannerLogic:
                 self.initial_position = self.current_position  # use position after mapping is done
                 self.save_map_png(filtered_map)
                 self.loginfo('Saved map.')
-                plt.close('all')
                 if self.compute_global_traj:
                     self.loginfo(f"Approximate centerline length: {round(cent_length, 4)}m; ")
                     if self.compute_global_trajectory(cent_length=cent_length):
                         self.loginfo("Successfully computed global waypoints.")
                         import subprocess
                         subprocess.Popen(args=[self.script_path, self.map_name], shell=False).wait()
+                        plt.close('all')
                         return (True, self.map_name)
                     else:
                         self.logwarn("Was unable to compute global waypoints!")
                         self.ready_to_plan = False
                         return (False, "")
+                
+                plt.close('all')
                 return (True, self.map_name)
             return (False, "")
 
@@ -297,7 +300,7 @@ class GlobalPlannerLogic:
                 self.logwarn('No closed contours found! Check the edited image...')
             else:
                 self.logwarn('No closed contours found! Keep driving...')
-            return False
+            return (False, "")
         except ValueError:
             self.logwarn("Couldn't find a closed contour with similar length as driven path!")
             self.loginfo('Maybe missed a lap completion...')
@@ -307,7 +310,7 @@ class GlobalPlannerLogic:
             self.lap_count = 0
             self.required_laps = 1
             self.cent_driven = [self.initial_position]
-            return False
+            return (False, "")
 
         centerline_smooth = smooth_centerline(centerline)
 
@@ -430,7 +433,7 @@ class GlobalPlannerLogic:
             traceback.print_exc()
             self.logwarn(f"mincurv optimization failed, error: {e}")
             self.loginfo('Try again later!')
-            return False
+            return (False, "")
 
         self.map_info_str += f'IQP estimated lap time: {round(est_t_iqp, 4)}s; '
         self.map_info_str += f'IQP maximum speed: {round(np.amax(global_trajectory_iqp[:, 5]), 4)}m/s; '
@@ -566,7 +569,7 @@ class GlobalPlannerLogic:
             global_traj_wpnts_sp,
             bounds_markers
         )
-        return True
+        return (True, self.map_name)
 
     def filter_map_occupancy_grid(self) -> np.ndarray:
         """

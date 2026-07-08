@@ -39,6 +39,19 @@ RUN apt-get update && apt-get install -y \
     python3-scipy \
     udev \
     i2c-tools \
+    gfortran \
+    libxcb-cursor0 \
+    && rm -rf /var/lib/apt/lists/*
+
+
+
+RUN apt-get update && apt-get install -y equivs \
+    && printf "Section: misc\nPriority: optional\nStandards-Version: 3.9.2\nPackage: opencv-dummy\nProvides: libopencv-core-dev, libopencv-flann-dev, libopencv-imgproc-dev, libopencv-imgcodecs-dev, libopencv-videoio-dev, libopencv-highgui-dev, libopencv-ml-dev, libopencv-features2d-dev, libopencv-calib3d-dev, libopencv-dnn-dev, libopencv-objdetect-dev, libopencv-photo-dev, libopencv-video-dev, libopencv-shape-dev, libopencv-stitching-dev, libopencv-superres-dev, libopencv-videostab-dev, libopencv-contrib-dev, libopencv-dev, opencv-data\nDescription: Dummy package for NVIDIA OpenCV\n" > /tmp/opencv-dummy.control \
+    && cd /tmp && equivs-build opencv-dummy.control \
+    && dpkg -i opencv-dummy_1.0_all.deb \
+    && rm -rf /var/lib/apt/lists/* /tmp/*
+
+RUN apt-get update && apt-get install -y \
     python3-rosdep \
     ros-$ROS_DISTRO-turtlesim \
     ros-$ROS_DISTRO-rqt \
@@ -51,6 +64,9 @@ RUN apt-get update && apt-get install -y \
     ros-$ROS_DISTRO-navigation2 \
     ros-$ROS_DISTRO-nav2-bringup \
     ros-$ROS_DISTRO-ackermann-msgs \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN apt-get update && apt-get install -y \
     ros-$ROS_DISTRO-serial-driver \
     ros-$ROS_DISTRO-asio-cmake-module \
     ros-$ROS_DISTRO-joy \
@@ -64,12 +80,10 @@ RUN apt-get update && apt-get install -y \
     ros-$ROS_DISTRO-imu-filter-madgwick \
     ros-$ROS_DISTRO-laser-proc \
     ros-$ROS_DISTRO-diagnostic-updater \
-    gfortran \
-    libxcb-cursor0 \
     && rm -rf /var/lib/apt/lists/*
 
 # Install additional Python packages
-RUN python3 -m pip install smbus2 transforms3d tqdm "numpy<2" scikit-image trajectory-planning-helpers casadi scikit-learn
+RUN python3 -m pip install --index-url https://pypi.org/simple smbus2 transforms3d tqdm "numpy<2" scikit-image trajectory-planning-helpers casadi scikit-learn filterpy numba pandas matplotlib pynput quadprog==0.1.11
 
 # 5. Create non-root user matching the host UID/GID
 RUN groupadd -f -g ${GID} ${USER} \

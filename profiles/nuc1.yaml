@@ -4,7 +4,7 @@ sim: false
 slam_method: "cartographer"
 localize: true
 localize_method: "amcl"
-map_name: "track11"
+map_name: "track433"
 ctrl_algo: "PP"
 LU_table: "NUC1_hangar_pacejka_lookup_table"
 overtake_mode: "spliner"

@@ -260,8 +260,8 @@ fi
 
 if [ -f "$SCRIPT_DIR/requirements.txt" ]; then
     info "Installing Python requirements..."
-    "$VENV_DIR/bin/pip" install --quiet --upgrade pip setuptools wheel
-    "$VENV_DIR/bin/pip" install --quiet -r "$SCRIPT_DIR/requirements.txt"
+    env -u PYTHONPATH "$VENV_DIR/bin/pip" install --quiet --upgrade pip setuptools wheel
+    env -u PYTHONPATH "$VENV_DIR/bin/pip" install --quiet -r "$SCRIPT_DIR/requirements.txt"
     success "Python requirements installed"
 else
     warn "requirements.txt not found (optional)"
@@ -322,36 +322,10 @@ if [ "$SERVICE" = "jetson" ]; then
 fi
 
 # ══════════════════════════════════════════════════════════════════════════════
-# STEP 7: Build Docker Image
-# ══════════════════════════════════════════════════════════════════════════════
-section "Step 7: Build Docker Image"
-
-info "Building Docker image for ${CYAN}$SERVICE${NC} service..."
-info "(This may take 2–5 minutes on first run)"
-if docker compose --env-file "$REPO_DIR/.env" build "$SERVICE"; then
-    success "Docker image built successfully"
-else
-    error "Docker build failed. Check Docker installation and disk space."
-fi
-
-# ══════════════════════════════════════════════════════════════════════════════
-# STEP 8: Launch Docker Container
-# ══════════════════════════════════════════════════════════════════════════════
-section "Step 8: Launch Container"
-
-info "Launching container..."
-if docker compose --env-file "$REPO_DIR/.env" --profile "$SERVICE" up -d; then
-    success "Container launched successfully"
-    info "Container name: ${CYAN}f1tenth_${SERVICE}${NC}"
-else
-    error "Failed to launch container"
-fi
-
-# ══════════════════════════════════════════════════════════════════════════════
-# STEP 9: Jetson Host Setup (Optional — only on Jetson hardware)
+# STEP 7: Jetson Host Setup (Optional — only on Jetson hardware)
 # ══════════════════════════════════════════════════════════════════════════════
 if [ "$IS_JETSON" = "yes" ]; then
-    section "Step 9: Jetson Host Optimization"
+    section "Step 7: Jetson Host Optimization"
 
     info "This is a Jetson. Running Jetson-specific host setup..."
     info "This requires ${YELLOW}sudo${NC} for kernel parameters, udev rules, and systemd services."
@@ -373,6 +347,32 @@ if [ "$IS_JETSON" = "yes" ]; then
     fi
 else
     info "(Not a Jetson — skipping Jetson optimizations)"
+fi
+
+# ══════════════════════════════════════════════════════════════════════════════
+# STEP 8: Build Docker Image
+# ══════════════════════════════════════════════════════════════════════════════
+section "Step 8: Build Docker Image"
+
+info "Building Docker image for ${CYAN}$SERVICE${NC} service..."
+info "(This may take 2–5 minutes on first run)"
+if docker compose --env-file "$REPO_DIR/.env" build "$SERVICE"; then
+    success "Docker image built successfully"
+else
+    error "Docker build failed. Check Docker installation and disk space."
+fi
+
+# ══════════════════════════════════════════════════════════════════════════════
+# STEP 9: Launch Docker Container
+# ══════════════════════════════════════════════════════════════════════════════
+section "Step 9: Launch Container"
+
+info "Launching container..."
+if docker compose --env-file "$REPO_DIR/.env" --profile "$SERVICE" up -d; then
+    success "Container launched successfully"
+    info "Container name: ${CYAN}f1tenth_${SERVICE}${NC}"
+else
+    error "Failed to launch container"
 fi
 
 # ══════════════════════════════════════════════════════════════════════════════

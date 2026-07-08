@@ -74,7 +74,7 @@ amcl:
     recovery_alpha_fast: 0.0
 
     save_pose_rate: 0.5
-    tmp_tol: 1.0
+    transform_tolerance: 1.0
 
     # --- Initial pose ---
     # Update x/y/yaw below to match wherever you actually place the car

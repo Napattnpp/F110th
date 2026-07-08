@@ -1,7 +1,7 @@
 import os
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, GroupAction
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, GroupAction, TimerAction
 from launch.conditions import IfCondition, UnlessCondition
 from launch.launch_description_sources import AnyLaunchDescriptionSource, PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, PythonExpression
@@ -108,12 +108,17 @@ def generate_launch_description():
         
     # ftg_mapper node to drive around during mapping (optional)
     physical_actions.append(
-        Node(
-            package='controller',
-            executable='ftg_mapper',
-            name='ftg_mapper',
-            output='screen',
-            condition=IfCondition(LaunchConfiguration('run_ftg'))
+        TimerAction(
+            period=10.0,
+            actions=[
+                Node(
+                    package='controller',
+                    executable='ftg_mapper',
+                    name='ftg_mapper',
+                    output='screen',
+                    condition=IfCondition(LaunchConfiguration('run_ftg'))
+                )
+            ]
         )
     )
         
