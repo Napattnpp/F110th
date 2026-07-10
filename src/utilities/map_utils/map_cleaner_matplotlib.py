@@ -104,8 +104,9 @@ class MapCleanerApp:
             'min_blob': 80,
             'cover_track_edge': False,          # Optimized default: walls sit outside the track
             'keep_largest_track': True,
-            'edge_smooth_method': 'bilateral',  # 'bilateral', 'distance', 'contour', 'none'
-            'edge_smooth_iterations': 0,        # 0-3: smoothing iterations
+            'edge_smooth_method': 'spline',     # 'bilateral', 'distance', 'spline', 'none'
+            'edge_smooth_iterations': 1,        # 0-3: smoothing iterations / strength
+            'fill_unknown_as_wall': False,
         }
         self.map_resolution = 0.05
         
@@ -176,6 +177,7 @@ class MapCleanerApp:
             keep_largest_track=self.params['keep_largest_track'],
             edge_smooth_method=self.params['edge_smooth_method'],
             edge_smooth_iterations=self.params['edge_smooth_iterations'],
+            fill_unknown_as_wall=self.params['fill_unknown_as_wall'],
         )
         if self.fig is not None and self.ax_clean is not None:
             self.redraw()
@@ -249,7 +251,8 @@ class MapCleanerApp:
         param_text = (
             f"free_th={self.params['free_th']} wall={self.params['wall_thickness']}px "
             f"smooth_radius={self.params['smooth_radius']} cover_edge={self.params['cover_track_edge']} "
-            f"resolution={self.map_resolution:.3f} m/px from YAML"
+            f"method={self.params['edge_smooth_method']} ({self.params['edge_smooth_iterations']} iter) "
+            f"fill_wall={1 if self.params['fill_unknown_as_wall'] else 0} resolution={self.map_resolution:.3f} m/px"
         )
         for text in list(self.fig.texts):
             if getattr(text, '_map_cleaner_param_text', False):
@@ -282,11 +285,11 @@ class MapCleanerApp:
             color='#202020',
         )
 
-        sliders_height = 0.025
-        slider_y_start = 0.28
-        slider_spacing = 0.05
-        slider_width = 0.58
-        slider_x = 0.30
+        sliders_height = 0.020
+        slider_y_start = 0.29
+        slider_spacing = 0.042
+        slider_width = 0.54
+        slider_x = 0.38
 
         sliders = {}
         slider_labels = [
@@ -295,6 +298,7 @@ class MapCleanerApp:
             ('smooth_radius', 'Track smooth radius', 0, 10, 1, self.params['smooth_radius']),
             ('cover_track_edge', 'Cover track edge (0/1)', 0, 1, 1, 1 if self.params['cover_track_edge'] else 0),
             ('edge_smooth_iterations', 'Edge straighten (0=none)', 0, 3, 1, self.params['edge_smooth_iterations']),
+            ('fill_unknown_as_wall', 'Fill unknown as wall (0/1)', 0, 1, 1, 1 if self.params['fill_unknown_as_wall'] else 0),
         ]
         
         for i, (key, label, vmin, vmax, step, init) in enumerate(slider_labels):
@@ -306,7 +310,7 @@ class MapCleanerApp:
             
             def make_callback(k):
                 def on_change(val):
-                    if k == 'cover_track_edge':
+                    if k == 'cover_track_edge' or k == 'fill_unknown_as_wall':
                         self.params[k] = bool(val)
                     else:
                         self.params[k] = int(val)
@@ -325,12 +329,24 @@ class MapCleanerApp:
         clear_button.on_clicked(clear_measure)
         self.clear_button = clear_button
 
+        # Radio buttons for selecting smoothing method
+        from matplotlib.widgets import RadioButtons
+        rax = self.fig.add_axes([0.05, 0.09, 0.12, 0.16])
+        methods = ('none', 'bilateral', 'distance', 'spline')
+        active_idx = methods.index(self.params['edge_smooth_method'])
+        radio = RadioButtons(rax, methods, active=active_idx, activecolor='#185FA5')
+        for label in radio.labels:
+            label.set_fontsize(8)
+        self.radio = radio  # Prevent garbage collection
+        
+        def set_method(label):
+            self.params['edge_smooth_method'] = label
+            self.update_clean()
+            
+        radio.on_clicked(set_method)
+
         instr = "Click two points to measure   [S] save (cleaned image)   [Q] quit   [R] reset   Ctrl+C/Z safe exit"
         plt.figtext(0.06, 0.055, instr, fontsize=9, family='monospace')
-        
-        # Show which smoothing method is being used
-        smooth_method_text = f"Edge straightening: {self.params['edge_smooth_method']} | Iterations: {self.params['edge_smooth_iterations']}"
-        plt.figtext(0.06, 0.025, smooth_method_text, fontsize=8, family='monospace', style='italic')
         
         # Disable matplotlib's default key handlers completely
         # This prevents matplotlib from intercepting 's' to save the figure
@@ -361,14 +377,18 @@ class MapCleanerApp:
                     'wall_thickness': tuned['wall_thickness'],
                     'smooth_radius': tuned['smooth_radius'],
                     'cover_track_edge': 1 if tuned['cover_track_edge'] else 0,
-                    'edge_smooth_iterations': 0,
+                    'edge_smooth_iterations': 1,
+                    'fill_unknown_as_wall': 0,
                 }
                 self.params.update({
                     'keep_largest_track': tuned['keep_largest_track'],
+                    'edge_smooth_method': 'spline',
                 })
+                # Update radio buttons to 'spline' index 3
+                self.radio.set_active(3)
                 for key, value in defaults.items():
                     sliders[key].set_val(value)
-                    if key == 'cover_track_edge':
+                    if key == 'cover_track_edge' or key == 'fill_unknown_as_wall':
                         self.params[key] = bool(value)
                     else:
                         self.params[key] = int(value)

@@ -195,7 +195,53 @@ class MapCleaner:
         # Rethreshold to create smooth binary image
         result = cv2.threshold(dist, dist.max() * 0.3, 255, cv2.THRESH_BINARY)[1]
         return result.astype(np.uint8)
-    
+    @staticmethod
+    def spline_smooth_contour(contour, smoothing_factor=50.0, num_points=1000):
+        """Fit a parametric B-Spline to a 2D contour and resample it.
+        
+        Args:
+            contour: numpy array representing the contour.
+            smoothing_factor: s value for splprep. Larger = smoother/more approximation. 0 = exact interpolation.
+            num_points: Number of points to sample along the spline.
+        """
+        pts = contour.reshape(-1, 2)
+        if len(pts) < 4:
+            return contour
+
+        # Filter consecutive duplicates
+        filtered = [pts[0]]
+        for p in pts[1:]:
+            if not np.allclose(p, filtered[-1]):
+                filtered.append(p)
+        if len(filtered) > 1 and np.allclose(filtered[0], filtered[-1]):
+            filtered.pop()
+            
+        pts = np.array(filtered)
+        if len(pts) < 4:
+            return contour
+
+        x = pts[:, 0]
+        y = pts[:, 1]
+        
+        # Append start to end to close the loop
+        x = np.append(x, x[0])
+        y = np.append(y, y[0])
+        
+        try:
+            from scipy.interpolate import splprep, splev
+            # Find parametric representation of a 2D curve
+            # per=True denotes periodic boundary conditions (closed curve)
+            tck, u = splprep([x, y], s=smoothing_factor, per=True)
+            
+            # Evaluate the spline
+            u_new = np.linspace(0, 1, num_points)
+            new_x, new_y = splev(u_new, tck)
+            
+            smoothed_contour = np.stack((new_x, new_y), axis=1).astype(np.int32)
+            return smoothed_contour.reshape(-1, 1, 2)
+        except Exception:
+            return contour
+
     @staticmethod
     def contour_smooth(binary_img, epsilon_factor=0.02):
         """Smooth wall contours by approximating them with fewer points.
@@ -347,9 +393,6 @@ class MapCleaner:
             ###         ##.
             ###   ->    ##.     (bump on right side removed)
             ##.         ##.
-        
-        The algorithm works by scanning each column of the image vertically
-        and each row horizontally, looking at transitions in the wall boundary.
         """
         h, w = binary_img.shape
         wall = (binary_img > 0).astype(np.uint8)
@@ -358,26 +401,14 @@ class MapCleaner:
         # Maximum jag size to fix (in pixels)
         max_jag = 2
         
-        # ---- Vectorized notch filling ----
-        # For each direction we find "boundary" pixels (wall pixel with no wall 
-        # in that direction) and check whether the empty neighbor is flanked by
-        # wall pixels within max_jag distance on both sides perpendicular to
-        # the direction.
-        
-        # Process all four edge directions (right, left, bottom, top)
-        
-        # -- RIGHT: fill pixel at (y, x+1) when wall[y,x]=1, wall[y,x+1]=0,
-        #    and there exists wall within max_jag rows above AND below at col x+1
-        is_right_boundary = (result[:, :-1] == 1) & (result[:, 1:] == 0)  # shape (h, w-1)
-
-        
-        # For each offset dy=1..max_jag, check if wall exists at (y-dy, x+1) 
+        # ---- 1. Concave notch filling ----
+        # -- RIGHT: fill pixel at (y, x+1)
+        is_right_boundary = (result[:, :-1] == 1) & (result[:, 1:] == 0)
         has_above = np.zeros((h, w - 1), dtype=bool)
         has_below = np.zeros((h, w - 1), dtype=bool)
         for dy in range(1, max_jag + 1):
-            has_above[dy:, :] |= (result[:-dy, 1:] == 1) & ~has_above[dy:, :]  
-            has_below[:-dy, :] |= (result[dy:, 1:] == 1) & ~has_below[:-dy, :]
-        # Only keep those on actual boundary
+            has_above[dy:, :] |= (result[:-dy, 1:] == 1)
+            has_below[:-dy, :] |= (result[dy:, 1:] == 1)
         fill_right = is_right_boundary & has_above & has_below
         result[:, 1:] = np.maximum(result[:, 1:], fill_right.astype(np.uint8))
         
@@ -410,7 +441,45 @@ class MapCleaner:
             has_right[:, :-dx] |= (result[:-1, dx:] == 1)
         fill_top = is_top_boundary & has_left & has_right
         result[:-1, :] = np.maximum(result[:-1, :], fill_top.astype(np.uint8))
-        
+
+        # ---- 2. Convex bump removal ----
+        # LEFT BUMPS: wall pixel with empty left and wall right, but empty top and bottom
+        left_bump = (result[1:-1, 1:-1] == 1) & (result[1:-1, :-2] == 0) & (result[1:-1, 2:] == 1) & \
+                    (result[:-2, 1:-1] == 0) & (result[2:, 1:-1] == 0)
+        result[1:-1, 1:-1][left_bump] = 0
+
+        # RIGHT BUMPS: wall pixel with empty right and wall left, but empty top and bottom
+        right_bump = (result[1:-1, 1:-1] == 1) & (result[1:-1, 2:] == 0) & (result[1:-1, :-2] == 1) & \
+                     (result[:-2, 1:-1] == 0) & (result[2:, 1:-1] == 0)
+        result[1:-1, 1:-1][right_bump] = 0
+
+        # TOP BUMPS: wall pixel with empty top and wall bottom, but empty left and right
+        top_bump = (result[1:-1, 1:-1] == 1) & (result[:-2, 1:-1] == 0) & (result[2:, 1:-1] == 1) & \
+                   (result[1:-1, :-2] == 0) & (result[1:-1, 2:] == 0)
+        result[1:-1, 1:-1][top_bump] = 0
+
+        # BOTTOM BUMPS: wall pixel with empty bottom and wall top, but empty left and right
+        bottom_bump = (result[1:-1, 1:-1] == 1) & (result[2:, 1:-1] == 0) & (result[:-2, 1:-1] == 1) & \
+                      (result[1:-1, :-2] == 0) & (result[1:-1, 2:] == 0)
+        result[1:-1, 1:-1][bottom_bump] = 0
+
+        # 2-pixel wide bumps (horizontal / vertical runs)
+        # Left 2-pixel bump
+        left_bump_2 = (result[1:-2, 1:-1] == 1) & (result[2:-1, 1:-1] == 1) & \
+                      (result[1:-2, :-2] == 0) & (result[2:-1, :-2] == 0) & \
+                      (result[1:-2, 2:] == 1) & (result[2:-1, 2:] == 1) & \
+                      (result[:-3, 1:-1] == 0) & (result[3:, 1:-1] == 0)
+        result[1:-2, 1:-1][left_bump_2] = 0
+        result[2:-1, 1:-1][left_bump_2] = 0
+
+        # Top 2-pixel bump
+        top_bump_2 = (result[1:-1, 1:-2] == 1) & (result[1:-1, 2:-1] == 1) & \
+                     (result[:-2, 1:-2] == 0) & (result[:-2, 2:-1] == 0) & \
+                     (result[2:, 1:-2] == 1) & (result[2:, 2:-1] == 1) & \
+                     (result[1:-1, :-3] == 0) & (result[1:-1, 3:] == 0)
+        result[1:-1, 1:-2][top_bump_2] = 0
+        result[1:-1, 2:-1][top_bump_2] = 0
+
         return (result * 255).astype(np.uint8)
 
     @staticmethod
@@ -588,7 +657,8 @@ class MapCleaner:
     def clean_f1tenth(self, raw_img, free_threshold=None, wall_thickness=3,
                      smooth_radius=5, min_track_blob=80,
                      cover_track_edge=False, keep_largest_track=True,
-                     edge_smooth_method='bilateral', edge_smooth_iterations=0):
+                     edge_smooth_method='bilateral', edge_smooth_iterations=0,
+                     fill_unknown_as_wall=False):
         """
         Clean an F1TENTH racetrack map by segmenting the white track first.
 
@@ -635,6 +705,61 @@ class MapCleaner:
                         cleaned_track[labeled_track == blob_id] = True
 
         track_mask = cleaned_track
+        track_u8 = track_mask.astype(np.uint8)
+
+        # 1. Apply primary smoothing on track_mask
+        if edge_smooth_method != 'none' and edge_smooth_iterations > 0:
+            if edge_smooth_method == 'spline':
+                contours, hierarchy = cv2.findContours(track_u8, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_NONE)
+                smooth_track = np.zeros_like(track_u8)
+                
+                if contours and hierarchy is not None:
+                    hierarchy = hierarchy[0]
+                    # Outer boundaries (parent = -1): Apply larger smoothing to straighten straightaways
+                    for idx, contour in enumerate(contours):
+                        if hierarchy[idx][3] == -1:
+                            if cv2.contourArea(contour) < 100:
+                                continue
+                            s_outer = 40.0 * edge_smooth_iterations
+                            smoothed = MapCleaner.spline_smooth_contour(contour, smoothing_factor=s_outer)
+                            cv2.drawContours(smooth_track, [smoothed], 0, 1, -1)
+                    
+                    # Inner boundaries (parent != -1): Apply lighter smoothing to preserve apex shape
+                    for idx, contour in enumerate(contours):
+                        if hierarchy[idx][3] != -1:
+                            if cv2.contourArea(contour) < 50:
+                                continue
+                            s_inner = 15.0 * edge_smooth_iterations
+                            smoothed = MapCleaner.spline_smooth_contour(contour, smoothing_factor=s_inner)
+                            cv2.drawContours(smooth_track, [smoothed], 0, 0, -1)
+                    
+                    track_mask = smooth_track > 0
+                    track_u8 = track_mask.astype(np.uint8)
+                    
+            elif edge_smooth_method == 'bilateral':
+                # Convert to dense 0-255 image for bilateral filter
+                track_u8_dense = track_mask.astype(np.uint8) * 255
+                for _ in range(edge_smooth_iterations):
+                    track_u8_dense = self.bilateral_filter(track_u8_dense, d=9, sigma_color=50, sigma_space=50)
+                    track_u8_dense = cv2.threshold(track_u8_dense, 127, 255, cv2.THRESH_BINARY)[1]
+                track_mask = track_u8_dense > 127
+                track_u8 = track_mask.astype(np.uint8)
+                
+            elif edge_smooth_method == 'distance':
+                track_u8_dense = track_mask.astype(np.uint8) * 255
+                for _ in range(edge_smooth_iterations):
+                    track_u8_dense = self.distance_field_smooth(track_u8_dense, iterations=1)
+                track_mask = track_u8_dense > 127
+                track_u8 = track_mask.astype(np.uint8)
+
+        # 2. Run global pixel-level snap cleanup pass directly on track_mask
+        if edge_smooth_method != 'none':
+            track_u8_dense = track_mask.astype(np.uint8) * 255
+            track_clean = self._pixel_snap_edges_fast(track_u8_dense)
+            track_mask = track_clean > 127
+            track_u8 = track_mask.astype(np.uint8)
+
+        # 3. Calculate walls from the perfectly smoothed and snapped track_mask
         wall_thickness = max(1, int(wall_thickness))
         if cover_track_edge:
             inside_px = max(1, int(np.ceil(wall_thickness / 2)))
@@ -643,7 +768,6 @@ class MapCleaner:
             inside_px = 0
             outside_px = wall_thickness
 
-        track_u8 = track_mask.astype(np.uint8)
         outside_u8 = (~track_mask).astype(np.uint8)
         dist_inside = cv2.distanceTransform(track_u8, cv2.DIST_L2, 3)
         dist_outside = cv2.distanceTransform(outside_u8, cv2.DIST_L2, 3)
@@ -652,24 +776,16 @@ class MapCleaner:
         if inside_px > 0:
             wall_mask |= track_mask & (dist_inside <= inside_px)
 
-        result = np.full((h, w), 128, dtype=np.uint8)
-        result[track_mask] = 255
+        # Define unknown background (everything outside the wall band)
+        unknown_mask = (~track_mask) & (dist_outside > outside_px)
+
+        if fill_unknown_as_wall:
+            result = np.zeros((h, w), dtype=np.uint8)  # Set background to black (wall)
+        else:
+            result = np.full((h, w), 128, dtype=np.uint8)  # Set background to gray (unknown)
+            
+        result[~unknown_mask] = 255
         result[wall_mask] = 0
-        
-        # Apply wall edge straightening if requested
-        if edge_smooth_method != 'none' and edge_smooth_iterations > 0:
-            # Extract wall pixels for smoothing
-            wall_binary = (result == 0).astype(np.uint8) * 255
-            
-            # Apply edge straightening (actually moves pixels to align them)
-            wall_smooth = self.edge_straighten(wall_binary, 
-                                              method=edge_smooth_method,
-                                              iterations=edge_smooth_iterations)
-            
-            # Put straightened walls back
-            result[wall_smooth == 255] = 0
-            result[wall_smooth == 0] = 128  # Reset unknowns
-            result[track_mask] = 255  # Preserve track
         
         stats = self.compute_stats(result)
         self.log(
