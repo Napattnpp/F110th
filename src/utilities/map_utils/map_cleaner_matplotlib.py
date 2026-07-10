@@ -410,24 +410,28 @@ class MapCleanerApp:
         if self.map_path:
             input_dir = Path(self.map_path).parent
             base_name = Path(self.map_path).stem
-            filename = input_dir / f"{base_name}_cleaned.pgm"
+            filename_pgm = input_dir / f"{base_name}_cleaned.pgm"
+            filename_png = input_dir / f"{base_name}_cleaned.png"
         else:
             # If no input map (demo mode), save in current directory
-            filename = Path('map_cleaned.pgm')
+            filename_pgm = Path('map_cleaned.pgm')
+            filename_png = Path('map_cleaned.png')
         
         try:
             # Ensure the directory exists
-            filename.parent.mkdir(parents=True, exist_ok=True)
+            filename_pgm.parent.mkdir(parents=True, exist_ok=True)
             
-            # Save the cleaned image (numpy array), not the matplotlib figure
-            if str(filename).endswith('.pgm'):
-                save_pgm(str(filename), self.clean_img)
+            # Save PGM (for ROS map_server)
+            save_pgm(str(filename_pgm), self.clean_img)
+            print(f"✓ Saved cleaned PGM: {filename_pgm}")
+            
+            # Save PNG (for easy viewing on macOS/GitHub)
+            success = cv2.imwrite(str(filename_png), self.clean_img)
+            if success:
+                print(f"✓ Saved preview PNG: {filename_png}")
             else:
-                # Force cv2 to save the array directly
-                success = cv2.imwrite(str(filename), self.clean_img)
-                if not success:
-                    raise IOError(f"cv2.imwrite failed for {filename}")
-            print(f"✓ Saved cleaned image: {filename}")
+                print(f"⚠ Failed to save preview PNG")
+                
             print("→ Closing window...")
             # Auto-close window after successful save
             if self.fig is not None:
