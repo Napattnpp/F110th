@@ -52,7 +52,7 @@ def generate_launch_description():
     )
     launch_base_arg = DeclareLaunchArgument(
         'launch_base',
-        default_value='True',
+        default_value='False',
         description='Whether to also launch base_launch.py'
     )
     map_name_arg = DeclareLaunchArgument(

@@ -56,7 +56,7 @@ def generate_launch_description():
     )
     launch_base_arg = DeclareLaunchArgument(
         'launch_base',
-        default_value='True',
+        default_value='False',
         description='Whether to also launch base_launch.py'
     )
     map_name_arg = DeclareLaunchArgument(
@@ -104,7 +104,8 @@ def generate_launch_description():
     perception_launch = IncludeLaunchDescription(
         get_launch_source('perception', 'perception_launch'),
         launch_arguments={
-            'param_file': os.path.join(pkg_bringup, 'config', 'opponent_tracker_params.yaml')
+            'param_file': os.path.join(pkg_bringup, 'config', 'opponent_tracker_params.yaml'),
+            'enable_fake_obstacles': LaunchConfiguration('sim')
         }.items()
     )
 

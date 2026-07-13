@@ -224,14 +224,6 @@ def generate_launch_description():
             )
         )
 
-    foxglove_bridge_node = Node(
-        package='foxglove_bridge',
-        executable='foxglove_bridge',
-        name='foxglove_bridge',
-        parameters=[{'port': 8765}],
-        output='screen'
-    )
-
     return LaunchDescription([
         racecar_version_arg,
         map_name_arg,
@@ -244,6 +236,5 @@ def generate_launch_description():
         global_trajectory_pub,
         sector_tuner_node,
         ot_interpolator_node,
-        foxglove_bridge_node,
         *optional_nodes
     ])

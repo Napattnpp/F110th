@@ -28,6 +28,8 @@ RUN apt-get update && apt-get install -y \
     iputils-ping \
     net-tools \
     git \
+    wget \
+    curl \
     gfortran \
     python3-pip \
     python3-numpy \
@@ -92,14 +94,14 @@ RUN groupadd -f -g ${GID} ${USER} \
 USER ${USER}
 RUN echo "source /opt/ros/$ROS_DISTRO/setup.bash" >> /home/${USER}/.bashrc \
     && echo "source /uros_ws/install/setup.bash" >> /home/${USER}/.bashrc \
-    && echo "if [ -f /home/${USER}/F110th/out/install/setup.bash ]; then source /home/${USER}/F110th/out/install/setup.bash; fi" >> /home/${USER}/.bashrc \
-    && echo "export ROS_DOMAIN_ID=${ROS_DOMAIN_ID}" >> /home/${USER}/.bashrc \
-    && echo "export RMW_IMPLEMENTATION=${RMW_IMPLEMENTATION}" >> /home/${USER}/.bashrc
+    && echo "if [ -f /home/${USER}/F110th/out/install/setup.bash ]; then source /home/${USER}/F110th/out/install/setup.bash; fi" >> /home/${USER}/.bashrc
 
 USER root
-WORKDIR /home/${USER}/F110th
-
 COPY ./.devcontainer/docker/ros_entrypoint.sh /
 RUN chmod +x /ros_entrypoint.sh
+
+USER ${USER}
+WORKDIR /home/${USER}/F110th
+
 ENTRYPOINT ["/ros_entrypoint.sh"]
 CMD ["bash"]

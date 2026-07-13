@@ -70,6 +70,15 @@ class Controller(Node):
                          allow_undeclared_parameters=True,
                          automatically_declare_parameters_from_overrides=True)
 
+        # Declare FTG parameters locally
+        self.declare_parameter('debug', False)
+        self.declare_parameter('safety_radius', 40)
+        self.declare_parameter('max_lidar_dist', 9.0)
+        self.declare_parameter('max_speed', 6.0)
+        self.declare_parameter('range_offset', 180)
+        self.declare_parameter('track_width', 2.6)
+
+
         self.type_arr = ["not_set", "bool_value", "integer_value", "double_value", "string_value",
                          "byte_array_value", "bool_array_value", "integer_array_value",
                          "double_array_value", "string_array_value"]
@@ -341,13 +350,13 @@ class Controller(Node):
 
     def init_ftg_controller(self):
 
-        #TODO fix to work without alternative value
-        self.state_machine_debug = self.get_remote_parameter('state_machine', 'debug')
-        self.state_machine_safety_radius = self.get_remote_parameter('state_machine', 'safety_radius')
-        self.state_machine_max_lidar_dist = self.get_remote_parameter('state_machine', 'max_lidar_dist')
-        self.state_machine_max_speed = self.get_remote_parameter('state_machine', 'max_speed')
-        self.state_machine_range_offset = self.get_remote_parameter('state_machine', 'range_offset')
-        self.state_machine_track_width = self.get_remote_parameter('state_machine', 'track_width')
+        # Get FTG parameters locally
+        self.state_machine_debug = self.get_parameter('debug').value
+        self.state_machine_safety_radius = self.get_parameter('safety_radius').value
+        self.state_machine_max_lidar_dist = self.get_parameter('max_lidar_dist').value
+        self.state_machine_max_speed = self.get_parameter('max_speed').value
+        self.state_machine_range_offset = self.get_parameter('range_offset').value
+        self.state_machine_track_width = self.get_parameter('track_width').value
 
         self.get_logger().info(f"FTG Controller parameters: {self.state_machine_debug}, {self.state_machine_safety_radius}, {self.state_machine_max_lidar_dist}, {self.state_machine_max_speed}, {self.state_machine_range_offset}, {self.state_machine_track_width}")
 

@@ -10,4 +10,11 @@
         args="--ros-args --log-level warn">
         <param from= "$(var param_file)" />
     </node>
+
+    <arg name="enable_fake_obstacles" default="false" description="Launch fake obstacle publisher" />
+    <group if="$(var enable_fake_obstacles)">
+        <node pkg="perception" name="fake_obstacle_publisher" exec="fake_obstacle_publisher" output="screen">
+            <param from="$(var param_file)" />
+        </node>
+    </group>
 </launch>

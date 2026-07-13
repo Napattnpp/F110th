@@ -5,8 +5,8 @@ controller:
     # Too short (0.8m) on tight track → car overshoots corners → oscillates
     # Too long → car cuts corners / slow to respond
     # MAX ALLOWED: 1.5 (hard limit in controller_manager.py FloatingPointRange)
-    t_clip_min: 0.3       # default to 1.0 for simulator tracking
-    t_clip_max: 0.5
+    t_clip_min: 0.5       # default to 1.0 for simulator tracking
+    t_clip_max: 1.0
     m_l1: 0.3           # how much speed increases lookahead
     q_l1: -0.167
 

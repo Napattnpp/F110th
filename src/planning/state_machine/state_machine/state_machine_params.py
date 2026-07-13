@@ -267,6 +267,8 @@ class StateMachineParams:
             node.declare_parameter("buffer_speed_scale", 0.5, descriptor=descriptor)
         self.buffer_speed_scale: float = node.get_parameter("buffer_speed_scale").value
 
+
+
     def parameters_callback(self, parameters: List[Parameter]) -> SetParametersResult:
         for param in parameters:
             match param.name:

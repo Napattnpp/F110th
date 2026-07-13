@@ -161,6 +161,12 @@ def handle_h2h(args):
     ]
     sys.exit(run_command(cmd, args.dry_run))
 
+def handle_telemetry(args):
+    cmd = [
+        "ros2", "launch", "foxglove_bridge", "foxglove_bridge_launch.xml"
+    ]
+    sys.exit(run_command(cmd, args.dry_run))
+
 def handle_ftg(args):
     cmd = ["ros2", "run", "controller", "ftg_mapper"]
     sys.exit(run_command(cmd, args.dry_run))
@@ -181,12 +187,461 @@ def handle_edit_map(args):
     ]
     sys.exit(run_command(cmd, args.dry_run))
 
+def run_tui():
+    import curses
+    import time
+    import signal
+
+    log_dir = os.path.join(PROJECT_ROOT, "out", "logs")
+    os.makedirs(log_dir, exist_ok=True)
+
+    profiles = []
+    if os.path.exists(PROFILES_DIR):
+        for f in os.listdir(PROFILES_DIR):
+            if f.endswith(".yaml") and f != "active_profile.yaml":
+                profiles.append(f[:-5])
+    profiles = sorted(profiles)
+    if not profiles:
+        profiles = ["default"]
+
+    maps = ["latest"]
+    maps_dir = os.path.join(PROJECT_ROOT, "src", "race_bringup", "maps")
+    if os.path.exists(maps_dir):
+        for d in os.listdir(maps_dir):
+            if os.path.isdir(os.path.join(maps_dir, d)) and not d.startswith("."):
+                maps.append(d)
+
+    active_profile = get_active_profile()
+
+    profile_idx = 0
+    if active_profile.get("profile_name") in profiles:
+        profile_idx = profiles.index(active_profile.get("profile_name"))
+    elif profiles:
+        active_profile["profile_name"] = profiles[0]
+
+    map_idx = 0
+    curr_map = active_profile.get("map_name", "latest")
+    if curr_map in maps:
+        map_idx = maps.index(curr_map)
+
+    sim_options = ["True", "False"]
+    sim_idx = 0 if str(active_profile.get("sim", False)) == "True" else 1
+
+    ctrl_options = ["MAP", "PP"]
+    ctrl_idx = 0 if active_profile.get("ctrl_algo", "MAP") == "MAP" else 1
+
+    overtake_options = ["spliner", "graph_based"]
+    overtake_idx = 0 if active_profile.get("overtake_mode", "spliner") == "spliner" else 1
+
+    slam_options = ["cartographer", "slam_toolbox"]
+    slam_idx = 0 if active_profile.get("slam_method", "cartographer") == "cartographer" else 1
+
+    mode_options = ["h2h", "qualifying", "timetrials", "mapping"]
+    mode_idx = 0
+
+    class ExternalProcess:
+        def __init__(self, pid):
+            self.pid = pid
+
+        def poll(self):
+            try:
+                os.kill(self.pid, 0)
+                return None  # Still running
+            except OSError:
+                return 0  # Stopped
+
+        def send_signal(self, sig):
+            try:
+                os.kill(self.pid, sig)
+            except OSError:
+                pass
+
+        def kill(self):
+            try:
+                import signal
+                os.kill(self.pid, signal.SIGKILL)
+            except OSError:
+                pass
+
+        def wait(self):
+            while self.poll() is None:
+                time.sleep(0.1)
+
+    def get_running_pids_for_keywords(keywords):
+        pids = []
+        try:
+            output = subprocess.check_output(["ps", "-ax", "-o", "pid,args"], text=True)
+            for line in output.splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                parts = line.split(None, 1)
+                if len(parts) < 2:
+                    continue
+                pid_str, cmd = parts
+                if not pid_str.strip().isdigit():
+                    continue
+                pid = int(pid_str)
+                # Exclude the current process and the ps command itself
+                if pid == os.getpid() or "ps -ax" in cmd:
+                    continue
+                # Exclude other instances of the TUI launcher script (avoiding race_bringup packages)
+                if ("race " in cmd or cmd.endswith("race")) and "race_bringup" not in cmd:
+                    continue
+                if all(k in cmd for k in keywords):
+                    pids.append(pid)
+        except Exception:
+            pass
+        return pids
+
+    def find_running_tier_pid(tier_key):
+        keywords_map = {
+            "tier1": ["base_launch.py"],
+            "tier2": ["foxglove_bridge"],
+            "tier3_timetrials": ["timetrials_launch.py"],
+            "tier3_qualifying": ["qualifying_launch.py"],
+            "tier3_h2h": ["head_to_head_launch.py"],
+            "tier3_mapping": ["mapping_launch.py"],
+        }
+        if tier_key == "tier3":
+            for key in ["tier3_timetrials", "tier3_qualifying", "tier3_h2h", "tier3_mapping"]:
+                pids = get_running_pids_for_keywords(keywords_map[key])
+                if pids:
+                    return pids[0]
+            return None
+        else:
+            pids = get_running_pids_for_keywords(keywords_map[tier_key])
+            return pids[0] if pids else None
+
+    procs = {"tier1": None, "tier2": None, "tier3": None}
+    for key in procs:
+        pid = find_running_tier_pid(key)
+        if pid is not None:
+            procs[key] = ExternalProcess(pid)
+
+    log_files = {
+        "tier1": os.path.join(log_dir, "base_system.log"),
+        "tier2": os.path.join(log_dir, "telemetry.log"),
+        "tier3": os.path.join(log_dir, "algorithm.log"),
+    }
+
+    def cleanup_procs():
+        for key in procs:
+            if procs[key] is not None and procs[key].poll() is None:
+                try:
+                    os.killpg(os.getpgid(procs[key].pid), signal.SIGINT)
+                except ProcessLookupError:
+                    pass
+        time.sleep(1.0)
+        for key in procs:
+            if procs[key] is not None and procs[key].poll() is None:
+                try:
+                    os.killpg(os.getpgid(procs[key].pid), signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+
+    def draw_menu(stdscr):
+        nonlocal active_profile, profile_idx, map_idx, sim_idx, ctrl_idx, overtake_idx, slam_idx, mode_idx
+        
+        curses.start_color()
+        curses.init_pair(1, curses.COLOR_WHITE, curses.COLOR_BLUE)
+        curses.init_pair(2, curses.COLOR_BLACK, curses.COLOR_CYAN)
+        curses.init_pair(3, curses.COLOR_GREEN, curses.COLOR_BLUE)
+        curses.init_pair(4, curses.COLOR_RED, curses.COLOR_BLUE)
+        curses.init_pair(5, curses.COLOR_YELLOW, curses.COLOR_BLUE)
+
+        stdscr.bkgd(' ', curses.color_pair(1))
+        stdscr.nodelay(True)
+        curses.curs_set(0)
+
+        selected_row = 0
+
+        while True:
+            for key in procs:
+                if procs[key] is not None and procs[key].poll() is not None:
+                    procs[key] = None
+
+            stdscr.erase()
+            h, w = stdscr.getmaxyx()
+            
+            stdscr.attron(curses.color_pair(5))
+            stdscr.box()
+            stdscr.attroff(curses.color_pair(5))
+
+            title = " F1TENTH SYSTEM UTILITIES - TUI "
+            stdscr.addstr(0, max(2, (w - len(title)) // 2), title, curses.color_pair(5) | curses.A_BOLD)
+
+            stdscr.addstr(2, 4, "--- Profile & Track Configuration ---", curses.color_pair(5))
+            
+            items = [
+                ("Active Profile", "toggle", profiles, "profile_idx"),
+                ("Track Map", "toggle", maps, "map_idx"),
+                ("Simulation Mode", "toggle", sim_options, "sim_idx"),
+                ("Controller Algorithm", "toggle", ctrl_options, "ctrl_idx"),
+                ("Overtake Planner Mode", "toggle", overtake_options, "overtake_idx"),
+                ("SLAM Mapping Method", "toggle", slam_options, "slam_idx"),
+                ("Selected Task Mode (Tier 3)", "toggle", mode_options, "mode_idx"),
+                ("", "separator", [], ""),
+                ("Tier 1: Launch Base System", "action", ["tier1"], ""),
+                ("Tier 2: Launch Telemetry (Foxglove)", "action", ["tier2"], ""),
+                ("Tier 3: Launch Selected Task Mode", "action", ["tier3"], ""),
+                ("", "separator", [], ""),
+                ("View Live Logs (Press Ctrl+C to return)", "view_logs", [], ""),
+                ("", "separator", [], ""),
+                ("Exit (Keep ROS 2 running)", "exit_keep", [], ""),
+                ("Exit (Stop all ROS 2 processes)", "exit_stop", [], ""),
+            ]
+
+            y = 4
+            for idx, item in enumerate(items):
+                label, itype, vals, ref = item
+                if itype == "separator":
+                    y += 1
+                    stdscr.addstr(y, 4, "-" * (w - 8), curses.color_pair(1))
+                    continue
+
+                y += 1
+                is_selected = (idx == selected_row)
+                attr = curses.color_pair(2) if is_selected else curses.color_pair(1)
+
+                stdscr.addstr(y, 6, f"{label:<30}", attr)
+
+                if itype == "toggle":
+                    if ref == "profile_idx":
+                        val = profiles[profile_idx]
+                    elif ref == "map_idx":
+                        val = maps[map_idx]
+                    elif ref == "sim_idx":
+                        val = sim_options[sim_idx]
+                    elif ref == "ctrl_idx":
+                        val = ctrl_options[ctrl_idx]
+                    elif ref == "overtake_idx":
+                        val = overtake_options[overtake_idx]
+                    elif ref == "slam_idx":
+                        val = slam_options[slam_idx]
+                    elif ref == "mode_idx":
+                        val = mode_options[mode_idx]
+                    
+                    stdscr.addstr(y, 40, f"[ < {val} > ]", attr)
+                
+                elif itype == "action":
+                    key = vals[0]
+                    is_running = (procs[key] is not None)
+                    status_str = "[ RUNNING ]" if is_running else "[ STOPPED ]"
+                    status_pair = curses.color_pair(3) if is_running else curses.color_pair(4)
+                    
+                    stdscr.addstr(y, 40, f"Press ENTER to {'Stop' if is_running else 'Launch'}", attr)
+                    stdscr.addstr(y, 62, status_str, status_pair | (curses.A_BOLD if is_running else curses.A_NORMAL))
+
+            stdscr.attron(curses.color_pair(5))
+            stdscr.addstr(h-2, 4, "Navigate: Up/Down   Toggle Value: Left/Right   Run/Select: Enter   Quit: Esc", curses.color_pair(5))
+            stdscr.attroff(curses.color_pair(5))
+
+            try:
+                ch = stdscr.getch()
+            except Exception:
+                ch = -1
+
+            if ch == 27 or ch == ord('q'):
+                break
+            
+            elif ch == curses.KEY_UP:
+                selected_row = (selected_row - 1) % len(items)
+                while items[selected_row][1] == "separator":
+                    selected_row = (selected_row - 1) % len(items)
+
+            elif ch == curses.KEY_DOWN:
+                selected_row = (selected_row + 1) % len(items)
+                while items[selected_row][1] == "separator":
+                    selected_row = (selected_row + 1) % len(items)
+
+            elif ch == curses.KEY_LEFT:
+                item = items[selected_row]
+                label, itype, vals, ref = item
+                if itype == "toggle":
+                    if ref == "profile_idx":
+                        profile_idx = (profile_idx - 1) % len(vals)
+                        p_name = vals[profile_idx]
+                        p_path = os.path.join(PROFILES_DIR, f"{p_name}.yaml")
+                        data = load_yaml(p_path)
+                        data["profile_name"] = p_name
+                        save_yaml(data, ACTIVE_CONFIG_PATH)
+                        active_profile = get_active_profile()
+                        curr_map = active_profile.get("map_name", "latest")
+                        if curr_map in maps: map_idx = maps.index(curr_map)
+                        sim_idx = 0 if str(active_profile.get("sim", False)) == "True" else 1
+                        ctrl_idx = 0 if active_profile.get("ctrl_algo", "MAP") == "MAP" else 1
+                        overtake_idx = 0 if active_profile.get("overtake_mode", "spliner") == "spliner" else 1
+                        slam_idx = 0 if active_profile.get("slam_method", "cartographer") == "cartographer" else 1
+                    elif ref == "map_idx":
+                        map_idx = (map_idx - 1) % len(vals)
+                    elif ref == "sim_idx":
+                        sim_idx = (sim_idx - 1) % len(vals)
+                    elif ref == "ctrl_idx":
+                        ctrl_idx = (ctrl_idx - 1) % len(vals)
+                    elif ref == "overtake_idx":
+                        overtake_idx = (overtake_idx - 1) % len(vals)
+                    elif ref == "slam_idx":
+                        slam_idx = (slam_idx - 1) % len(vals)
+                    elif ref == "mode_idx":
+                        mode_idx = (mode_idx - 1) % len(vals)
+
+            elif ch == curses.KEY_RIGHT:
+                item = items[selected_row]
+                label, itype, vals, ref = item
+                if itype == "toggle":
+                    if ref == "profile_idx":
+                        profile_idx = (profile_idx + 1) % len(vals)
+                        p_name = vals[profile_idx]
+                        p_path = os.path.join(PROFILES_DIR, f"{p_name}.yaml")
+                        data = load_yaml(p_path)
+                        data["profile_name"] = p_name
+                        save_yaml(data, ACTIVE_CONFIG_PATH)
+                        active_profile = get_active_profile()
+                        curr_map = active_profile.get("map_name", "latest")
+                        if curr_map in maps: map_idx = maps.index(curr_map)
+                        sim_idx = 0 if str(active_profile.get("sim", False)) == "True" else 1
+                        ctrl_idx = 0 if active_profile.get("ctrl_algo", "MAP") == "MAP" else 1
+                        overtake_idx = 0 if active_profile.get("overtake_mode", "spliner") == "spliner" else 1
+                        slam_idx = 0 if active_profile.get("slam_method", "cartographer") == "cartographer" else 1
+                    elif ref == "map_idx":
+                        map_idx = (map_idx + 1) % len(vals)
+                    elif ref == "sim_idx":
+                        sim_idx = (sim_idx + 1) % len(vals)
+                    elif ref == "ctrl_idx":
+                        ctrl_idx = (ctrl_idx + 1) % len(vals)
+                    elif ref == "overtake_idx":
+                        overtake_idx = (overtake_idx + 1) % len(vals)
+                    elif ref == "slam_idx":
+                        slam_idx = (slam_idx + 1) % len(vals)
+                    elif ref == "mode_idx":
+                        mode_idx = (mode_idx + 1) % len(vals)
+
+            elif ch == 10:
+                item = items[selected_row]
+                label, itype, vals, ref = item
+                if itype == "action":
+                    key = vals[0]
+                    if procs[key] is not None:
+                        try:
+                            os.killpg(os.getpgid(procs[key].pid), signal.SIGINT)
+                        except ProcessLookupError:
+                            pass
+                    else:
+                        p_name = profiles[profile_idx]
+                        m_name = maps[map_idx]
+                        sim_val = sim_options[sim_idx]
+                        ctrl_val = ctrl_options[ctrl_idx]
+                        overtake_val = overtake_options[overtake_idx]
+                        slam_val = slam_options[slam_idx]
+                        mode_val = mode_options[mode_idx]
+                        racecar_val = active_profile.get("racecar_version", "NUC1")
+                        table_val = active_profile.get("LU_table", "NUC1_hangar_pacejka")
+
+                        cmd = []
+                        if key == "tier1":
+                            cmd = [
+                                "ros2", "launch", "race_bringup", "base_launch.py",
+                                f"map_name:={m_name}",
+                                f"sim:={sim_val}",
+                                f"racecar_version:={racecar_val}"
+                            ]
+                        elif key == "tier2":
+                            cmd = [
+                                "ros2", "launch", "foxglove_bridge", "foxglove_bridge_launch.xml"
+                            ]
+                        elif key == "tier3":
+                            if mode_val == "timetrials":
+                                cmd = [
+                                    "ros2", "launch", "race_bringup", "timetrials_launch.py",
+                                    f"map_name:={m_name}",
+                                    f"sim:={sim_val}",
+                                    f"ctrl_algo:={ctrl_val}",
+                                    f"LU_table:={table_val}",
+                                    f"racecar_version:={racecar_val}",
+                                    "launch_base:=False"
+                                ]
+                            elif mode_val == "qualifying":
+                                cmd = [
+                                    "ros2", "launch", "race_bringup", "qualifying_launch.py",
+                                    f"map_name:={m_name}",
+                                    f"sim:={sim_val}",
+                                    f"ctrl_algo:={ctrl_val}",
+                                    f"LU_table:={table_val}",
+                                    f"racecar_version:={racecar_val}",
+                                    "launch_base:=False"
+                                ]
+                            elif mode_val == "h2h":
+                                cmd = [
+                                    "ros2", "launch", "race_bringup", "head_to_head_launch.py",
+                                    f"map_name:={m_name}",
+                                    f"sim:={sim_val}",
+                                    f"ctrl_algo:={ctrl_val}",
+                                    f"LU_table:={table_val}",
+                                    f"overtake_mode:={overtake_val}",
+                                    f"racecar_version:={racecar_val}",
+                                    "launch_base:=False"
+                                ]
+                            elif mode_val == "mapping":
+                                cmd = [
+                                    "ros2", "launch", "race_bringup", "mapping_launch.py",
+                                    f"map_name:={m_name}",
+                                    f"sim:={sim_val}",
+                                    f"slam_method:={slam_val}",
+                                    f"racecar_version:={racecar_val}"
+                                ]
+                        
+                        if cmd:
+                            try:
+                                flog = open(log_files[key], "w")
+                                procs[key] = subprocess.Popen(cmd, stdout=flog, stderr=flog, start_new_session=True)
+                            except FileNotFoundError:
+                                with open(log_files[key], "w") as f:
+                                    f.write("Error: Command not found. Are you running inside the Docker container with ROS 2 installed?\n")
+                                procs[key] = None
+                
+                elif itype == "view_logs":
+                    curses.endwin()
+                    print("\n\033[36m--- Viewing Live Logs. Press Ctrl+C to stop viewing and return to menu ---\033[0m\n")
+                    try:
+                        for lf in log_files.values():
+                            open(lf, 'a').close()
+                        subprocess.call(["tail", "-f"] + list(log_files.values()))
+                    except KeyboardInterrupt:
+                        pass
+                    finally:
+                        stdscr.clear()
+                        stdscr.refresh()
+                
+                elif itype == "exit_keep":
+                    return
+                elif itype == "exit_stop":
+                    cleanup_procs()
+                    return
+
+            time.sleep(0.05)
+
+    try:
+        curses.wrapper(draw_menu)
+    finally:
+        pass
+
 def main():
+    if len(sys.argv) < 2:
+        try:
+            run_tui()
+        except KeyboardInterrupt:
+            pass
+        sys.exit(0)
+
     parser = argparse.ArgumentParser(description="F1TENTH Workflow Profile Manager CLI")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     # profile
     p_parser = subparsers.add_parser("profile", help="Manage configuration profiles")
+    
+    # tui
+    subparsers.add_parser("tui", help="Launch interactive TUI launcher")
     p_sub = p_parser.add_subparsers(dest="subcommand", required=True)
     p_sub.add_parser("list", help="List available profiles")
     
@@ -219,7 +674,7 @@ def main():
     q_parser.add_argument("--racecar", type=str, help="Racecar version")
     q_parser.add_argument("--ctrl", type=str, help="Control algorithm (PP/MAP)")
     q_parser.add_argument("--table", type=str, help="Lookup table parameter")
-    q_parser.add_argument("--launch-base", type=str, choices=["True", "False"], default="True", help="Launch base system too")
+    q_parser.add_argument("--launch-base", type=str, choices=["True", "False"], default="False", help="Launch base system too")
     q_parser.add_argument("--dry-run", action="store_true", help="Print command without executing")
 
     # h2h
@@ -230,12 +685,16 @@ def main():
     h_parser.add_argument("--ctrl", type=str, help="Control algorithm (PP/MAP)")
     h_parser.add_argument("--table", type=str, help="Lookup table parameter")
     h_parser.add_argument("--overtake", type=str, choices=["spliner", "graph_based"], help="Overtake planner mode")
-    h_parser.add_argument("--launch-base", type=str, choices=["True", "False"], default="True", help="Launch base system too")
+    h_parser.add_argument("--launch-base", type=str, choices=["True", "False"], default="False", help="Launch base system too")
     h_parser.add_argument("--dry-run", action="store_true", help="Print command without executing")
 
     # ftg
     ftg_parser = subparsers.add_parser("ftg", help="Run Follow the Gap controller node standalone")
     ftg_parser.add_argument("--dry-run", action="store_true", help="Print command without executing")
+
+    # telemetry
+    tel_parser = subparsers.add_parser("telemetry", help="Launch telemetry / Foxglove bridge")
+    tel_parser.add_argument("--dry-run", action="store_true", help="Print command without executing")
 
     # finish-map
     fm_parser = subparsers.add_parser("finish-map", help="Finish and save mapping session")
@@ -267,6 +726,14 @@ def main():
         handle_h2h(args)
     elif args.command == "ftg":
         handle_ftg(args)
+    elif args.command == "telemetry":
+        handle_telemetry(args)
+    elif args.command == "tui":
+        try:
+            run_tui()
+        except KeyboardInterrupt:
+            pass
+        sys.exit(0)
     elif args.command == "finish-map":
         handle_finish_map(args)
     elif args.command == "edit-map":

@@ -166,6 +166,7 @@ def launch_setup(context, *args, **kwargs):
     map_server_node = Node(
         package='nav2_map_server',
         executable='map_server',
+        name='map_server',
         parameters=[{'yaml_filename': temp_yaml_path},
                     {'topic': 'map'},
                     {'frame_id': 'map'},
@@ -276,18 +277,12 @@ def launch_setup(context, *args, **kwargs):
             condition=LaunchConfigurationEquals('foxglove_target', 'studio'),
         )
     )
-    ld.add_action(foxglove_bridge_node)
-    ld.add_action(foxglove_open)
     ld.add_action(bridge_node)
     ld.add_action(nav_lifecycle_node)
     ld.add_action(map_server_node)
     ld.add_action(ego_robot_publisher)
     if has_opp:
         ld.add_action(opp_robot_publisher)
-    ld.add_action(foxglove_log)
-    ld.add_action(foxglove_ws_log)
-    ld.add_action(foxglove_target_log)
-    ld.add_action(foxglove_layout_log)
 
     return ld.entities
 

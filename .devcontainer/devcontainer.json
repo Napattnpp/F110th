@@ -5,6 +5,7 @@
     "runServices": [
         "general"
     ],
+    "localEnvFile": "../.env",
     // "initializeCommand": "/bin/bash -c 'source ${localWorkspaceFolder}/.devcontainer/xauth_setup.sh'",
     "workspaceFolder": "/home/${localEnv:USER}/F110th",
     "customizations": {

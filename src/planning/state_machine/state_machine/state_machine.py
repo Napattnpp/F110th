@@ -39,6 +39,21 @@ class StateMachine(Node):
         
         self.ftg_disabled = True # TODO fix with global prams?
 
+        # Get sim parameter from global_parameters node to automatically switch profiles
+        self.global_param_client = self.create_client(GetParameters, '/global_parameters/get_parameters')
+        self.global_param_client.wait_for_service()
+        req = GetParameters.Request()
+        req.names = ['sim']
+        future = self.global_param_client.call_async(req)
+        rclpy.spin_until_future_complete(self, future)
+        self.sim = False
+        if future.result() is not None:
+            self.sim = future.result().values[0].bool_value
+        self.get_logger().info(f"Is simulation: {self.sim}")
+
+        # Automate test_on_car alignment
+        self.params.test_on_car = not self.sim
+
         # update on parameter changes for rate
         self.add_on_set_parameters_callback(self.params.parameters_callback)
         
@@ -72,14 +87,14 @@ class StateMachine(Node):
             self.get_logger().info("Waiting for car state frenet message", throttle_duration_sec=0.5)
             rclpy.spin_once(self)
 
-        if self.params.mode == 'head_to_head':
+        if self.params.mode in ['head_to_head', 'qualifying']:
             self.current_position = None
             self.create_subscription(PoseStamped, '/car_state/pose', self.car_state_cb, 10)
             while self.current_position is None:
                 self.get_logger().info("Waiting for car state pose message", throttle_duration_sec=0.5)
                 rclpy.spin_once(self)
 
-            if self.params.mode=="head_to_head" and self.params.overtake_mode == "spliner":
+            if self.params.mode in ["head_to_head", "qualifying"] and self.params.overtake_mode == "spliner":
                 self.last_valid_avoidance_wpnts = None
                 self.splini_ttl_counter = 0
                 self.avoidance_wpnts = None
@@ -98,9 +113,8 @@ class StateMachine(Node):
         # INITIALIZATIONS        
         self.waypoints_dist = 0.1
         
-        # Fake obstacle generation parameters
-        self.fake_obs_lap = -1
-        self.fake_obstacles = []
+        # Fake obstacle generation parameters have been moved to fake_obstacle_publisher in perception package.
+        
         self.state = StateType(self.params.initial_state)
         self.local_waypoints = WpntArray()
         self.first_visualization = True
@@ -135,7 +149,6 @@ class StateMachine(Node):
         self.state_marker_pub = self.create_publisher(Marker, 'state_marker', 10)
         self.loc_wpnt_pub = self.create_publisher(WpntArray, 'local_waypoints', 10)
         self.vis_loc_wpnt_pub = self.create_publisher(MarkerArray, 'local_waypoints/markers', 10)
-        self.fake_obs_pub = self.create_publisher(ObstacleArray, '/perception/fake_obstacles', 10)
         
         # main loop
         self.main_loop = self.create_timer(1/self.params.rate_hz, self.main_loop_callback)
@@ -588,7 +601,8 @@ class StateMachine(Node):
         self.get_logger().debug(f"Current state: {self.state}")
         # transition logic
         if self.cur_s is not None:
-            self._handle_fake_obstacles()
+            if self.params.mode == "qualifying":
+                self._handle_qualifying_logic()
             
         if self.params.force_state:
             self.state = self.params.force_state_choice
@@ -602,7 +616,7 @@ class StateMachine(Node):
         self.local_waypoints.wpnts = self.state_logic(self)
         self._pub_local_waypoints(self.local_waypoints)
 
-        if self.params.mode=="head_to_head" and self.params.overtake_mode == "spliner":
+        if self.params.mode in ["head_to_head", "qualifying"] and self.params.overtake_mode == "spliner":
             self.splini_ttl_counter -= 1
             # Once ttl has reached 0 we overwrite the avoidance waypoints with the empty waypoints
             if self.splini_ttl_counter <= 0:
@@ -610,46 +624,9 @@ class StateMachine(Node):
                 self.avoidance_wpnts = WpntArray()
                 self.splini_ttl_counter = -1
 
-    def _handle_fake_obstacles(self):
-        """Generates and publishes fake obstacles during Q2."""
-        q1_end = self.params.q1_laps + self.params.buf_laps
-        q2_end = q1_end + self.params.q2_laps
-        
-        # Determine if we are in Q2
-        if q1_end < self.lap_count <= q2_end and self.track_length > 0:
-            if self.lap_count > self.fake_obs_lap:
-                self.fake_obs_lap = self.lap_count
-                self.fake_obstacles = []
-                # Generate 2 new random obstacles ahead of the car
-                for _ in range(2):
-                    obs = Obstacle()
-                    # Ensure they spawn at least 15m away
-                    rand_offset = random.uniform(15.0, min(60.0, self.track_length / 2))
-                    obs.s_center = (self.cur_s + rand_offset) % self.track_length
-                    obs.s_start = obs.s_center - 0.3
-                    obs.s_end = obs.s_center + 0.3
-                    obs.d_center = 0.0
-                    obs.d_left = 0.4
-                    obs.d_right = -0.4
-                    obs.vs = 0.0
-                    obs.vd = 0.0
-                    self.fake_obstacles.append(obs)
-            
-            # Publish them
-            msg = ObstacleArray()
-            msg.header.stamp = self.get_clock().now().to_msg()
-            msg.header.frame_id = "map"
-            msg.obstacles = self.fake_obstacles
-            self.fake_obs_pub.publish(msg)
-        else:
-            # Not in Q2, publish empty array to clear
-            if self.fake_obs_lap != -1:
-                self.fake_obs_lap = -1
-                self.fake_obstacles = []
-                msg = ObstacleArray()
-                msg.header.stamp = self.get_clock().now().to_msg()
-                msg.header.frame_id = "map"
-                self.fake_obs_pub.publish(msg)
+    def _handle_qualifying_logic(self):
+        """Removes fake obstacles during Qualifying if any existed. (Now handled externally)"""
+        pass
 
 # defined as entry point in setup.py:
 def main(args=None):
