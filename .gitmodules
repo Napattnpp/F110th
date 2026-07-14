@@ -2,3 +2,7 @@
 	path = src/f1tenth_system
 	url = https://github.com/Napattnpp/f1tenth_system.git
 	branch = humble-devel
+[submodule "src/state_estimation/particle_filter"]
+	path = src/state_estimation/particle_filter
+	url = https://github.com/Napattnpp/particle_filter.git
+	branch = humble-synpf
