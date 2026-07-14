@@ -156,7 +156,11 @@ def generate_launch_description():
             condition=IfCondition(PythonExpression(["'", LaunchConfiguration('localize'), "' == 'True' and '", LaunchConfiguration('localize_method'), "' == 'particle_filter'"])),
             actions=[
                 IncludeLaunchDescription(
-                    pf_source
+                    pf_source,
+                    launch_arguments={
+                        'localize_config': os.path.join(pkg_bringup, 'config', 'localize.yaml'),
+                        'map_yaml_path': PathJoinSubstitution([map_path, [LaunchConfiguration('map_name'), '.yaml']])
+                    }.items()
                 )
             ]
         )
