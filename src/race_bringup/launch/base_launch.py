@@ -60,7 +60,7 @@ def generate_launch_description():
     localize_method_arg = DeclareLaunchArgument(
         'localize_method',
         default_value=profile.get('localize_method', 'amcl'),
-        description="Localization method: 'amcl' / 'cartographer'"
+        description="Localization method: 'amcl' / 'cartographer' / 'particle_filter'"
     )
 
     # Configuration files path
@@ -148,6 +148,19 @@ def generate_launch_description():
         ]
     )
     physical_actions.append(amcl_group)
+
+    # 5. Particle Filter Localization (Conditional on localize == True and localize_method == particle_filter)
+    pf_source = get_launch_source('particle_filter', 'localize_launch')
+    if pf_source is not None:
+        pf_group = GroupAction(
+            condition=IfCondition(PythonExpression(["'", LaunchConfiguration('localize'), "' == 'True' and '", LaunchConfiguration('localize_method'), "' == 'particle_filter'"])),
+            actions=[
+                IncludeLaunchDescription(
+                    pf_source
+                )
+            ]
+        )
+        physical_actions.append(pf_group)
 
     physical_group = GroupAction(
         condition=UnlessCondition(LaunchConfiguration('sim')),

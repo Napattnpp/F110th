@@ -109,13 +109,15 @@ def handle_base(args):
     sim = args.sim if args.sim is not None else str(profile.get("sim", False))
     racecar = args.racecar or profile.get("racecar_version", "NUC1")
     localize = args.localize if args.localize is not None else str(profile.get("localize", True))
+    method = args.method or profile.get("localize_method", "amcl")
 
     cmd = [
         "ros2", "launch", "race_bringup", "base_launch.py",
         f"map_name:={map_name}",
         f"sim:={sim}",
         f"racecar_version:={racecar}",
-        f"localize:={localize}"
+        f"localize:={localize}",
+        f"localize_method:={method}"
     ]
     sys.exit(run_command(cmd, args.dry_run))
 
@@ -225,6 +227,12 @@ def run_tui():
 
     slam_options = ["cartographer", "slam_toolbox"]
     slam_idx = 0 if active_profile.get("slam_method", "cartographer") == "cartographer" else 1
+
+    loc_options = ["amcl", "cartographer", "particle_filter"]
+    loc_idx = 0
+    curr_loc = active_profile.get("localize_method", "amcl")
+    if curr_loc in loc_options:
+        loc_idx = loc_options.index(curr_loc)
 
     mode_options = ["h2h", "qualifying", "timetrials", "mapping"]
     mode_idx = 0
@@ -370,6 +378,7 @@ def run_tui():
                 ("Controller Algorithm", "toggle", ctrl_options, "ctrl_idx"),
                 ("Overtake Planner Mode", "toggle", overtake_options, "overtake_idx"),
                 ("SLAM Mapping Method", "toggle", slam_options, "slam_idx"),
+                ("Localization Method", "toggle", loc_options, "loc_idx"),
                 ("Selected Task Mode (Tier 3)", "toggle", mode_options, "mode_idx"),
                 ("", "separator", [], ""),
                 ("Tier 1: Launch Base System", "action", ["tier1"], ""),
@@ -409,6 +418,8 @@ def run_tui():
                         val = overtake_options[overtake_idx]
                     elif ref == "slam_idx":
                         val = slam_options[slam_idx]
+                    elif ref == "loc_idx":
+                        val = loc_options[loc_idx]
                     elif ref == "mode_idx":
                         val = mode_options[mode_idx]
                     
@@ -463,6 +474,9 @@ def run_tui():
                         ctrl_idx = 0 if active_profile.get("ctrl_algo", "MAP") == "MAP" else 1
                         overtake_idx = 0 if active_profile.get("overtake_mode", "spliner") == "spliner" else 1
                         slam_idx = 0 if active_profile.get("slam_method", "cartographer") == "cartographer" else 1
+                        loc_idx = 0
+                        curr_loc = active_profile.get("localize_method", "amcl")
+                        if curr_loc in loc_options: loc_idx = loc_options.index(curr_loc)
                     elif ref == "map_idx":
                         map_idx = (map_idx - 1) % len(vals)
                     elif ref == "sim_idx":
@@ -473,6 +487,8 @@ def run_tui():
                         overtake_idx = (overtake_idx - 1) % len(vals)
                     elif ref == "slam_idx":
                         slam_idx = (slam_idx - 1) % len(vals)
+                    elif ref == "loc_idx":
+                        loc_idx = (loc_idx - 1) % len(vals)
                     elif ref == "mode_idx":
                         mode_idx = (mode_idx - 1) % len(vals)
 
@@ -494,6 +510,9 @@ def run_tui():
                         ctrl_idx = 0 if active_profile.get("ctrl_algo", "MAP") == "MAP" else 1
                         overtake_idx = 0 if active_profile.get("overtake_mode", "spliner") == "spliner" else 1
                         slam_idx = 0 if active_profile.get("slam_method", "cartographer") == "cartographer" else 1
+                        loc_idx = 0
+                        curr_loc = active_profile.get("localize_method", "amcl")
+                        if curr_loc in loc_options: loc_idx = loc_options.index(curr_loc)
                     elif ref == "map_idx":
                         map_idx = (map_idx + 1) % len(vals)
                     elif ref == "sim_idx":
@@ -504,6 +523,8 @@ def run_tui():
                         overtake_idx = (overtake_idx + 1) % len(vals)
                     elif ref == "slam_idx":
                         slam_idx = (slam_idx + 1) % len(vals)
+                    elif ref == "loc_idx":
+                        loc_idx = (loc_idx + 1) % len(vals)
                     elif ref == "mode_idx":
                         mode_idx = (mode_idx + 1) % len(vals)
 
@@ -524,6 +545,7 @@ def run_tui():
                         ctrl_val = ctrl_options[ctrl_idx]
                         overtake_val = overtake_options[overtake_idx]
                         slam_val = slam_options[slam_idx]
+                        loc_val = loc_options[loc_idx]
                         mode_val = mode_options[mode_idx]
                         racecar_val = active_profile.get("racecar_version", "NUC1")
                         table_val = active_profile.get("LU_table", "NUC1_hangar_pacejka")
@@ -534,7 +556,8 @@ def run_tui():
                                 "ros2", "launch", "race_bringup", "base_launch.py",
                                 f"map_name:={m_name}",
                                 f"sim:={sim_val}",
-                                f"racecar_version:={racecar_val}"
+                                f"racecar_version:={racecar_val}",
+                                f"localize_method:={loc_val}"
                             ]
                         elif key == "tier2":
                             cmd = [
@@ -647,6 +670,7 @@ def main():
     b_parser.add_argument("--sim", type=str, choices=["True", "False"], help="Run in simulation")
     b_parser.add_argument("--racecar", type=str, help="Racecar version")
     b_parser.add_argument("--localize", type=str, choices=["True", "False"], help="Enable localization")
+    b_parser.add_argument("--method", type=str, choices=["amcl", "cartographer", "particle_filter"], help="Localization method")
     b_parser.add_argument("--dry-run", action="store_true", help="Print command without executing")
 
     # qualifying
