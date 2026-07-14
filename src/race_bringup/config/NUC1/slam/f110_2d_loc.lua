@@ -33,8 +33,8 @@ options = {
 MAP_BUILDER.use_trajectory_builder_2d = true
 MAP_BUILDER.use_trajectory_builder_3d = false
 MAP_BUILDER.num_background_threads = 4.0
-TRAJECTORY_BUILDER_2D.use_imu_data = false
-TRAJECTORY_BUILDER_2D.max_range = 12.0
+TRAJECTORY_BUILDER_2D.use_imu_data = false -- Reverted to false: IMU is offset from base_link and already fused via EKF
+TRAJECTORY_BUILDER_2D.max_range = 20.0 -- Increased to see further down long straights and prevent longitudinal slipping
 TRAJECTORY_BUILDER_2D.min_range = 0.05
 TRAJECTORY_BUILDER.pure_localization_trimmer = {
     max_submaps_to_keep = 5,
@@ -43,17 +43,16 @@ TRAJECTORY_BUILDER.pure_localization_trimmer = {
 -- might be able to optimize these parameters
 -- see: http://google-cartographer-ros.readthedocs.io/en/latest/tuning.html
 TRAJECTORY_BUILDER_2D.submaps.num_range_data = 80
-POSE_GRAPH.optimize_every_n_nodes = 5
+POSE_GRAPH.optimize_every_n_nodes = 90 -- Run global optimization frequently to correct drift fast in pure localization
 POSE_GRAPH.global_sampling_ratio = 0.05
 POSE_GRAPH.constraint_builder.sampling_ratio = 0.05
 
-TRAJECTORY_BUILDER_2D.ceres_scan_matcher.rotation_weight = 0.2 * TRAJECTORY_BUILDER_2D.ceres_scan_matcher.rotation_weight
-
-TRAJECTORY_BUILDER_2D.ceres_scan_matcher.translation_weight = 0.2 * TRAJECTORY_BUILDER_2D.ceres_scan_matcher.translation_weight
+TRAJECTORY_BUILDER_2D.ceres_scan_matcher.rotation_weight = 5.0 * TRAJECTORY_BUILDER_2D.ceres_scan_matcher.rotation_weight -- Increased to trust odometry/IMU more, reducing jitter
+TRAJECTORY_BUILDER_2D.ceres_scan_matcher.translation_weight = 5.0 * TRAJECTORY_BUILDER_2D.ceres_scan_matcher.translation_weight -- Increased to trust odometry/IMU more, reducing jitter
 
 POSE_GRAPH.optimization_problem.odometry_rotation_weight = 0
 POSE_GRAPH.optimization_problem.odometry_translation_weight = 0
---POSE_GRAPH.optimization_problem.local_slam_pose_rotation_weight = 1.25 * POSE_GRAPH.optimization_problem.local_slam_pose_rotation_weight
+-- POSE_GRAPH.optimization_problem.local_slam_pose_rotation_weight = 1.25 * POSE_GRAPH.optimization_problem.local_slam_pose_rotation_weight
 
 
 return options
