@@ -339,7 +339,7 @@ def run_tui():
                     pass
 
     def draw_menu(stdscr):
-        nonlocal active_profile, profile_idx, map_idx, sim_idx, ctrl_idx, overtake_idx, slam_idx, mode_idx
+        nonlocal active_profile, profile_idx, map_idx, sim_idx, ctrl_idx, overtake_idx, slam_idx, loc_idx, mode_idx
         
         curses.start_color()
         curses.init_pair(1, curses.COLOR_WHITE, curses.COLOR_BLUE)
