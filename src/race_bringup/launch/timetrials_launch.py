@@ -50,21 +50,6 @@ def generate_launch_description():
         default_value='False',
         description='Measure execution time'
     )
-    launch_base_arg = DeclareLaunchArgument(
-        'launch_base',
-        default_value='False',
-        description='Whether to also launch base_launch.py'
-    )
-    map_name_arg = DeclareLaunchArgument(
-        'map_name',
-        default_value=profile.get('map_name', 'latest'),
-        description='Map name in race_bringup/maps'
-    )
-    sim_arg = DeclareLaunchArgument(
-        'sim',
-        default_value=str(profile.get('sim', False)),
-        description='True/False if you want to run simulation'
-    )
 
     # Include controller manager
     controller_source = get_launch_source('controller', 'controller_launch')
@@ -95,35 +80,12 @@ def generate_launch_description():
 
     # Perception and spline planner are disabled for time trials
 
-    # Include base system launch (sensors, simulator, etc.) conditionally
-    base_launch = None
-    base_launch_source = get_launch_source('race_bringup', 'base_launch')
-    if base_launch_source is not None:
-        base_launch = GroupAction(
-            condition=IfCondition(LaunchConfiguration('launch_base')),
-            actions=[
-                IncludeLaunchDescription(
-                    base_launch_source,
-                    launch_arguments={
-                        'racecar_version': LaunchConfiguration('racecar_version'),
-                        'map_name': LaunchConfiguration('map_name'),
-                        'sim': LaunchConfiguration('sim')
-                    }.items()
-                )
-            ]
-        )
-
     actions = [
         racecar_version_arg,
         lu_table_arg,
         ctrl_algo_arg,
         measure_arg,
-        launch_base_arg,
-        map_name_arg,
-        sim_arg,
     ]
-    if base_launch is not None:
-        actions.append(base_launch)
     if controller_launch is not None:
         actions.append(controller_launch)
     if state_machine_launch is not None:

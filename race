@@ -121,43 +121,33 @@ def handle_base(args):
 
 def handle_qualifying(args):
     profile = get_active_profile()
-    map_name = args.map or profile.get("map_name", "latest")
-    sim = args.sim if args.sim is not None else str(profile.get("sim", False))
     racecar = args.racecar or profile.get("racecar_version", "NUC1")
     ctrl = args.ctrl or profile.get("ctrl_algo", "MAP")
     table = args.table or profile.get("LU_table", "NUC1_hangar_pacejka")
-    launch_base = args.launch_base
 
     cmd = [
         "ros2", "launch", "race_bringup", "qualifying_launch.py",
-        f"map_name:={map_name}",
-        f"sim:={sim}",
         f"racecar_version:={racecar}",
         f"ctrl_algo:={ctrl}",
-        f"LU_table:={table}",
-        f"launch_base:={launch_base}"
+        f"LU_table:={table}"
     ]
     sys.exit(run_command(cmd, args.dry_run))
 
 def handle_h2h(args):
     profile = get_active_profile()
-    map_name = args.map or profile.get("map_name", "latest")
     sim = args.sim if args.sim is not None else str(profile.get("sim", False))
     racecar = args.racecar or profile.get("racecar_version", "NUC1")
     ctrl = args.ctrl or profile.get("ctrl_algo", "MAP")
     table = args.table or profile.get("LU_table", "NUC1_hangar_pacejka")
     overtake = args.overtake or profile.get("overtake_mode", "spliner")
-    launch_base = args.launch_base
 
     cmd = [
         "ros2", "launch", "race_bringup", "head_to_head_launch.py",
-        f"map_name:={map_name}",
         f"sim:={sim}",
         f"racecar_version:={racecar}",
         f"ctrl_algo:={ctrl}",
         f"LU_table:={table}",
-        f"overtake_mode:={overtake}",
-        f"launch_base:={launch_base}"
+        f"overtake_mode:={overtake}"
     ]
     sys.exit(run_command(cmd, args.dry_run))
 
@@ -554,33 +544,25 @@ def run_tui():
                             if mode_val == "timetrials":
                                 cmd = [
                                     "ros2", "launch", "race_bringup", "timetrials_launch.py",
-                                    f"map_name:={m_name}",
-                                    f"sim:={sim_val}",
                                     f"ctrl_algo:={ctrl_val}",
                                     f"LU_table:={table_val}",
-                                    f"racecar_version:={racecar_val}",
-                                    "launch_base:=False"
+                                    f"racecar_version:={racecar_val}"
                                 ]
                             elif mode_val == "qualifying":
                                 cmd = [
                                     "ros2", "launch", "race_bringup", "qualifying_launch.py",
-                                    f"map_name:={m_name}",
-                                    f"sim:={sim_val}",
                                     f"ctrl_algo:={ctrl_val}",
                                     f"LU_table:={table_val}",
-                                    f"racecar_version:={racecar_val}",
-                                    "launch_base:=False"
+                                    f"racecar_version:={racecar_val}"
                                 ]
                             elif mode_val == "h2h":
                                 cmd = [
                                     "ros2", "launch", "race_bringup", "head_to_head_launch.py",
-                                    f"map_name:={m_name}",
                                     f"sim:={sim_val}",
                                     f"ctrl_algo:={ctrl_val}",
                                     f"LU_table:={table_val}",
                                     f"overtake_mode:={overtake_val}",
-                                    f"racecar_version:={racecar_val}",
-                                    "launch_base:=False"
+                                    f"racecar_version:={racecar_val}"
                                 ]
                             elif mode_val == "mapping":
                                 cmd = [
@@ -669,23 +651,18 @@ def main():
 
     # qualifying
     q_parser = subparsers.add_parser("qualifying", help="Launch full qualifying stack")
-    q_parser.add_argument("--map", type=str, help="Map name")
-    q_parser.add_argument("--sim", type=str, choices=["True", "False"], help="Run in simulation")
     q_parser.add_argument("--racecar", type=str, help="Racecar version")
     q_parser.add_argument("--ctrl", type=str, help="Control algorithm (PP/MAP)")
     q_parser.add_argument("--table", type=str, help="Lookup table parameter")
-    q_parser.add_argument("--launch-base", type=str, choices=["True", "False"], default="False", help="Launch base system too")
     q_parser.add_argument("--dry-run", action="store_true", help="Print command without executing")
 
     # h2h
     h_parser = subparsers.add_parser("h2h", help="Launch full head-to-head stack")
-    h_parser.add_argument("--map", type=str, help="Map name")
     h_parser.add_argument("--sim", type=str, choices=["True", "False"], help="Run in simulation")
     h_parser.add_argument("--racecar", type=str, help="Racecar version")
     h_parser.add_argument("--ctrl", type=str, help="Control algorithm (PP/MAP)")
     h_parser.add_argument("--table", type=str, help="Lookup table parameter")
     h_parser.add_argument("--overtake", type=str, choices=["spliner", "graph_based"], help="Overtake planner mode")
-    h_parser.add_argument("--launch-base", type=str, choices=["True", "False"], default="False", help="Launch base system too")
     h_parser.add_argument("--dry-run", action="store_true", help="Print command without executing")
 
     # ftg
