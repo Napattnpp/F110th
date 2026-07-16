@@ -8,10 +8,12 @@ perception:
       min_obs_size: 10
       max_obs_size: 1.0
       max_viewing_distance: 9
-      boundaries_inflation: 0.1
+      boundaries_inflation: 0.05
 
     tracking:
       rate: 40 # rate at which the node is running
+      min_nb_meas: 3 # minimum number of measurements before publishing
+      ttl_static: 8 # time-to-live for static obstacles to prevent corner dropout
       P_vs: 0.2 # proportional gain for the vs
       P_d: 0.02 # proportional gain for the d
       P_vd: 0.2 # proportional gain for the vd

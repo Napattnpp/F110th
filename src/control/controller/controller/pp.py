@@ -152,11 +152,13 @@ class PP_Controller:
         speed_for_lu = self.speed_adjust_lat_err(speed_la_for_lu, lat_e_norm)
 
         L1_vector = np.array([L1_point[0] - self.position_in_map[0, 0], L1_point[1] - self.position_in_map[0, 1]])
-        if np.linalg.norm(L1_vector) == 0:
+        L1_norm = np.linalg.norm(L1_vector)
+        if L1_norm == 0:
             self.logger_warn("[Controller] norm of L1 vector was 0, eta is set to 0")
             eta = 0
         else:
-            eta = np.arcsin(np.dot([-np.sin(yaw), np.cos(yaw)], L1_vector)/np.linalg.norm(L1_vector))
+            val = np.dot([-np.sin(yaw), np.cos(yaw)], L1_vector) / L1_norm
+            eta = np.arcsin(np.clip(val, -1.0, 1.0))
 
         steering_angle = np.arctan(2*self.wheelbase*np.sin(eta)/L1_distance)
 
@@ -371,15 +373,37 @@ class PP_Controller:
 
     def waypoint_at_distance_before_car(self, distance, waypoints, idx_waypoint_behind_car):
         """
-        Calculates the waypoint at a certain frenet distance in front of the car
-
-        Returns:
-            waypoint as numpy array at a ceratin distance in front of the car
+        Calculates the waypoint at a certain frenet distance in front of the car,
+        using true cumulative Euclidean distance along the path segments with linear interpolation.
+        Supports closed-loop tracks by wrapping around the waypoints array.
         """
         if distance is None:
             distance = self.t_clip_min
-        d_distance = distance
-        waypoints_distance = 0.1
-        d_index= int(d_distance/waypoints_distance + 0.5)
+            
+        n_waypoints = len(waypoints)
+        if n_waypoints == 0:
+            return np.zeros(2)
+        if n_waypoints == 1:
+            return np.array(waypoints[0])
 
-        return np.array(waypoints[min(len(waypoints) -1, idx_waypoint_behind_car + d_index)]) 
+        accumulated_dist = 0.0
+        curr_idx = idx_waypoint_behind_car
+
+        # Traverse segments, wrapping around indices for closed loops
+        for _ in range(n_waypoints):
+            p1 = waypoints[curr_idx % n_waypoints]
+            p2 = waypoints[(curr_idx + 1) % n_waypoints]
+            segment_dist = np.linalg.norm(p2 - p1)
+            
+            if accumulated_dist + segment_dist >= distance:
+                # Target is on this segment! Interpolate to find the exact point
+                rem_dist = distance - accumulated_dist
+                t = rem_dist / segment_dist if segment_dist > 1e-6 else 0.0
+                interpolated_pt = p1 + t * (p2 - p1)
+                return interpolated_pt
+
+            accumulated_dist += segment_dist
+            curr_idx += 1
+
+        # Fallback if distance is larger than the entire track length
+        return np.array(waypoints[curr_idx % n_waypoints]) 

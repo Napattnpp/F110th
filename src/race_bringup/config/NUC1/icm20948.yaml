@@ -7,19 +7,19 @@
     rate_hz: 80
 
     accel_range_g: 2
-    gyro_range_dps: 250
-    gyro_scale_z: 1.006
+    gyro_range_dps: 2000
+    gyro_scale_z: 1.00515
     auto_calibrate_gyro: true
 
     # These values should be filled after running calibrate_gyro
-    gyro_bias_x: 0.0221905
-    gyro_bias_y: 0.0110288
-    gyro_bias_z: 0.00236582
+    gyro_bias_x: 0.0196698
+    gyro_bias_y: 0.0112732
+    gyro_bias_z: 0.00304279
 
     accel_bias_x: 0.0
     accel_bias_y: 0.0
     accel_bias_z: 0.0
 
     # Covariance diagonals (x, y, z)
-    accel_covariance: [0.00090426, 0.00099860, 0.00085567]
-    gyro_covariance: [0.00000865, 0.00000668, 0.00000560]
+    accel_covariance: [0.00089462, 0.00109606, 0.00092529]
+    gyro_covariance: [0.00000837, 0.00000617, 0.00000593]

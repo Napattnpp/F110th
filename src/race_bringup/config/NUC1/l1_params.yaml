@@ -1,14 +1,15 @@
 controller:
   ros__parameters:
+    LUT_name: "NUC1_hangar_pacejka"
     # ── Lookahead distance: L1 = q_l1 + speed * m_l1, clipped to [t_clip_min, t_clip_max] ──
     # OSCILLATION FIX: increase t_clip_min → longer lookahead → smoother path, less oscillation
     # Too short (0.8m) on tight track → car overshoots corners → oscillates
     # Too long → car cuts corners / slow to respond
-    # MAX ALLOWED: 1.5 (hard limit in controller_manager.py FloatingPointRange)
-    t_clip_min: 0.6       # decreased to tighten up turns and prevent wall crashes on rejoin
-    t_clip_max: 1.5
-    m_l1: 0.3           # how much speed increases lookahead (keep as-is for now)
-    q_l1: -0.167
+    # MAX ALLOWED: 1.0 (hard limit in controller_manager.py FloatingPointRange)
+    t_clip_min: 0.45      # Increased to be larger than wheelbase (0.33m) to prevent low-speed oscillations
+    t_clip_max: 2.5       # Increased to 2.5 to allow larger lookahead at high speed (20000 ERPM)
+    m_l1: 0.78             # Set lookahead time to 0.7 seconds (well within [0.0, 1.0] limit)
+    q_l1: 0.15             # Slightly increased base offset for low speed stability
 
     speed_lookahead: 0.25
     lat_err_coeff: 1.0
@@ -28,9 +29,9 @@ controller:
 
     ## Acceleration Based Velocity Controller Parameters
     vel_accel_mode: False
-    vel_ctr_p_gain: 1.0
+    vel_ctr_p_gain: 1.8
     vel_ctr_i_gain: 0.0
-    vel_ctr_d_gain: 0.5
+    vel_ctr_d_gain: 0.2
 
     ## Trailing Controller Parameters
     allow_accel_trailing: False

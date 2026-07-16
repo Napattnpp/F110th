@@ -204,8 +204,11 @@ class StateMachine(Node):
             self.splini_ttl_counter = int(self.params.splini_ttl * self.params.rate_hz)
             self.avoidance_wpnts = data
         else:
-        # If empty we don't overwrite the avoidance waypoints
-            pass
+            # If the spliner explicitly publishes empty waypoints, we clear our cache immediately
+            # to allow fast transition back to TRAILING or GB_TRACK
+            self.splini_ttl_counter = 0
+            self.avoidance_wpnts = data
+            self.last_valid_avoidance_wpnts = None
 
     def obstacles_cb(self, data):
         if len(data.obstacles) != 0:

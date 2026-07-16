@@ -5,6 +5,7 @@ from f110_msgs.msg import WpntArray
 import numpy as np
 from visualization_msgs.msg import MarkerArray, Marker
 from tf_transformations import quaternion_from_euler
+import copy
 
 from race_bringup.parameter_event_handler import ParameterEventHandler
 
@@ -30,6 +31,15 @@ class SectorTuner(Node):
         # get initial scaling
         self.sectors_params=self.parameters_to_dict()
         self.n_sectors = self.sectors_params['n_sectors']
+
+        # Clip initial sector scaling values to global limit on startup
+        global_limit = self.sectors_params.get('global_limit', 1.0)
+        for i in range(self.n_sectors):
+            sector_key = f"Sector{i}"
+            if sector_key in self.sectors_params:
+                self.sectors_params[sector_key]['scaling'] = np.clip(
+                    self.sectors_params[sector_key]['scaling'], 0.0, global_limit
+                )
         
         desc = ParameterDescriptor(type=ParameterType.PARAMETER_DOUBLE, floating_point_range=[FloatingPointRange(from_value=0.0, to_value=1.0, step=0.01)])
         self.set_descriptor('global_limit',descriptor=desc)
@@ -168,14 +178,17 @@ class SectorTuner(Node):
         """
         Scales the global waypoints' velocities
         """
-        if self.glb_wpnts_scaled is None:
-            self.glb_wpnts_scaled = self.glb_wpnts_og
-            self.glb_wpnts_sp_scaled = self.glb_wpnts_sp_og
+        if self.glb_wpnts_og is None:
+            return
 
-        for i, wpnt  in enumerate(self.glb_wpnts_og.wpnts):
+        # Always make a fresh deep copy of the original waypoints to prevent decay bug
+        self.glb_wpnts_scaled = copy.deepcopy(self.glb_wpnts_og)
+        if self.glb_wpnts_sp_og is not None:
+            self.glb_wpnts_sp_scaled = copy.deepcopy(self.glb_wpnts_sp_og)
+
+        for i, wpnt in enumerate(self.glb_wpnts_scaled.wpnts):
             vel_scaling = self.get_vel_scaling(i)
-            new_vel = wpnt.vx_mps*vel_scaling
-            self.glb_wpnts_scaled.wpnts[i].vx_mps = new_vel
+            wpnt.vx_mps = wpnt.vx_mps * vel_scaling
 
     def timer_callback(self):
         if(self.glb_wpnts_og is None):

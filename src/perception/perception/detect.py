@@ -339,13 +339,22 @@ class Detect(Node):
         T = from_vector3_msg(t.transform.translation)
         R = from_quat_msg(t.transform.rotation)
 
-        angles = np.linspace(scans.angle_min,
-                             scans.angle_max, len(scans.ranges))
-        x_laser_frame = (scans.ranges * np.cos(angles)).flatten()
-        y_laser_frame = (scans.ranges * np.sin(angles)).flatten()
-        z_laser_frame = np.zeros(len(scans.ranges))
+        ranges = np.array(scans.ranges)
+        angles = np.linspace(scans.angle_min, scans.angle_max, len(ranges))
+        
+        # Filter out inf and nan values from the LiDAR scan
+        valid_idx = np.isfinite(ranges)
+        valid_ranges = ranges[valid_idx]
+        valid_angles = angles[valid_idx]
+        
+        if len(valid_ranges) == 0:
+            return []
+
+        x_laser_frame = (valid_ranges * np.cos(valid_angles)).flatten()
+        y_laser_frame = (valid_ranges * np.sin(valid_angles)).flatten()
+        z_laser_frame = np.zeros(len(valid_ranges))
         # 4xN matrix
-        xyz_laser_frame = np.vstack((x_laser_frame, y_laser_frame, z_laser_frame, np.ones(len(scans.ranges))))
+        xyz_laser_frame = np.vstack((x_laser_frame, y_laser_frame, z_laser_frame, np.ones(len(valid_ranges))))
 
         H_l2m = np.eye(4)
         H_l2m[:3, -1] = T
@@ -367,7 +376,7 @@ class Detect(Node):
 
         div_const = np.sin(d_phi) / np.sin(l - d_phi)
         for i in range(1, len(cloudPoints_list)):
-            curr_range = self.scans.ranges[i]
+            curr_range = valid_ranges[i]
             d_max = curr_range * div_const + 3 * sigma
 
             # Distance between points does not change in map frame or laser frame.

@@ -1,0 +1,4 @@
+spline_planner:
+  ros__parameters:
+    evasion_dist: 0.45
+    spline_bound_mindist: 0.10
