@@ -62,6 +62,7 @@ def generate_launch_description():
     mux_config = os.path.join(pkg_bringup, 'config', 'mux.yaml')
     joy_teleop_config = PathJoinSubstitution([pkg_bringup, 'config', LaunchConfiguration('racecar_version'), 'joy_teleop.yaml'])
     vesc_config = PathJoinSubstitution([pkg_bringup, 'config', LaunchConfiguration('racecar_version'), 'vesc.yaml'])
+    icm20948_config = PathJoinSubstitution([pkg_bringup, 'config', LaunchConfiguration('racecar_version'), 'icm20948.yaml'])
     global_planner_params = os.path.join(pkg_bringup, 'config', 'global_planner', 'global_planner_params.yaml')
     ekf_config = os.path.join(pkg_bringup, 'config', 'ekf.yaml')
 
@@ -101,7 +102,8 @@ def generate_launch_description():
                     'joy_config': joy_teleop_config,
                     'vesc_config': vesc_config,
                     'sllidar_s1_config': sllidar_s1_config,
-                    'mux_config': mux_config
+                    'mux_config': mux_config,
+                    'icm20948_config': icm20948_config
                 }.items()
         )
     )

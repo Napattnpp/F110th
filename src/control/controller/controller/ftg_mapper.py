@@ -23,7 +23,7 @@ class FTGMapperNode(Node):
         
         # Mapping Slow Speeds (Slower than the racing defaults)
         self.vel_close = 0.4
-        self.vel_mid = 0.5
+        self.vel_mid = 0.6
         self.vel_far = 0.7
         
         self.depth_close = 1.5

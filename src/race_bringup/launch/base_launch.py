@@ -63,11 +63,18 @@ def generate_launch_description():
         description="Localization method: 'amcl' / 'cartographer' / 'particle_filter'"
     )
 
+    trajectory_type_arg = DeclareLaunchArgument(
+        'trajectory_type',
+        default_value='minimum_curvature',
+        description='Type of trajectory to publish on /global_waypoints: minimum_curvature, shortest_path, centerline'
+    )
+
     # Configuration files path
     sllidar_s1_config = os.path.join(pkg_bringup, 'config', 'sllidar_s1.yaml')
     mux_config = os.path.join(pkg_bringup, 'config', 'mux.yaml')
     joy_teleop_config = PathJoinSubstitution([pkg_bringup, 'config', LaunchConfiguration('racecar_version'), 'joy_teleop.yaml'])
     vesc_config = PathJoinSubstitution([pkg_bringup, 'config', LaunchConfiguration('racecar_version'), 'vesc.yaml'])
+    icm20948_config = PathJoinSubstitution([pkg_bringup, 'config', LaunchConfiguration('racecar_version'), 'icm20948.yaml'])
     l1_params = PathJoinSubstitution([pkg_bringup, 'config', LaunchConfiguration('racecar_version'), 'l1_params.yaml'])
     ekf_config = os.path.join(pkg_bringup, 'config', 'ekf.yaml')
 
@@ -112,7 +119,8 @@ def generate_launch_description():
                     'joy_config': joy_teleop_config,
                     'vesc_config': vesc_config,
                     'sllidar_s1_config': sllidar_s1_config,
-                    'mux_config': mux_config
+                    'mux_config': mux_config,
+                    'icm20948_config': icm20948_config
                 }.items()
             )
         )
@@ -191,7 +199,8 @@ def generate_launch_description():
     global_trajectory_pub = IncludeLaunchDescription(
         get_launch_source('global_planner', 'global_trajectory_publisher_launch'),
         launch_arguments={
-            'map_path': map_path
+            'map_path': map_path,
+            'trajectory_type': LaunchConfiguration('trajectory_type')
         }.items()
     )
 
@@ -247,6 +256,7 @@ def generate_launch_description():
         sim_arg,
         localize_arg,
         localize_method_arg,
+        trajectory_type_arg,
         sim_group,
         physical_group,
         global_parameters_node,

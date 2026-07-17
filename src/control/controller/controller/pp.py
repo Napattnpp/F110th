@@ -87,6 +87,9 @@ class PP_Controller:
         self.state = state
         self.position_in_map = position_in_map
         self.waypoint_array_in_map = waypoint_array_in_map
+        if self.waypoint_array_in_map is None or len(self.waypoint_array_in_map) == 0:
+            self.logger_warn("[PP Controller] Received empty waypoint array!")
+            return 0.0, 0.0, 0.0, 0.0, np.array([0.0, 0.0]), 0.0, 0
         self.speed_now = speed_now
         self.opponent = opponent
         self.position_in_map_frenet = position_in_map_frenet
@@ -171,7 +174,7 @@ class PP_Controller:
         steering_angle *= np.clip(1 + (self.speed_now/10), 1, 1.25)
         
         # limit change of steering angle
-        threshold = 0.4
+        threshold = 16.0 / self.loop_rate
         if abs(steering_angle - self.curr_steering_angle) > threshold:
             self.logger_info(f"[PP Controller] steering angle clipped")
         steering_angle = np.clip(steering_angle, self.curr_steering_angle - threshold, self.curr_steering_angle + threshold) 

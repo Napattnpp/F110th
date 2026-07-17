@@ -5,7 +5,7 @@ state_machine:
     test_on_car: True  # also set True if using on a bag
     n_loc_wpnts: 80  # number of local waypoints published, 1 waypoints every 0.1 meter
 
-    volt_threshold: 11. # [V] voltage threshold below which we start screaming
+    volt_threshold: 9.5 # [V] voltage threshold below which we start screaming
 
     force_state: False  # force state to be the one specified in force_state_choice
 

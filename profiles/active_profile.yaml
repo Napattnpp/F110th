@@ -1,4 +1,4 @@
-LU_table: NUC1_hangar_pacejka_lookup_table
+LU_table: NUC1_hangar_pacejka
 ctrl_algo: PP
 localize: true
 localize_method: amcl

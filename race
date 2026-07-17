@@ -110,6 +110,7 @@ def handle_base(args):
     racecar = args.racecar or profile.get("racecar_version", "NUC1")
     localize = args.localize if args.localize is not None else str(profile.get("localize", True))
     method = args.method or profile.get("localize_method", "amcl")
+    trajectory = args.trajectory or profile.get("trajectory_type", "minimum_curvature")
 
     cmd = [
         "ros2", "launch", "race_bringup", "base_launch.py",
@@ -117,7 +118,8 @@ def handle_base(args):
         f"sim:={sim}",
         f"racecar_version:={racecar}",
         f"localize:={localize}",
-        f"localize_method:={method}"
+        f"localize_method:={method}",
+        f"trajectory_type:={trajectory}"
     ]
     sys.exit(run_command(cmd, args.dry_run))
 
@@ -233,6 +235,12 @@ def run_tui():
     curr_loc = active_profile.get("localize_method", "amcl")
     if curr_loc in loc_options:
         loc_idx = loc_options.index(curr_loc)
+
+    traj_options = ["minimum_curvature", "shortest_path", "centerline"]
+    traj_idx = 0
+    curr_traj = active_profile.get("trajectory_type", "minimum_curvature")
+    if curr_traj in traj_options:
+        traj_idx = traj_options.index(curr_traj)
 
     mode_options = ["h2h", "qualifying", "timetrials", "mapping"]
     mode_idx = 0
@@ -380,6 +388,7 @@ def run_tui():
                 ("SLAM Mapping Method", "toggle", slam_options, "slam_idx"),
                 ("Localization Method", "toggle", loc_options, "loc_idx"),
                 ("Selected Task Mode (Tier 3)", "toggle", mode_options, "mode_idx"),
+                ("Trajectory Type", "toggle", traj_options, "traj_idx"),
                 ("", "separator", [], ""),
                 ("Tier 1: Launch Base System", "action", ["tier1"], ""),
                 ("Tier 2: Launch Telemetry (Foxglove)", "action", ["tier2"], ""),
@@ -422,6 +431,8 @@ def run_tui():
                         val = loc_options[loc_idx]
                     elif ref == "mode_idx":
                         val = mode_options[mode_idx]
+                    elif ref == "traj_idx":
+                        val = traj_options[traj_idx]
                     
                     stdscr.addstr(y, 40, f"[ < {val} > ]", attr)
                 
@@ -491,6 +502,8 @@ def run_tui():
                         loc_idx = (loc_idx - 1) % len(vals)
                     elif ref == "mode_idx":
                         mode_idx = (mode_idx - 1) % len(vals)
+                    elif ref == "traj_idx":
+                        traj_idx = (traj_idx - 1) % len(vals)
 
             elif ch == curses.KEY_RIGHT:
                 item = items[selected_row]
@@ -527,6 +540,8 @@ def run_tui():
                         loc_idx = (loc_idx + 1) % len(vals)
                     elif ref == "mode_idx":
                         mode_idx = (mode_idx + 1) % len(vals)
+                    elif ref == "traj_idx":
+                        traj_idx = (traj_idx + 1) % len(vals)
 
             elif ch == 10:
                 item = items[selected_row]
@@ -549,6 +564,7 @@ def run_tui():
                         mode_val = mode_options[mode_idx]
                         racecar_val = active_profile.get("racecar_version", "NUC1")
                         table_val = active_profile.get("LU_table", "NUC1_hangar_pacejka")
+                        traj_val = traj_options[traj_idx]
 
                         cmd = []
                         if key == "tier1":
@@ -557,7 +573,8 @@ def run_tui():
                                 f"map_name:={m_name}",
                                 f"sim:={sim_val}",
                                 f"racecar_version:={racecar_val}",
-                                f"localize_method:={loc_val}"
+                                f"localize_method:={loc_val}",
+                                f"trajectory_type:={traj_val}"
                             ]
                         elif key == "tier2":
                             cmd = [
@@ -671,6 +688,7 @@ def main():
     b_parser.add_argument("--racecar", type=str, help="Racecar version")
     b_parser.add_argument("--localize", type=str, choices=["True", "False"], help="Enable localization")
     b_parser.add_argument("--method", type=str, choices=["amcl", "cartographer", "particle_filter"], help="Localization method")
+    b_parser.add_argument("--trajectory", type=str, choices=["minimum_curvature", "shortest_path", "centerline"], help="Trajectory type")
     b_parser.add_argument("--dry-run", action="store_true", help="Print command without executing")
 
     # qualifying

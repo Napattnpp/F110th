@@ -24,6 +24,7 @@ class GlobalRepublisher(Node):
 
         #Declare local ros params
         self.declare_parameter(name='track_length', value=6.9)
+        self.declare_parameter(name='trajectory_type', value='minimum_curvature')
 
         self.glb_wpnts_pub = self.create_publisher(WpntArray, '/global_waypoints', 10)
         if self.publish_markers:
@@ -117,12 +118,24 @@ class GlobalRepublisher(Node):
         self.graph_lattice = msg
 
     def global_republisher(self):
+        traj_type = self.get_parameter('trajectory_type').get_parameter_value().string_value
 
-        # Publish global waypoints
-        if self.glb_wpnts is not None:
-            self.glb_wpnts_pub.publish(self.glb_wpnts)
-        if self.publish_markers and self.glb_markers is not None and hasattr(self, 'glb_markers_pub'):
-            self.glb_markers_pub.publish(self.glb_markers)
+        # Select which trajectory to publish on /global_waypoints
+        if traj_type == 'shortest_path':
+            wpnts_to_pub = self.glb_sp_wpnts
+            markers_to_pub = self.glb_sp_markers
+        elif traj_type == 'centerline':
+            wpnts_to_pub = self.centerline_wpnts
+            markers_to_pub = self.centerline_markers
+        else: # default to minimum_curvature
+            wpnts_to_pub = self.glb_wpnts
+            markers_to_pub = self.glb_markers
+
+        # Publish selected global waypoints
+        if wpnts_to_pub is not None:
+            self.glb_wpnts_pub.publish(wpnts_to_pub)
+        if self.publish_markers and markers_to_pub is not None and hasattr(self, 'glb_markers_pub'):
+            self.glb_markers_pub.publish(markers_to_pub)
         
         # Publish shortest path
         if self.publish_shortest_path:
