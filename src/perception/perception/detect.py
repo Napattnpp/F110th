@@ -375,14 +375,16 @@ class Detect(Node):
         objects_pointcloud_list: List[List[Point2D]] = [[first_point]]
 
         div_const = np.sin(d_phi) / np.sin(l - d_phi)
+
+        # Vectorized calculation of distance to next point (avoiding looping np.linalg.norm overhead)
+        diffs = xyz_laser_frame[:2, 1:] - xyz_laser_frame[:2, :-1]
+        distances = np.linalg.norm(diffs, axis=0)
+
         for i in range(1, len(cloudPoints_list)):
             curr_range = valid_ranges[i]
             d_max = curr_range * div_const + 3 * sigma
 
-            # Distance between points does not change in map frame or laser frame.
-            dist_to_next_point = np.linalg.norm(xyz_laser_frame[:2, i] - xyz_laser_frame[:2, i - 1])
-            
-            # But from now onward, we deal with points in map frame.
+            dist_to_next_point = distances[i - 1]
             curr_point = (cloudPoints_list[i][0], cloudPoints_list[i][1])
             if dist_to_next_point < d_max:
                 objects_pointcloud_list[-1].append(curr_point)
@@ -395,26 +397,20 @@ class Detect(Node):
         # track
         # ------------------------------------------------
 
-        x_points = []
-        y_points = []
-        for obs in objects_pointcloud_list:
-            mean_x_pos = np.mean([point[0] for point in obs])
-            mean_y_pos = np.mean([point[1] for point in obs])
-            x_points.append(mean_x_pos)
-            y_points.append(mean_y_pos)
-        s_points, d_points = self.converter.get_frenet(np.array(x_points), np.array(y_points))
+        # Filter by size first to avoid computing expensive Frenet coordinates for tiny noise/spurious clusters
+        objects_pointcloud_list = [obj for obj in objects_pointcloud_list if len(obj) >= self.min_obs_size]
 
-        remove_array = []
-        for idx, object in enumerate(objects_pointcloud_list):
-            if len(object) < self.min_obs_size:
-                remove_array.append(object)
-                continue
-            if not (self.laserPointOnTrack(s_points[idx], d_points[idx], car_s)):
-                remove_array.append(object)
-                continue
+        if len(objects_pointcloud_list) > 0:
+            # Fast Python mean (avoiding np.mean on small arrays to reduce function call overhead)
+            x_points = [sum(p[0] for p in obs) / len(obs) for obs in objects_pointcloud_list]
+            y_points = [sum(p[1] for p in obs) / len(obs) for obs in objects_pointcloud_list]
+            s_points, d_points = self.converter.get_frenet(np.array(x_points), np.array(y_points))
 
-        for object in remove_array:
-            objects_pointcloud_list.remove(object)
+            # Filter out objects not on the track (using fast list comprehension instead of O(N^2) .remove)
+            objects_pointcloud_list = [
+                obj for idx, obj in enumerate(objects_pointcloud_list)
+                if self.laserPointOnTrack(s_points[idx], d_points[idx], car_s)
+            ]
 
         markers_array = []
         for idx, object in enumerate(objects_pointcloud_list):
@@ -430,7 +426,7 @@ class Detect(Node):
             marker.color.a = 0.5
             marker.color.g = 1.
             marker.color.r = 0.
-            marker.color.b = idx/len(objects_pointcloud_list)
+            marker.color.b = idx/max(1, len(objects_pointcloud_list))
             marker.pose.position.x = object[0][0]
             marker.pose.position.y = object[0][1]
             marker.pose.orientation.w = 1.
@@ -448,7 +444,7 @@ class Detect(Node):
             marker.color.a = 0.5
             marker.color.g = 1.
             marker.color.r = 0.
-            marker.color.b = idx/len(objects_pointcloud_list)
+            marker.color.b = idx/max(1, len(objects_pointcloud_list))
             marker.pose.position.x = object[-1][0]
             marker.pose.position.y = object[-1][1]
             marker.pose.orientation.w = 1.
@@ -560,22 +556,11 @@ class Detect(Node):
         """
         Delete obstacles that are too big
         """
+        # Filter obstacles in a single O(N) pass (removes O(N^2) list.remove overhead)
+        self.tracked_obstacles = [obs for obs in current_obstacles if obs.size <= self.max_obs_size]
 
-        remove_list = []
-        self.tracked_obstacles.clear()
-        for obs in current_obstacles:
-            if (obs.size > self.max_obs_size):
-                remove_list.append(obs)
-
-        self.get_logger().debug(
-            f"[Opponent Detection] removed {len(remove_list)} obstacles as they are too big.")
-
-        for obs in remove_list:
-            current_obstacles.remove(obs)
-
-        for idx, curr_obs in enumerate(current_obstacles):
+        for idx, curr_obs in enumerate(self.tracked_obstacles):
             curr_obs.id = idx
-            self.tracked_obstacles.append(curr_obs)
 
         self.get_logger().debug(
             f"[Opponent Detection] tracking {len(self.tracked_obstacles)} obstacles.")
