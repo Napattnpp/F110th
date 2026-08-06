@@ -69,6 +69,12 @@ def generate_launch_description():
         description='Type of trajectory to publish on /global_waypoints: minimum_curvature, shortest_path, centerline'
     )
 
+    disable_aeb_arg = DeclareLaunchArgument(
+        'disable_aeb',
+        default_value='True',
+        description='Whether to disable the safety AEB node'
+    )
+
     # Configuration files path
     sllidar_s1_config = os.path.join(pkg_bringup, 'config', 'sllidar_s1.yaml')
     mux_config = os.path.join(pkg_bringup, 'config', 'mux.yaml')
@@ -246,7 +252,8 @@ def generate_launch_description():
                 output='screen',
                 remappings=[
                     ('ego_racecar/odom', PythonExpression(["'/ego_racecar/odom' if ", LaunchConfiguration('sim'), " else '/car_state/odom'"]))
-                ]
+                ],
+                condition=UnlessCondition(LaunchConfiguration('disable_aeb'))
             )
         )
 
@@ -257,6 +264,7 @@ def generate_launch_description():
         localize_arg,
         localize_method_arg,
         trajectory_type_arg,
+        disable_aeb_arg,
         sim_group,
         physical_group,
         global_parameters_node,

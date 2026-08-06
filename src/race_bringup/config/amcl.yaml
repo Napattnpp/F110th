@@ -31,7 +31,7 @@ amcl:
     # fewer particles = less CPU per update = more stable loop timing.
     # min_particles: Minimum number of hypotheses (guesses) AMCL keeps track of. 
     # Lower = less CPU, but higher chance of getting lost if completely kidnapped.
-    min_particles: 1000
+    min_particles: 1200
     # max_particles: Maximum number of hypotheses AMCL can use when it's very confused.
     max_particles: 3000
     pf_err: 0.05

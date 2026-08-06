@@ -203,6 +203,14 @@ class StateMachineParams:
         node.set_descriptor("ftg_threshold_speed", descriptor=descriptor)
         self.ftg_threshold_speed: float = node.get_parameter("ftg_threshold_speed").value
 
+        descriptor = ParameterDescriptor(
+            description="Flag to disable FTG (Follow the Gap) fallback mode when stuck trailing\n",
+            read_only=False,
+            type=ParameterType.PARAMETER_BOOL,
+        )
+        node.set_descriptor("ftg_disabled", descriptor=descriptor)
+        self.ftg_disabled: bool = node.get_parameter("ftg_disabled").value
+
         # --- Qualifying mode parameters ---
         descriptor = ParameterDescriptor(
             description="Number of fast laps in Q1 (no avoidance) for qualifying mode\n",

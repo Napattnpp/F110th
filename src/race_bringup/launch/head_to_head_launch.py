@@ -4,7 +4,8 @@ from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, GroupAction
 from launch.conditions import IfCondition
 from launch.launch_description_sources import AnyLaunchDescriptionSource
-from launch.substitutions import LaunchConfiguration, PythonExpression
+from launch.substitutions import LaunchConfiguration, PythonExpression, PathJoinSubstitution
+from launch_ros.actions import Node
 
 def get_launch_source(package_name, base_name):
     try:
@@ -27,6 +28,8 @@ def generate_launch_description():
         profile = load_active_profile()
     except ImportError:
         profile = {}
+
+    map_name = profile.get('map_name', 'N18')
 
     # Arguments
     racecar_version_arg = DeclareLaunchArgument(
@@ -90,6 +93,23 @@ def generate_launch_description():
         ]
     )
 
+    # Graph-Based Interpolator Node (Conditional on overtake_mode == 'graph_based')
+    graph_planner_group = GroupAction(
+        condition=IfCondition(PythonExpression(["'", LaunchConfiguration('overtake_mode'), "' == 'graph_based'"])),
+        actions=[
+            Node(
+                package='sector_tuner',
+                executable='ot_interpolator',
+                name='ot_interpolator',
+                output='screen',
+                parameters=[
+                    os.path.join(pkg_bringup, 'maps', map_name, 'ot_sectors.yaml'),
+                    {'map_name': map_name}
+                ]
+            )
+        ]
+    )
+
     # Include Perception
     perception_launch = IncludeLaunchDescription(
         get_launch_source('perception', 'perception_launch'),
@@ -111,6 +131,7 @@ def generate_launch_description():
         controller_launch,
         state_machine_launch,
         spline_planner_group,
+        graph_planner_group,
         perception_launch
     ])
 

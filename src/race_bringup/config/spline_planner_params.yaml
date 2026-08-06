@@ -1,4 +1,13 @@
 spline_planner:
   ros__parameters:
-    evasion_dist: 0.45
-    spline_bound_mindist: 0.10
+    evasion_dist: 0.55
+    spline_bound_mindist: 0.12
+    ot_side_switch_cur_d_thresh: 0.60
+    pre_apex_0: 7.5
+    pre_apex_1: 5.0
+    pre_apex_2: 2.5
+    post_apex_0: 2.5
+    post_apex_1: 4.5
+    post_apex_2: 6.5
+
+

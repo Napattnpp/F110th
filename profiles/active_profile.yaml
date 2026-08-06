@@ -1,10 +1,10 @@
-LU_table: NUC2_hangar_pacejka
-ctrl_algo: PP
+LU_table: NUC1_hangar_pacejka
+ctrl_algo: MAP
 localize: true
 localize_method: amcl
-map_name: hangar_1905_v0
+map_name: track433
 overtake_mode: spliner
-profile_name: sim
+profile_name: nuc1
 racecar_version: NUC1
-sim: true
+sim: false
 slam_method: cartographer

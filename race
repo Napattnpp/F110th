@@ -111,6 +111,7 @@ def handle_base(args):
     localize = args.localize if args.localize is not None else str(profile.get("localize", True))
     method = args.method or profile.get("localize_method", "amcl")
     trajectory = args.trajectory or profile.get("trajectory_type", "minimum_curvature")
+    disable_aeb = args.disable_aeb if args.disable_aeb is not None else str(profile.get("disable_aeb", True))
 
     cmd = [
         "ros2", "launch", "race_bringup", "base_launch.py",
@@ -119,7 +120,8 @@ def handle_base(args):
         f"racecar_version:={racecar}",
         f"localize:={localize}",
         f"localize_method:={method}",
-        f"trajectory_type:={trajectory}"
+        f"trajectory_type:={trajectory}",
+        f"disable_aeb:={disable_aeb}"
     ]
     sys.exit(run_command(cmd, args.dry_run))
 
@@ -242,6 +244,9 @@ def run_tui():
     if curr_traj in traj_options:
         traj_idx = traj_options.index(curr_traj)
 
+    disable_aeb_options = ["True", "False"]
+    disable_aeb_idx = 0 if str(active_profile.get("disable_aeb", True)) == "True" else 1
+
     mode_options = ["h2h", "qualifying", "timetrials", "mapping"]
     mode_idx = 0
 
@@ -251,9 +256,11 @@ def run_tui():
 
         def poll(self):
             try:
-                os.kill(self.pid, 0)
+                output = subprocess.check_output(["ps", "-o", "state=", "-p", str(self.pid)], text=True).strip()
+                if not output or output.startswith('Z') or output.startswith('T'):
+                    return 0  # Stopped or Zombie
                 return None  # Still running
-            except OSError:
+            except Exception:
                 return 0  # Stopped
 
         def send_signal(self, sig):
@@ -276,18 +283,20 @@ def run_tui():
     def get_running_pids_for_keywords(keywords):
         pids = []
         try:
-            output = subprocess.check_output(["ps", "-ax", "-o", "pid,args"], text=True)
+            output = subprocess.check_output(["ps", "-ax", "-o", "pid,state,args"], text=True)
             for line in output.splitlines():
                 line = line.strip()
                 if not line:
                     continue
-                parts = line.split(None, 1)
-                if len(parts) < 2:
+                parts = line.split(None, 2)
+                if len(parts) < 3:
                     continue
-                pid_str, cmd = parts
+                pid_str, state, cmd = parts
                 if not pid_str.strip().isdigit():
                     continue
                 pid = int(pid_str)
+                if state.startswith('T') or state.startswith('Z'):
+                    continue
                 # Exclude the current process and the ps command itself
                 if pid == os.getpid() or "ps -ax" in cmd:
                     continue
@@ -335,19 +344,32 @@ def run_tui():
         for key in procs:
             if procs[key] is not None and procs[key].poll() is None:
                 try:
-                    os.killpg(os.getpgid(procs[key].pid), signal.SIGINT)
-                except ProcessLookupError:
+                    pgid = os.getpgid(procs[key].pid)
+                    os.killpg(pgid, signal.SIGINT)
+                    os.killpg(pgid, signal.SIGCONT)
+                except Exception:
                     pass
-        time.sleep(1.0)
+                try:
+                    procs[key].send_signal(signal.SIGINT)
+                    procs[key].send_signal(signal.SIGCONT)
+                except Exception:
+                    pass
+        time.sleep(0.5)
         for key in procs:
             if procs[key] is not None and procs[key].poll() is None:
                 try:
-                    os.killpg(os.getpgid(procs[key].pid), signal.SIGKILL)
-                except ProcessLookupError:
+                    pgid = os.getpgid(procs[key].pid)
+                    os.killpg(pgid, signal.SIGKILL)
+                except Exception:
                     pass
+                try:
+                    procs[key].kill()
+                except Exception:
+                    pass
+                procs[key] = None
 
     def draw_menu(stdscr):
-        nonlocal active_profile, profile_idx, map_idx, sim_idx, ctrl_idx, overtake_idx, slam_idx, loc_idx, mode_idx
+        nonlocal active_profile, profile_idx, map_idx, sim_idx, ctrl_idx, overtake_idx, slam_idx, loc_idx, mode_idx, traj_idx, disable_aeb_idx
         
         curses.start_color()
         curses.init_pair(1, curses.COLOR_WHITE, curses.COLOR_BLUE)
@@ -389,6 +411,7 @@ def run_tui():
                 ("Localization Method", "toggle", loc_options, "loc_idx"),
                 ("Selected Task Mode (Tier 3)", "toggle", mode_options, "mode_idx"),
                 ("Trajectory Type", "toggle", traj_options, "traj_idx"),
+                ("Disable AEB (Safety)", "toggle", disable_aeb_options, "disable_aeb_idx"),
                 ("", "separator", [], ""),
                 ("Tier 1: Launch Base System", "action", ["tier1"], ""),
                 ("Tier 2: Launch Telemetry (Foxglove)", "action", ["tier2"], ""),
@@ -433,6 +456,8 @@ def run_tui():
                         val = mode_options[mode_idx]
                     elif ref == "traj_idx":
                         val = traj_options[traj_idx]
+                    elif ref == "disable_aeb_idx":
+                        val = disable_aeb_options[disable_aeb_idx]
                     
                     stdscr.addstr(y, 40, f"[ < {val} > ]", attr)
                 
@@ -488,6 +513,10 @@ def run_tui():
                         loc_idx = 0
                         curr_loc = active_profile.get("localize_method", "amcl")
                         if curr_loc in loc_options: loc_idx = loc_options.index(curr_loc)
+                        traj_idx = 0
+                        curr_traj = active_profile.get("trajectory_type", "minimum_curvature")
+                        if curr_traj in traj_options: traj_idx = traj_options.index(curr_traj)
+                        disable_aeb_idx = 0 if str(active_profile.get("disable_aeb", True)) == "True" else 1
                     elif ref == "map_idx":
                         map_idx = (map_idx - 1) % len(vals)
                     elif ref == "sim_idx":
@@ -504,6 +533,8 @@ def run_tui():
                         mode_idx = (mode_idx - 1) % len(vals)
                     elif ref == "traj_idx":
                         traj_idx = (traj_idx - 1) % len(vals)
+                    elif ref == "disable_aeb_idx":
+                        disable_aeb_idx = (disable_aeb_idx - 1) % len(vals)
 
             elif ch == curses.KEY_RIGHT:
                 item = items[selected_row]
@@ -526,6 +557,10 @@ def run_tui():
                         loc_idx = 0
                         curr_loc = active_profile.get("localize_method", "amcl")
                         if curr_loc in loc_options: loc_idx = loc_options.index(curr_loc)
+                        traj_idx = 0
+                        curr_traj = active_profile.get("trajectory_type", "minimum_curvature")
+                        if curr_traj in traj_options: traj_idx = traj_options.index(curr_traj)
+                        disable_aeb_idx = 0 if str(active_profile.get("disable_aeb", True)) == "True" else 1
                     elif ref == "map_idx":
                         map_idx = (map_idx + 1) % len(vals)
                     elif ref == "sim_idx":
@@ -542,6 +577,8 @@ def run_tui():
                         mode_idx = (mode_idx + 1) % len(vals)
                     elif ref == "traj_idx":
                         traj_idx = (traj_idx + 1) % len(vals)
+                    elif ref == "disable_aeb_idx":
+                        disable_aeb_idx = (disable_aeb_idx + 1) % len(vals)
 
             elif ch == 10:
                 item = items[selected_row]
@@ -550,9 +587,17 @@ def run_tui():
                     key = vals[0]
                     if procs[key] is not None:
                         try:
-                            os.killpg(os.getpgid(procs[key].pid), signal.SIGINT)
-                        except ProcessLookupError:
+                            pgid = os.getpgid(procs[key].pid)
+                            os.killpg(pgid, signal.SIGINT)
+                            os.killpg(pgid, signal.SIGCONT)
+                        except Exception:
                             pass
+                        try:
+                            procs[key].send_signal(signal.SIGINT)
+                            procs[key].send_signal(signal.SIGCONT)
+                        except Exception:
+                            pass
+                        procs[key] = None
                     else:
                         p_name = profiles[profile_idx]
                         m_name = maps[map_idx]
@@ -565,6 +610,7 @@ def run_tui():
                         racecar_val = active_profile.get("racecar_version", "NUC1")
                         table_val = active_profile.get("LU_table", "NUC1_hangar_pacejka")
                         traj_val = traj_options[traj_idx]
+                        disable_aeb_val = disable_aeb_options[disable_aeb_idx]
 
                         cmd = []
                         if key == "tier1":
@@ -574,7 +620,8 @@ def run_tui():
                                 f"sim:={sim_val}",
                                 f"racecar_version:={racecar_val}",
                                 f"localize_method:={loc_val}",
-                                f"trajectory_type:={traj_val}"
+                                f"trajectory_type:={traj_val}",
+                                f"disable_aeb:={disable_aeb_val}"
                             ]
                         elif key == "tier2":
                             cmd = [
@@ -689,6 +736,7 @@ def main():
     b_parser.add_argument("--localize", type=str, choices=["True", "False"], help="Enable localization")
     b_parser.add_argument("--method", type=str, choices=["amcl", "cartographer", "particle_filter"], help="Localization method")
     b_parser.add_argument("--trajectory", type=str, choices=["minimum_curvature", "shortest_path", "centerline"], help="Trajectory type")
+    b_parser.add_argument("--disable-aeb", type=str, choices=["True", "False"], help="Disable safety AEB node")
     b_parser.add_argument("--dry-run", action="store_true", help="Print command without executing")
 
     # qualifying

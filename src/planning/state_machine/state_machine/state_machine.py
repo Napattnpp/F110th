@@ -37,7 +37,6 @@ class StateMachine(Node):
         # PARAMETER DECLARATION
         self.params = StateMachineParams(self)
         
-        self.ftg_disabled = True # TODO fix with global prams?
 
         # Get sim parameter from global_parameters node to automatically switch profiles
         self.global_param_client = self.create_client(GetParameters, '/global_parameters/get_parameters')
@@ -81,6 +80,7 @@ class StateMachine(Node):
         
         self.cur_s = None
         self.cur_d = None
+        self.cur_vs = 0.0
         self._prev_s = None
         self.create_subscription(Odometry, '/car_state/frenet/odom',self.car_state_frenet_cb, 10) # car frenet coordinates
         while self.cur_s is None:
@@ -184,6 +184,7 @@ class StateMachine(Node):
     def car_state_frenet_cb(self, msg: Odometry):
         self.cur_s = msg.pose.pose.position.x
         self.cur_d = msg.pose.pose.position.y
+        self.cur_vs = msg.twist.twist.linear.x  # longitudinal speed in frenet frame
 
         # Lap counting: detect wrap-around when cur_s jumps backwards past the
         # start/finish line.  A drop of more than half the track length is
@@ -340,12 +341,12 @@ class StateMachine(Node):
     def _check_ftg(self) -> bool:
         # If we have been standing still for 3 seconds inside TRAILING -> FTG
         threshold = self.params.ftg_timer_sec * self.params.rate_hz
-        if self.ftg_disabled:
+        if self.params.ftg_disabled:
             return False
         else:
-            if self.cur_state == StateType.TRAILING and self.cur_vs < self.params.ftg_threshold_speed:
+            if self.state == StateType.TRAILING and self.cur_vs < self.params.ftg_threshold_speed:
                 self.ftg_counter += 1
-                self.get_logger().warn(f"[{self.name}] FTG counter: {self.ftg_counter}/{threshold}")
+                self.get_logger().warn(f"[{self.get_name()}] FTG counter: {self.ftg_counter}/{threshold}")
             else:
                 self.ftg_counter = 0
 

@@ -3,17 +3,17 @@ perception:
     detect:
       rate: 40 # rate at which the node is running
       lambda: 10 # minimum reliables detection angle in degrees
-      sigma: 0.03 # standard deviation of the noise of the lidar ranges in m
+      sigma: 0.02 # standard deviation of noise for RPLIDAR S1
       min_2_points_dist: 0.01 # minimum distance between two points
-      min_obs_size: 10
-      max_obs_size: 1.0
-      max_viewing_distance: 9
+      min_obs_size: 6
+      max_obs_size: 2.0
+      max_viewing_distance: 14.0
       boundaries_inflation: 0.05
 
     tracking:
       rate: 40 # rate at which the node is running
-      min_nb_meas: 3 # minimum number of measurements before publishing
-      ttl_static: 8 # time-to-live for static obstacles to prevent corner dropout
+      min_nb_meas: 1 # minimum number of measurements before publishing
+      ttl_static: 15 # time-to-live for static obstacles to prevent corner dropout
       P_vs: 0.2 # proportional gain for the vs
       P_d: 0.02 # proportional gain for the d
       P_vd: 0.2 # proportional gain for the vd
@@ -24,7 +24,7 @@ perception:
       process_var_vs: 2 # the variance of the process velocity noise in the s direction
       process_var_vd: 8 # the variance of the process velocity noise in the d direction
       max_dist: 0.5 # max distance for association
-      var_pub: 1 # obstacles with bigger variance are not published
+      var_pub: 3.0 # obstacles with bigger variance are not published
 
 fake_obstacle_publisher:
   ros__parameters:

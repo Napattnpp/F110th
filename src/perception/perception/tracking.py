@@ -137,10 +137,11 @@ class Opponent_state:
 
     def update(self, tracked_obstacle: ObstacleSD):
 
-        vs = ((2/3 * (tracked_obstacle.measurments_s[-1] - tracked_obstacle.measurments_s[-2])*self.rate) 
-              + (1/3 * (tracked_obstacle.measurments_s[-2] - tracked_obstacle.measurments_s[-3])*self.rate))
+        ds1 = normalize_s(tracked_obstacle.measurments_s[-1] - tracked_obstacle.measurments_s[-2], Opponent_state.track_length)
+        ds2 = normalize_s(tracked_obstacle.measurments_s[-2] - tracked_obstacle.measurments_s[-3], Opponent_state.track_length)
+        vs = ((2/3 * ds1 * self.rate) + (1/3 * ds2 * self.rate))
 
-        if not (vs > -1 and vs < 8):
+        if not (-15.0 < vs < 15.0):
             self.isInitialised = False
             return
 

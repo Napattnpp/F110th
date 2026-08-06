@@ -10,6 +10,7 @@ import cv2
 import numpy as np
 import os
 import sys
+import yaml
 import signal
 from pathlib import Path
 from map_cleaner_core import MapCleaner
@@ -400,38 +401,117 @@ class MapCleanerApp:
         
         plt.show()
     
+    def save_map_files(self, clean_img):
+        """Rename original files to have _raw and save cleaned files as normal names."""
+        if not self.map_path:
+            # If no input map (demo mode), save in current directory
+            save_pgm('map.pgm', clean_img)
+            cv2.imwrite('map.png', clean_img)
+            print("✓ Saved demo map to map.pgm and map.png")
+            return
+
+        import shutil
+        input_path = Path(self.map_path)
+        input_dir = input_path.parent
+        base_name = input_path.stem
+
+        yaml_path = input_dir / f"{base_name}.yaml"
+        # Determine raw PGM path
+        raw_pgm_path = input_dir / f"{base_name}.pgm"
+        yaml_data = {}
+        has_yaml = False
+
+        if yaml_path.exists():
+            has_yaml = True
+            try:
+                with open(yaml_path, 'r') as f:
+                    yaml_data = yaml.safe_load(f)
+                    image_val = yaml_data.get('image', '')
+                    if image_val:
+                        if os.path.isabs(image_val):
+                            raw_pgm_path = Path(image_val)
+                        else:
+                            raw_pgm_path = input_dir / image_val
+            except Exception as e:
+                print(f"⚠ Failed to read yaml configuration: {e}")
+
+        raw_pgm_path = raw_pgm_path.resolve()
+        raw_yaml_path = input_dir / f"{base_name}_raw.yaml"
+        raw_pgm_dest = input_dir / f"{base_name}_raw.pgm"
+
+        # 1. Rename original PGM to have _raw
+        if raw_pgm_path.exists():
+            try:
+                shutil.move(str(raw_pgm_path), str(raw_pgm_dest))
+                print(f"✓ Renamed original PGM: {raw_pgm_path.name} → {raw_pgm_dest.name}")
+            except Exception as e:
+                print(f"✗ Failed to rename original PGM: {e}")
+        else:
+            print(f"⚠ Original PGM not found at {raw_pgm_path}")
+
+        # 2. Rename/save original YAML to have _raw and update image key
+        if has_yaml:
+            try:
+                # Update image reference to point to _raw PGM
+                if 'image' in yaml_data:
+                    orig_image = yaml_data['image']
+                    if os.path.isabs(orig_image):
+                        yaml_data['image'] = str(raw_pgm_dest)
+                    else:
+                        yaml_data['image'] = raw_pgm_dest.name
+                
+                with open(raw_yaml_path, 'w') as f:
+                    yaml.safe_dump(yaml_data, f, default_flow_style=False)
+                print(f"✓ Created raw YAML: {raw_yaml_path.name}")
+                
+                # Delete original yaml to avoid conflicts before writing the clean one
+                if yaml_path.exists():
+                    yaml_path.unlink()
+            except Exception as e:
+                print(f"✗ Failed to create raw YAML: {e}")
+
+        # 3. Save clean PGM to normal name
+        clean_pgm_path = input_dir / f"{base_name}.pgm"
+        try:
+            save_pgm(str(clean_pgm_path), clean_img)
+            print(f"✓ Saved cleaned PGM: {clean_pgm_path.name}")
+        except Exception as e:
+            print(f"✗ Failed to save cleaned PGM: {e}")
+
+        # 4. Save clean YAML to normal name pointing to normal PGM
+        if has_yaml:
+            try:
+                if 'image' in yaml_data:
+                    if os.path.isabs(yaml_data['image']):
+                        yaml_data['image'] = str(clean_pgm_path)
+                    else:
+                        yaml_data['image'] = clean_pgm_path.name
+                
+                with open(yaml_path, 'w') as f:
+                    yaml.safe_dump(yaml_data, f, default_flow_style=False)
+                print(f"✓ Created cleaned YAML: {yaml_path.name}")
+            except Exception as e:
+                print(f"✗ Failed to save cleaned YAML: {e}")
+
+        # 5. Save preview PNG as normal name
+        clean_png_path = input_dir / f"{base_name}.png"
+        try:
+            success = cv2.imwrite(str(clean_png_path), clean_img)
+            if success:
+                print(f"✓ Saved preview PNG: {clean_png_path.name}")
+            else:
+                print(f"⚠ Failed to save preview PNG")
+        except Exception as e:
+            print(f"✗ Failed to save preview PNG: {e}")
+
     def save_interactive(self):
         """Save cleaned image when user presses 'S' - auto-saves to file and closes window."""
         if self.clean_img is None:
             print("✗ No cleaned image to save")
             return
         
-        # Save in the SAME directory as the input map
-        if self.map_path:
-            input_dir = Path(self.map_path).parent
-            base_name = Path(self.map_path).stem
-            filename_pgm = input_dir / f"{base_name}_cleaned.pgm"
-            filename_png = input_dir / f"{base_name}_cleaned.png"
-        else:
-            # If no input map (demo mode), save in current directory
-            filename_pgm = Path('map_cleaned.pgm')
-            filename_png = Path('map_cleaned.png')
-        
         try:
-            # Ensure the directory exists
-            filename_pgm.parent.mkdir(parents=True, exist_ok=True)
-            
-            # Save PGM (for ROS map_server)
-            save_pgm(str(filename_pgm), self.clean_img)
-            print(f"✓ Saved cleaned PGM: {filename_pgm}")
-            
-            # Save PNG (for easy viewing on macOS/GitHub)
-            success = cv2.imwrite(str(filename_png), self.clean_img)
-            if success:
-                print(f"✓ Saved preview PNG: {filename_png}")
-            else:
-                print(f"⚠ Failed to save preview PNG")
-                
+            self.save_map_files(self.clean_img)
             print("→ Closing window...")
             # Auto-close window after successful save
             if self.fig is not None:
@@ -440,7 +520,7 @@ class MapCleanerApp:
             sys.exit(0)
         except Exception as e:
             print(f"✗ Save failed: {e}")
-    
+
     def run_batch(self, output_path=None):
         """Run processing and save without GUI."""
         if self.raw_img is None:
@@ -449,17 +529,17 @@ class MapCleanerApp:
         
         self.update_clean()
         
-        if output_path is None:
-            output_path = 'map_cleaned.pgm'
-        
-        try:
-            if output_path.endswith('.pgm'):
-                save_pgm(output_path, self.clean_img)
-            else:
-                cv2.imwrite(output_path, self.clean_img)
-            print(f"✓ Saved: {output_path}")
-        except Exception as e:
-            print(f"✗ Save failed: {e}")
+        if output_path is not None:
+            try:
+                if output_path.endswith('.pgm'):
+                    save_pgm(output_path, self.clean_img)
+                else:
+                    cv2.imwrite(output_path, self.clean_img)
+                print(f"✓ Saved: {output_path}")
+            except Exception as e:
+                print(f"✗ Save failed: {e}")
+        else:
+            self.save_map_files(self.clean_img)
 
 # ============================================================================
 # CLI ENTRY POINT

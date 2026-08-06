@@ -95,6 +95,7 @@ class ObstacleSpliner(Node):
         self.spline_bound_mindist = 0.15
         self.fixed_pred_time = 0.15
         self.kd_obs_pred = 1.0
+        self.ot_side_switch_cur_d_thresh = 0.60
         
         pd = ParameterDescriptor(
             type=ParameterType.PARAMETER_DOUBLE,
@@ -111,7 +112,8 @@ class ObstacleSpliner(Node):
             {'name': 'obs_traj_tresh', 'default': self.obs_traj_tresh, 'descriptor': pd},
             {'name': 'spline_bound_mindist', 'default': self.spline_bound_mindist, 'descriptor': pd},
             {'name': 'fixed_pred_time', 'default': self.fixed_pred_time, 'descriptor': pd},
-            {'name': 'kd_obs_pred', 'default': self.kd_obs_pred, 'descriptor': pd}
+            {'name': 'kd_obs_pred', 'default': self.kd_obs_pred, 'descriptor': pd},
+            {'name': 'ot_side_switch_cur_d_thresh', 'default': self.ot_side_switch_cur_d_thresh, 'descriptor': pd}
         ]
 
         self.declare_all_parameters(param_dicts=param_dicts)
@@ -166,6 +168,8 @@ class ObstacleSpliner(Node):
                 self.fixed_pred_time = param.value
             elif param_name == 'kd_obs_pred':
                 self.kd_obs_pred = param.value
+            elif param_name == 'ot_side_switch_cur_d_thresh':
+                self.ot_side_switch_cur_d_thresh = param.value
         
         # Ensure ascending order for spline parameters
         if self.pre_apex_1 < self.pre_apex_0:
@@ -338,9 +342,13 @@ class ObstacleSpliner(Node):
         return obs
 
     def _check_ot_side_possible(self, more_space) -> bool:
-        # TODO make rosparam for cur_d threshold
-        if abs(self.cur_d) > 0.25 and more_space != self.last_ot_side:
-            self.get_logger().info("Can't switch sides, because we are not on the raceline")
+        # Initial side choice (first detection) is always allowed
+        if self.last_ot_side == "":
+            return True
+        if abs(self.cur_d) > self.ot_side_switch_cur_d_thresh and more_space != self.last_ot_side:
+            self.get_logger().info(
+                f"Can't switch sides ({more_space} vs last {self.last_ot_side}), because cur_d ({self.cur_d:.2f}) > threshold ({self.ot_side_switch_cur_d_thresh:.2f})"
+            )
             return False
         return True
 
@@ -515,20 +523,22 @@ class ObstacleSpliner(Node):
             if not self._check_ot_side_possible(more_space):
                 danger_flag = True
 
+            # Soft-clamp evasion_d to stay within safe track bounds
             for i in range(evasion_s.shape[0]):
                 gb_wpnt_i = int((evasion_s[i] / wpnt_dist) % self.gb_max_idx)
-                # Check if wpnt is too close to the trackbounds but only if spline is actually off the raceline
                 if abs(evasion_d[i]) > spline_resolution:
-                    tb_dist = gb_wpnts[gb_wpnt_i].d_left if more_space == "left" else gb_wpnts[gb_wpnt_i].d_right
-                    if abs(evasion_d[i]) > abs(tb_dist) - self.spline_bound_mindist:
-                        self.get_logger().info(
-                            "Evasion trajectory too close to TRACKBOUNDS, aborting evasion"
-                        )
-                        danger_flag = True
-                        break
-                # Get V from gb wpnts and go slower if we are going through the inside
-                # TODO make speed scaling ros param
-                vi = gb_wpnts[gb_wpnt_i].vx_mps if outside == more_space else gb_wpnts[gb_wpnt_i].vx_mps * 0.9
+                    tb_dist = gb_wpnts[gb_wpnt_i].d_left if evasion_d[i] > 0 else gb_wpnts[gb_wpnt_i].d_right
+                    max_allowed_d = max(0.05, abs(tb_dist) - self.spline_bound_mindist)
+                    if abs(evasion_d[i]) > max_allowed_d:
+                        evasion_d[i] = np.sign(evasion_d[i]) * max_allowed_d
+
+            # Re-convert to Cartesian after soft-clamping
+            resp = self.converter.get_cartesian(evasion_s, evasion_d)
+
+            for i in range(evasion_s.shape[0]):
+                gb_wpnt_i = int((evasion_s[i] / wpnt_dist) % self.gb_max_idx)
+                # Maintain full target speed during evasion to ensure smooth momentum
+                vi = gb_wpnts[gb_wpnt_i].vx_mps
                 wpnts.wpnts.append(
                     self.xyv_to_wpnts(
                         x=resp[0, i], y=resp[1, i], s=evasion_s[i], d=evasion_d[i], v=vi, wpnts=wpnts)

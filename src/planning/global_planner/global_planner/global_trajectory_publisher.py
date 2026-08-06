@@ -23,8 +23,10 @@ class GlobalRepublisher(Node):
         
 
         #Declare local ros params
-        self.declare_parameter(name='track_length', value=6.9)
-        self.declare_parameter(name='trajectory_type', value='minimum_curvature')
+        if not self.has_parameter('track_length'):
+            self.declare_parameter(name='track_length', value=6.9)
+        if not self.has_parameter('trajectory_type'):
+            self.declare_parameter(name='trajectory_type', value='minimum_curvature')
 
         self.glb_wpnts_pub = self.create_publisher(WpntArray, '/global_waypoints', 10)
         if self.publish_markers:

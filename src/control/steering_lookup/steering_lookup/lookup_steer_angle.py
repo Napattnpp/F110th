@@ -31,10 +31,15 @@ class LookupSteerAngle:
     LookupSteerAngle:
     """
     def __init__(self, model_name, logger):
-      path = ament_pkg.get_package_share_directory('steering_lookup')
-      file_path = path + '/cfg/' + model_name + '_lookup_table.csv'
-      self.lu = np.loadtxt(file_path, delimiter=",")
-      self.logger = logger
+        path = ament_pkg.get_package_share_directory('steering_lookup')
+        file_name = model_name
+        if not file_name.endswith('.csv'):
+            if not file_name.endswith('_lookup_table'):
+                file_name += '_lookup_table'
+            file_name += '.csv'
+        file_path = path + '/cfg/' + file_name
+        self.lu = np.loadtxt(file_path, delimiter=",")
+        self.logger = logger
 
     def lookup_steer_angle(self, accel, vel):
         """

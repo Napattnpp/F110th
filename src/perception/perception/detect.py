@@ -380,6 +380,8 @@ class Detect(Node):
         diffs = xyz_laser_frame[:2, 1:] - xyz_laser_frame[:2, :-1]
         distances = np.linalg.norm(diffs, axis=0)
 
+        div_const = np.sin(d_phi) / np.sin(l - d_phi)
+
         for i in range(1, len(cloudPoints_list)):
             curr_range = valid_ranges[i]
             d_max = curr_range * div_const + 3 * sigma

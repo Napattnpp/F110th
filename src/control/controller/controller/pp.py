@@ -265,7 +265,8 @@ class PP_Controller:
 
         
         self.trailing_command = np.clip(self.opponent[2] - p_value - i_value - d_value, 0, global_speed) 
-        if not self.opponent[4] and self.gap_actual > self.gap_should:
+        # If the opponent is static/stopped or not visible, maintain at least the blind trailing speed
+        if (self.opponent[2] < 0.1) or (not self.opponent[4] and self.gap_actual > self.gap_should):
             self.trailing_command = max(self.blind_trailing_speed, self.trailing_command)
 
         return self.trailing_command

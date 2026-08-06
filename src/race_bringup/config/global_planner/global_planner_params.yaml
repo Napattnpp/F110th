@@ -2,10 +2,10 @@ global_planner:
   ros__parameters:
     rate: 10  # [hz]
     required_laps: 1  # how many laps to drive until calculating global waypoints
-    safety_width: 0.65  # [m] Increased to prevent corner clipping
-    safety_width_sp: 0.65  # [m] Increased to prevent corner clipping
+    safety_width: 0.82  # [m] Increased to prevent corner clipping
+    safety_width_sp: 0.82  # [m] Increased to prevent corner clipping
     occupancy_grid_threshold: 10
-    filter_kernel_size: 7  # how much filtering to do to raw map images
+    filter_kernel_size: 4  # how much filtering to do to raw map images
                            # NOTE: kernel=9 is too aggressive for narrow tracks
                            # and breaks corridors into disconnected components.
                            # kernel<=5 keeps the track loop connected.
