@@ -559,6 +559,7 @@ def write_centerline(centerline: np.ndarray, sp_bool: bool = False) -> MarkerArr
             wpnt.d_right = width_tr_right_m
             wpnt.d_left = width_tr_left_m
             wpnt.y_m = y_m
+            wpnt.vx_mps = 2.0
             centerline_wpnts.wpnts.append(wpnt)
 
             id_cnt += 1

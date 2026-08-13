@@ -179,7 +179,11 @@ class StateMachine(Node):
         self.gb_max_idx = data.wpnts[-1].id
 
     def glb_wpnts_cb(self, data: WpntArray):
-        self.max_speed = max([wpnt.vx_mps for wpnt in data.wpnts])
+        if data.wpnts:
+            max_sp = max([wpnt.vx_mps for wpnt in data.wpnts])
+            self.max_speed = max_sp if max_sp > 0 else 1.0
+        else:
+            self.max_speed = 1.0
 
     def car_state_frenet_cb(self, msg: Odometry):
         self.cur_s = msg.pose.pose.position.x
@@ -530,7 +534,10 @@ class StateMachine(Node):
             mrk.id = i
             mrk.pose.position.x = wpnt.x_m
             mrk.pose.position.y = wpnt.y_m
-            mrk.pose.position.z = wpnt.vx_mps / self.max_speed  # Visualise speed in z dimension
+            if self.max_speed and self.max_speed > 0:
+                mrk.pose.position.z = wpnt.vx_mps / self.max_speed  # Visualise speed in z dimension
+            else:
+                mrk.pose.position.z = 0.0
             mrk.pose.orientation.w = 1.0
             loc_markers.markers.append(mrk)
 

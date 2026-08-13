@@ -129,6 +129,10 @@ class GlobalRepublisher(Node):
         elif traj_type == 'centerline':
             wpnts_to_pub = self.centerline_wpnts
             markers_to_pub = self.centerline_markers
+            if wpnts_to_pub is not None:
+                for wp in wpnts_to_pub.wpnts:
+                    if wp.vx_mps == 0.0:
+                        wp.vx_mps = 2.0
         else: # default to minimum_curvature
             wpnts_to_pub = self.glb_wpnts
             markers_to_pub = self.glb_markers

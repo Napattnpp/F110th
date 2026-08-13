@@ -94,10 +94,15 @@ class Controller(Node):
         self.rate = 40
         self.state = "GB_TRACK"
 
-        self.LUT_name = self.get_parameter('LU_table').value # name of lookup table
+        self.LUT_name = self.get_parameter('LU_table').value if self.has_parameter('LU_table') and self.get_parameter('LU_table').value is not None else "NUC1_hangar_pacejka"
         self.get_logger().info(f"Using {self.LUT_name}")
-        self.mode = self.get_parameter('mode').value
-        self.mapping = self.get_parameter('mapping').value
+        
+        self.mode = self.get_parameter('mode').value if self.has_parameter('mode') and self.get_parameter('mode').value is not None else "MAP"
+        if not self.mode or self.mode == "None":
+            self.get_logger().warn("Parameter 'mode' not specified. Defaulting to 'MAP'.")
+            self.mode = "MAP"
+
+        self.mapping = self.get_parameter('mapping').value if self.has_parameter('mapping') and self.get_parameter('mapping').value is not None else False
 
         # Publishers
         self.publish_topic = '/drive' # TODO adapt car topic name here
@@ -198,7 +203,7 @@ class Controller(Node):
                         'descriptor' : ParameterDescriptor(type=ParameterType.PARAMETER_DOUBLE, floating_point_range=[FloatingPointRange(from_value=0.0, to_value=0.5, step=0.01)])},
                        {'name' : 'speed_lookahead_for_steer',
                         'default' : self.l1_params["speed_lookahead_for_steer"],
-                        'descriptor' : ParameterDescriptor(type=ParameterType.PARAMETER_DOUBLE, floating_point_range=[FloatingPointRange(from_value=0.0, to_value=0.2, step=0.01)])},
+                        'descriptor' : ParameterDescriptor(type=ParameterType.PARAMETER_DOUBLE, floating_point_range=[FloatingPointRange(from_value=0.0, to_value=1.0, step=0.01)])},
                        {'name' : 'prioritize_dyn',
                         'default' : self.prioritize_dyn,
                         'descriptor' : ParameterDescriptor(type=ParameterType.PARAMETER_BOOL)},

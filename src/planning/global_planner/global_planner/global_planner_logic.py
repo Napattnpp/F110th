@@ -123,6 +123,7 @@ class GlobalPlannerLogic:
                 self.map_resolution = data['resolution']
                 self.map_origin.x = data['origin'][0]
                 self.map_origin.y = data['origin'][1]
+                self.free_thresh = float(data.get('free_thresh', 0.196))
                 self.map_valid: bool = True
 
                 self.initial_position = [self.map_origin.x, self.map_origin.y, 0]
@@ -201,9 +202,10 @@ class GlobalPlannerLogic:
             """
             # Filter and plot map
             filtered_map = self.filter_map_occupancy_grid()
-            self.ax1.imshow(filtered_map, cmap='gray')
-            plt.show(block=False)
-            plt.pause(2)  # only update the plot every 2 seconds
+            if self.show_plots:
+                self.ax1.imshow(filtered_map, cmap='gray')
+                plt.show(block=False)
+                plt.pause(2)  # only update the plot every 2 seconds
 
             if self.ready_to_plan:
                 self.initial_position = self.current_position  # use position after mapping is done
@@ -269,11 +271,16 @@ class GlobalPlannerLogic:
         Returns:
             bool: Success or failure
         """
-        # open up png map from file
+        # open up png/pgm map from file
         img_path = os.path.join(self.map_dir, self.map_name + '.png')
+        if not os.path.exists(img_path):
+            img_path = os.path.join(self.map_dir, self.map_name + '.pgm')
         raw_img = cv2.imread(img_path, 0)
-        # Binarize: treat white pixels (>= 250) as free space (255), and everything else as occupied/unknown (0)
-        filtered_map = np.where(raw_img >= 250, 255, 0).astype(np.uint8)
+
+        # Dynamically compute pixel threshold from map YAML free_thresh (e.g. 0.196 -> ~205 intensity)
+        free_thresh = getattr(self, 'free_thresh', 0.196)
+        pixel_threshold = int((1.0 - free_thresh) * 255.0)
+        filtered_map = np.where(raw_img >= pixel_threshold, 255, 0).astype(np.uint8)
         filtered_map = cv2.flip(filtered_map, 0)
 
         # skeletonize

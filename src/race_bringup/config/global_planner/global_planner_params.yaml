@@ -2,13 +2,11 @@ global_planner:
   ros__parameters:
     rate: 10  # [hz]
     required_laps: 1  # how many laps to drive until calculating global waypoints
-    safety_width: 0.82  # [m] Increased to prevent corner clipping
-    safety_width_sp: 0.82  # [m] Increased to prevent corner clipping
+    # ── Safety Width Clearance Margins (Total Corridor Reduction = 2 * Wall Buffer) ──
+    safety_width: 1.00     # [m] Clearance buffer for Minimum Curvature raceline (0.30m wall buffer per side)
+    safety_width_sp: 1.00  # [m] Clearance buffer specifically for Shortest Path trajectory (0.25m inner corner buffer per side)
     occupancy_grid_threshold: 10
-    filter_kernel_size: 4  # how much filtering to do to raw map images
-                           # NOTE: kernel=9 is too aggressive for narrow tracks
-                           # and breaks corridors into disconnected components.
-                           # kernel<=5 keeps the track loop connected.
-    reverse_mapping: False  # By default, do not reverse the direction of the track
+    filter_kernel_size: 4  # Morphological filter kernel size for raw map image noise removal (keep <= 5 for narrow tracks)
+    reverse_mapping: False # By default, do not reverse the direction of the track
 
     show_plots: False

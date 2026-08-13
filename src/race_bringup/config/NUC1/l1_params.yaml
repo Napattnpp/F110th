@@ -5,27 +5,26 @@ controller:
     # OSCILLATION FIX: increase t_clip_min → longer lookahead → smoother path, less oscillation
     # Too short (0.8m) on tight track → car overshoots corners → oscillates
     # Too long → car cuts corners / slow to respond
-    # MAX ALLOWED: 1.0 (hard limit in controller_manager.py FloatingPointRange)
-    t_clip_min: 0.45      # Increased to be larger than wheelbase (0.33m) to prevent low-speed oscillations
-    t_clip_max: 2.5       # Increased to 2.5 to allow larger lookahead at high speed (20000 ERPM)
-    m_l1: 0.78             # Set lookahead time to 0.7 seconds (well within [0.0, 1.0] limit)
-    q_l1: 0.15             # Slightly increased base offset for low speed stability
+    t_clip_min: 0.42      # Sharpened lookahead to prevent late turn-in on tight corners
+    t_clip_max: 2.5       # Upper lookahead limit
+    m_l1: 0.70            # Lookahead time multiplier
+    q_l1: 0.15            # Base lookahead distance offset
 
-    speed_lookahead: 0.25
+    # ── Speed & Braking Lookahead ──
+    speed_lookahead: 0.35            # Increased from 0.25 to sample lower speeds earlier and brake BEFORE sharp corners
     lat_err_coeff: 1.0
 
     # ── Steer scaling based on acceleration ──
-    # 1.2 amplifies steering when accelerating from standstill → causes extra snap at corners
-    # Set to 1.0 (neutral) while tuning at low speed
-    acc_scaler_for_steer: 1.0   # was 1.2 — set back to 1.2 once driving smoothly at speed
-    dec_scaler_for_steer: 0.9
+    # Amplify steering during acceleration to counteract weight transfer and front-wheel understeer
+    acc_scaler_for_steer: 1.15
+    dec_scaler_for_steer: 0.95
 
-    # ── High-speed steer downscaling (not relevant at 0.3 m/s) ──
+    # ── High-speed steer downscaling ──
     start_scale_speed: 7.0
     end_scale_speed: 8.0
     downscale_factor: 0.2
 
-    speed_lookahead_for_steer: 0.18 # safe/agg 0.0/0.175
+    speed_lookahead_for_steer: 0.22 # Increased from 0.18 to prepare steering angle for upcoming corners
 
     ## Acceleration Based Velocity Controller Parameters
     vel_accel_mode: False
