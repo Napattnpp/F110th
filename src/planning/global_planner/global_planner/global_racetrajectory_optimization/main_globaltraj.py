@@ -288,6 +288,10 @@ elif opt_type == 'shortest_path':
                                                         normvectors=normvec_normalized_interp,
                                                         w_veh=pars["optim_opts"]["width_opt"],
                                                         print_debug=debug)
+    half_window = 3
+    window = 2 * half_window + 1
+    alpha_opt = np.concatenate((alpha_opt[-half_window:], alpha_opt, alpha_opt[:half_window]), axis=None)
+    alpha_opt = np.convolve(alpha_opt, np.ones(window), 'valid') / window
 
 elif opt_type == 'mintime':
     # reftrack_interp, a_interp and normvec_normalized_interp are returned for the case that non-regular sampling was

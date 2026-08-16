@@ -6,7 +6,7 @@ options = {
   trajectory_builder = TRAJECTORY_BUILDER,
   map_frame = "map",
   tracking_frame = "base_link",
-  published_frame = "odom",  --Change to "odom" for REP105 compliance (but worse performance)
+  published_frame = "odom",  -- Change to "odom" for REP105 compliance
   odom_frame = "odom",
   provide_odom_frame = false,
   use_odometry = true,
@@ -35,30 +35,36 @@ MAP_BUILDER.use_trajectory_builder_3d = false
 MAP_BUILDER.num_background_threads = 4.0
 TRAJECTORY_BUILDER_2D.use_imu_data = false
 
--- Lidar scan filtering
-TRAJECTORY_BUILDER_2D.max_range = 10.0 -- Restrict max range to ignore distant reflections and speed up matching
-TRAJECTORY_BUILDER_2D.min_range = 0.1  -- Ignore reflections from the car's own chassis
+-- Lidar scan filtering & ray length capping
+TRAJECTORY_BUILDER_2D.max_range = 10.0
+TRAJECTORY_BUILDER_2D.min_range = 0.10
+TRAJECTORY_BUILDER_2D.missing_data_ray_length = 5.0
 
--- Smaller submaps for fast F1TENTH motion to prevent drift accumulation within submaps
-TRAJECTORY_BUILDER_2D.submaps.num_range_data = 45
+-- Real-time Correlative Scan Matcher (prevents Ceres local minima during wheel slip)
+TRAJECTORY_BUILDER_2D.use_online_correlative_scan_matching = true
+TRAJECTORY_BUILDER_2D.real_time_correlative_scan_matcher.linear_search_window = 0.15
+TRAJECTORY_BUILDER_2D.real_time_correlative_scan_matcher.angular_search_window = math.rad(20.)
 
--- Occupancy grid tuning
-TRAJECTORY_BUILDER_2D.submaps.range_data_inserter.probability_grid_range_data_inserter.hit_probability = 0.65
-TRAJECTORY_BUILDER_2D.submaps.range_data_inserter.probability_grid_range_data_inserter.miss_probability = 0.45
+-- Smaller submaps for fast F1TENTH motion to prevent intra-submap drift
+TRAJECTORY_BUILDER_2D.submaps.num_range_data = 35
 
--- Run graph optimization frequently
-POSE_GRAPH.optimize_every_n_nodes = 20
+-- Occupancy grid tuning (balanced probabilities to avoid sticky ghost walls)
+TRAJECTORY_BUILDER_2D.submaps.range_data_inserter.probability_grid_range_data_inserter.hit_probability = 0.55
+TRAJECTORY_BUILDER_2D.submaps.range_data_inserter.probability_grid_range_data_inserter.miss_probability = 0.49
 
--- Increase constraint search density for reliable loop closure on small tracks
-POSE_GRAPH.constraint_builder.sampling_ratio = 0.7
+-- Ceres scan matcher tuning
+TRAJECTORY_BUILDER_2D.ceres_scan_matcher.translation_weight = 20.0
+TRAJECTORY_BUILDER_2D.ceres_scan_matcher.rotation_weight = 40.0
+
+-- Frequent graph optimization
+POSE_GRAPH.optimize_every_n_nodes = 5
+
+-- Constraint builder density and score thresholds for robust loop closure
+POSE_GRAPH.constraint_builder.sampling_ratio = 0.6
 POSE_GRAPH.constraint_builder.min_score = 0.55
 POSE_GRAPH.constraint_builder.global_localization_min_score = 0.60
 
--- Scan matcher tuning
-TRAJECTORY_BUILDER_2D.ceres_scan_matcher.rotation_weight = 40.0
-TRAJECTORY_BUILDER_2D.ceres_scan_matcher.translation_weight = 20.0
-
--- Reduce odometry trust during graph optimization so scan matching can correct wheel slip
+-- Moderate trust in odometry during pose graph optimization
 POSE_GRAPH.optimization_problem.odometry_rotation_weight = 1e2
 POSE_GRAPH.optimization_problem.odometry_translation_weight = 1e2
 

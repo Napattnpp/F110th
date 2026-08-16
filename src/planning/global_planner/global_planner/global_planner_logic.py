@@ -502,7 +502,7 @@ class GlobalPlannerLogic:
         # to use iqp as new centerline, set trackname='map_centerline_2', otherwise use track_name='map_centerline'
         # is a bit faster but cuts corner a bit more
         global_trajectory_sp, bound_r_sp, bound_l_sp, est_t_sp = trajectory_optimizer(
-            input_path=self.input_path, track_name=sp_centerline_path, curv_opt_type='shortest_path', safety_width=self.safety_width_sp, plot=(
+            input_path=self.input_path, track_name=iqp_centerline_path, curv_opt_type='shortest_path', safety_width=self.safety_width_sp, plot=(
                 self.show_plots and not self.map_editor_mode))
 
         self.est_lap_time = Float32()  # variable which will be published and used in l1_param_optimizer
@@ -598,7 +598,7 @@ class GlobalPlannerLogic:
 
         # Filtering with morphological opening
         kernel = np.ones((self.filter_kernel_size, self.filter_kernel_size), np.uint8)
-        filtered_map = cv2.morphologyEx(bw, cv2.MORPH_OPEN, kernel, iterations=2)
+        filtered_map = cv2.morphologyEx(bw, cv2.MORPH_OPEN, kernel, iterations=1)
 
         return filtered_map
 

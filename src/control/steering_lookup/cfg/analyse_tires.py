@@ -1,7 +1,14 @@
-from cmath import atan
-from os import access
+import os
+import sys
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
 
-from matplotlib.pyplot import axis
+script_dir = os.path.dirname(os.path.abspath(__file__))
+if script_dir not in sys.path:
+    sys.path.insert(0, script_dir)
+
+from cmath import atan
 from helpers.bagloader import load_bags
 from helpers.load_model import get_dotdict
 from helpers.save_model import save
@@ -10,17 +17,17 @@ from scipy.ndimage import median_filter
 import numpy as np
 import pandas as pd
 from numpy.linalg import lstsq
-import matplotlib.pyplot as plt
 from scipy.signal import sosfiltfilt, butter
 
-model_name_ = "NUC3_pacejka" #name + tire model name
+model_name_ = "NUC1_pacejka" #name + tire model name
 model, tires = model_name_.split("_")
-bag_path_ = './data/' + model + "/tire_dynamics"
+bag_path_ = os.path.join(script_dir, '../../../../data/' + model + "/tire_dynamics")
 g_ = 9.81
 
 class TireAnalyser:
   def __init__(self, model_name = model_name_, bag_path = bag_path_):
     print(f"Loading model {model_name}...")
+    self.model_name = model_name
     self.model = get_dotdict(model_name)
 
     # hangar
@@ -204,17 +211,16 @@ class TireAnalyser:
 
   def plot_solution(self):
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(8,6))
-    # fig.suptitle('Tire Dynamics Identification')
     ax1.scatter(self.alpha_f, self.F_yf, color="Green", alpha=0.15, label='Est. Lateral Force')
     ax2.scatter(self.alpha_r, self.F_yr, color="Green", alpha=0.15, label='Est. Lateral Force')
 
-    ax1.plot(self.space_f, self.fit_f, 'b', label=f'Model predicition for fixed Fz: {self.meanFz_f:.2f}')
-    ax2.plot(self.space_r, self.fit_r[:], 'b', label=f'Model predicition for fixed Fz: {self.meanFz_r:.2f}')
+    ax1.plot(self.space_f, self.fit_f, 'b', label=f'Model prediction for fixed Fz: {self.meanFz_f:.2f}')
+    ax2.plot(self.space_r, self.fit_r[:], 'b', label=f'Model prediction for fixed Fz: {self.meanFz_r:.2f}')
 
     ax1.set_title('Front tires')
     ax2.set_title('Rear tires')
     for ax in [ax1, ax2]:
-      ax.set_xlabel(r'$\alpha_f$ [rad]')
+      ax.set_xlabel(r'$\alpha$ [rad]')
       ax.set_ylabel(r'$F_y$ [N]')
       ax.grid()
       ax.legend(loc='best')
@@ -222,10 +228,10 @@ class TireAnalyser:
       ax.set_ylim([-20, 20])
 
     plt.tight_layout()
-    plt.show()
-
-
-
+    plot_file = os.path.join(script_dir, f"{self.model_name}_tire_fit.png")
+    plt.savefig(plot_file)
+    print(f"Saved tire fitting plot to {plot_file}")
+    plt.close()
 
 
 if __name__ == '__main__':

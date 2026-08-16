@@ -12,14 +12,14 @@
     auto_calibrate_gyro: true
 
     # These values should be filled after running calibrate_gyro
-    gyro_bias_x: 0.0155567
-    gyro_bias_y: 0.0120399
-    gyro_bias_z: 0.00178871
+    gyro_bias_x: 0.0198455
+    gyro_bias_y: 0.0132727
+    gyro_bias_z: 0.00252241
 
     accel_bias_x: 0.0
     accel_bias_y: 0.0
     accel_bias_z: 0.0
 
     # Covariance diagonals (x, y, z)
-    accel_covariance: [0.00098372, 0.00122845, 0.00126125]
-    gyro_covariance: [0.00002385, 0.00000719, 0.00000653]
+    accel_covariance: [0.00194538, 0.00107095, 0.00300829]
+    gyro_covariance: [0.00000775, 0.00000684, 0.00000659]

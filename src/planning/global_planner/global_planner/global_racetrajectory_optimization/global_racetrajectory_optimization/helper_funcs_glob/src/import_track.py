@@ -23,10 +23,18 @@ def import_track(file_path: str,
     """
 
     # load data from csv file
-    csv_data_temp = np.loadtxt(file_path, comments='#', delimiter=',')
+    try:
+        csv_data_temp = np.loadtxt(file_path, comments='#', delimiter=',')
+    except ValueError:
+        csv_data_temp = np.loadtxt(file_path, comments='#', delimiter=',', skiprows=1)
 
     # get coords and track widths out of array
-    if np.shape(csv_data_temp)[1] == 3:
+    if np.shape(csv_data_temp)[1] == 2:
+        refline_ = csv_data_temp[:, 0:2]
+        w_tr_r = np.ones(len(refline_)) * 1.0
+        w_tr_l = np.ones(len(refline_)) * 1.0
+
+    elif np.shape(csv_data_temp)[1] == 3:
         refline_ = csv_data_temp[:, 0:2]
         w_tr_r = csv_data_temp[:, 2] / 2
         w_tr_l = w_tr_r

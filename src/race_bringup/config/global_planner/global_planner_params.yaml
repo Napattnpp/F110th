@@ -4,9 +4,9 @@ global_planner:
     required_laps: 1  # how many laps to drive until calculating global waypoints
     # ── Safety Width Clearance Margins (Total Corridor Reduction = 2 * Wall Buffer) ──
     safety_width: 1.00     # [m] Clearance buffer for Minimum Curvature raceline (0.30m wall buffer per side)
-    safety_width_sp: 1.00  # [m] Clearance buffer specifically for Shortest Path trajectory (0.25m inner corner buffer per side)
+    safety_width_sp: 1.25  # [m] Clearance buffer specifically for Shortest Path trajectory (0.25m inner corner buffer per side)
     occupancy_grid_threshold: 10
-    filter_kernel_size: 4  # Morphological filter kernel size for raw map image noise removal (keep <= 5 for narrow tracks)
+    filter_kernel_size: 5  # Morphological filter kernel size for raw map image noise removal (keep <= 5 for narrow tracks)
     reverse_mapping: False # By default, do not reverse the direction of the track
 
     show_plots: False

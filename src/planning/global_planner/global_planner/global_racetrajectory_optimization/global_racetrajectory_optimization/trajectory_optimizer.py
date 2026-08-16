@@ -54,7 +54,7 @@ def trajectory_optimizer(input_path: str,
                  "mintime_plots": False}            # plot states, controls, friction coeffs etc. (mintime only)
     
     # vehicle parameter file -------------------------------------------------------------------------------------------
-    file_paths = {"veh_params_file": "racecar_f110.ini"}
+    file_paths = {"veh_params_file": "racecar.ini"}
 
     # track file (including centerline coordinates + track widths) -----------------------------------------------------
     file_paths["track_name"] = track_name
@@ -109,7 +109,7 @@ def trajectory_optimizer(input_path: str,
     file_paths["module"] = os.path.dirname(os.path.abspath(__file__))
 
     # assemble track import path
-    file_paths["track_file"] = os.path.join(file_paths["track_name"] + ".csv")
+    file_paths["track_file"] = os.path.join(file_paths["inputs"], file_paths["track_name"] + ".csv")
 
     # assemble friction map import paths
     file_paths["tpamap"] = os.path.join(file_paths["inputs"], "frictionmaps",
@@ -151,8 +151,11 @@ def trajectory_optimizer(input_path: str,
     parser = configparser.ConfigParser()
     pars = {}
 
-    if not parser.read(os.path.join(file_paths["inputs"], file_paths["veh_params_file"])):
-        raise ValueError('Specified config file does not exist or is empty!')
+    ini_path = os.path.join(file_paths["inputs"], file_paths["veh_params_file"])
+    if not os.path.exists(ini_path):
+        ini_path = os.path.join(file_paths["module"], "params", file_paths["veh_params_file"])
+    if not parser.read(ini_path):
+        raise ValueError(f'Specified config file does not exist or is empty! Checked: {ini_path}')
 
     pars["ggv_file"] = json.loads(parser.get('GENERAL_OPTIONS', 'ggv_file'))
     pars["ax_max_machines_file"] = json.loads(parser.get('GENERAL_OPTIONS', 'ax_max_machines_file'))
@@ -182,9 +185,19 @@ def trajectory_optimizer(input_path: str,
 
     # set import path for ggv diagram and ax_max_machines (if required)
     if not (curv_opt_type == 'mintime' and not mintime_opts["recalc_vel_profile_by_tph"]):
-        file_paths["ggv_file"] = os.path.join(file_paths["inputs"], "veh_dyn_info", pars["ggv_file"])
-        file_paths["ax_max_machines_file"] = os.path.join(file_paths["inputs"], "veh_dyn_info",
-                                                          pars["ax_max_machines_file"])
+        ggv_p = os.path.join(file_paths["inputs"], pars["ggv_file"])
+        if not os.path.exists(ggv_p):
+            ggv_p = os.path.join(file_paths["inputs"], "veh_dyn_info", pars["ggv_file"])
+        if not os.path.exists(ggv_p):
+            ggv_p = os.path.join(file_paths["module"], "inputs", "veh_dyn_info", pars["ggv_file"])
+        file_paths["ggv_file"] = ggv_p
+
+        ax_p = os.path.join(file_paths["inputs"], pars["ax_max_machines_file"])
+        if not os.path.exists(ax_p):
+            ax_p = os.path.join(file_paths["inputs"], "veh_dyn_info", pars["ax_max_machines_file"])
+        if not os.path.exists(ax_p):
+            ax_p = os.path.join(file_paths["module"], "inputs", "veh_dyn_info", pars["ax_max_machines_file"])
+        file_paths["ax_max_machines_file"] = ax_p
 
     # ------------------------------------------------------------------------------------------------------------------
     # IMPORT TRACK AND VEHICLE DYNAMICS INFORMATION --------------------------------------------------------------------
@@ -284,11 +297,9 @@ def trajectory_optimizer(input_path: str,
                                                             w_veh=safety_width,
                                                             print_debug=debug)
         half_window = 3
-        window = 2*half_window + 1
-        print(alpha_opt.shape)
-        alpha_opt = np.concatenate((alpha_opt[-half_window:], alpha_opt, alpha_opt[:half_window]), axis = None)
-        alpha_opt = np.convolve(alpha_opt, np.ones(window), 'valid')/window
-        print(alpha_opt.shape)
+        window = 2 * half_window + 1
+        alpha_opt = np.concatenate((alpha_opt[-half_window:], alpha_opt, alpha_opt[:half_window]), axis=None)
+        alpha_opt = np.convolve(alpha_opt, np.ones(window), 'valid') / window
 
     elif curv_opt_type == 'mintime':
         # reftrack_interp, a_interp and normvec_normalized_interp are returned for the case that non-regular sampling

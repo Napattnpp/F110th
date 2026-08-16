@@ -88,7 +88,7 @@ def generate_launch_description():
     map_path = PathJoinSubstitution([pkg_bringup, 'maps', LaunchConfiguration('map_name')])
 
     localize_bool_for_state_estimation = PythonExpression([
-        "'True' if '", LaunchConfiguration('localize'), "' == 'True' and '", LaunchConfiguration('localize_method'), "' == 'cartographer' else 'False'"
+        "'True' if '", LaunchConfiguration('localize'), "'.lower() in ['true', '1'] and '", LaunchConfiguration('localize_method'), "' == 'cartographer' else 'False'"
     ])
 
     # 1. On Sim (sim is True)
@@ -150,7 +150,7 @@ def generate_launch_description():
     # 4. AMCL Localization (Conditional on localize == True and localize_method == amcl)
     amcl_source = get_launch_source('race_bringup', 'amcl_launch')
     amcl_group = GroupAction(
-        condition=IfCondition(PythonExpression(["'", LaunchConfiguration('localize'), "' == 'True' and '", LaunchConfiguration('localize_method'), "' == 'amcl'"])),
+        condition=IfCondition(PythonExpression(["'", LaunchConfiguration('localize'), "'.lower() in ['true', '1'] and '", LaunchConfiguration('localize_method'), "' == 'amcl'"])),
         actions=[
             IncludeLaunchDescription(
                 amcl_source,
@@ -167,13 +167,14 @@ def generate_launch_description():
     pf_source = get_launch_source('particle_filter', 'localize_launch')
     if pf_source is not None:
         pf_group = GroupAction(
-            condition=IfCondition(PythonExpression(["'", LaunchConfiguration('localize'), "' == 'True' and '", LaunchConfiguration('localize_method'), "' == 'particle_filter'"])),
+            condition=IfCondition(PythonExpression(["'", LaunchConfiguration('localize'), "'.lower() in ['true', '1'] and '", LaunchConfiguration('localize_method'), "' == 'particle_filter'"])),
             actions=[
                 IncludeLaunchDescription(
                     pf_source,
                     launch_arguments={
                         'localize_config': os.path.join(pkg_bringup, 'config', 'localize.yaml'),
-                        'map_yaml_path': PathJoinSubstitution([map_path, [LaunchConfiguration('map_name'), '.yaml']])
+                        'map_yaml_path': PathJoinSubstitution([map_path, [LaunchConfiguration('map_name'), '.yaml']]),
+                        'use_sim_time': LaunchConfiguration('sim')
                     }.items()
                 )
             ]

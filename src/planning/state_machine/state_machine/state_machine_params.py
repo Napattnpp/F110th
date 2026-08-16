@@ -55,7 +55,8 @@ class StateMachineParams:
             read_only=False,
         )
         node.set_descriptor("mode", descriptor=descriptor)
-        self.mode: str = node.get_parameter("mode").value
+        mode_val = node.get_parameter("mode").value
+        self.mode: str = mode_val if mode_val is not None else "head_to_head"
         
         descriptor = ParameterDescriptor(
             description="Number of local waypoints\n",
@@ -272,8 +273,23 @@ class StateMachineParams:
         if node.has_parameter("buffer_speed_scale"):
             node.set_descriptor("buffer_speed_scale", descriptor=descriptor)
         else:
-            node.declare_parameter("buffer_speed_scale", 0.5, descriptor=descriptor)
+            node.declare_parameter("buffer_speed_scale", 0.9, descriptor=descriptor)
         self.buffer_speed_scale: float = node.get_parameter("buffer_speed_scale").value
+
+        descriptor = ParameterDescriptor(
+            description="Fraction of max speed published during Q2 avoidance laps in qualifying mode (0.0–1.0)\n",
+            read_only=False,
+            type=ParameterType.PARAMETER_DOUBLE,
+            floating_point_range=[FloatingPointRange(
+                from_value=0.1,
+                to_value=1.0,
+                step=0.05)]
+        )
+        if node.has_parameter("q2_speed_scale"):
+            node.set_descriptor("q2_speed_scale", descriptor=descriptor)
+        else:
+            node.declare_parameter("q2_speed_scale", 1.0, descriptor=descriptor)
+        self.q2_speed_scale: float = node.get_parameter("q2_speed_scale").value
 
 
 

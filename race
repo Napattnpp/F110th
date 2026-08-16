@@ -217,8 +217,20 @@ def run_tui():
 
     map_idx = 0
     curr_map = active_profile.get("map_name", "latest")
-    if curr_map in maps:
-        map_idx = maps.index(curr_map)
+    lu_tables = []
+    cfg_dir = os.path.join(PROJECT_ROOT, "src", "control", "steering_lookup", "cfg")
+    if os.path.exists(cfg_dir):
+        for f in os.listdir(cfg_dir):
+            if f.endswith("_lookup_table.csv"):
+                lu_tables.append(f[:-17])
+    lu_tables = sorted(lu_tables)
+    if not lu_tables:
+        lu_tables = ["NUC1_hangar_pacejka"]
+
+    lut_idx = 0
+    curr_lut = active_profile.get("LU_table", "NUC1_hangar_pacejka")
+    if curr_lut in lu_tables:
+        lut_idx = lu_tables.index(curr_lut)
 
     sim_options = ["True", "False"]
     sim_idx = 0 if str(active_profile.get("sim", False)) == "True" else 1
@@ -369,7 +381,7 @@ def run_tui():
                 procs[key] = None
 
     def draw_menu(stdscr):
-        nonlocal active_profile, profile_idx, map_idx, sim_idx, ctrl_idx, overtake_idx, slam_idx, loc_idx, mode_idx, traj_idx, disable_aeb_idx
+        nonlocal active_profile, profile_idx, map_idx, lut_idx, sim_idx, ctrl_idx, overtake_idx, slam_idx, loc_idx, mode_idx, traj_idx, disable_aeb_idx
         
         curses.start_color()
         curses.init_pair(1, curses.COLOR_WHITE, curses.COLOR_BLUE)
@@ -406,6 +418,7 @@ def run_tui():
                 ("Track Map", "toggle", maps, "map_idx"),
                 ("Simulation Mode", "toggle", sim_options, "sim_idx"),
                 ("Controller Algorithm", "toggle", ctrl_options, "ctrl_idx"),
+                ("Pacejka Lookup Table", "toggle", lu_tables, "lut_idx"),
                 ("Overtake Planner Mode", "toggle", overtake_options, "overtake_idx"),
                 ("SLAM Mapping Method", "toggle", slam_options, "slam_idx"),
                 ("Localization Method", "toggle", loc_options, "loc_idx"),
@@ -446,6 +459,8 @@ def run_tui():
                         val = sim_options[sim_idx]
                     elif ref == "ctrl_idx":
                         val = ctrl_options[ctrl_idx]
+                    elif ref == "lut_idx":
+                        val = lu_tables[lut_idx]
                     elif ref == "overtake_idx":
                         val = overtake_options[overtake_idx]
                     elif ref == "slam_idx":
@@ -523,6 +538,10 @@ def run_tui():
                         sim_idx = (sim_idx - 1) % len(vals)
                     elif ref == "ctrl_idx":
                         ctrl_idx = (ctrl_idx - 1) % len(vals)
+                    elif ref == "lut_idx":
+                        lut_idx = (lut_idx - 1) % len(vals)
+                        active_profile["LU_table"] = vals[lut_idx]
+                        save_yaml(active_profile, ACTIVE_CONFIG_PATH)
                     elif ref == "overtake_idx":
                         overtake_idx = (overtake_idx - 1) % len(vals)
                     elif ref == "slam_idx":
@@ -552,6 +571,8 @@ def run_tui():
                         if curr_map in maps: map_idx = maps.index(curr_map)
                         sim_idx = 0 if str(active_profile.get("sim", False)) == "True" else 1
                         ctrl_idx = 0 if active_profile.get("ctrl_algo", "MAP") == "MAP" else 1
+                        curr_lut = active_profile.get("LU_table", "NUC1_hangar_pacejka")
+                        if curr_lut in lu_tables: lut_idx = lu_tables.index(curr_lut)
                         overtake_idx = 0 if active_profile.get("overtake_mode", "spliner") == "spliner" else 1
                         slam_idx = 0 if active_profile.get("slam_method", "cartographer") == "cartographer" else 1
                         loc_idx = 0
@@ -567,6 +588,10 @@ def run_tui():
                         sim_idx = (sim_idx + 1) % len(vals)
                     elif ref == "ctrl_idx":
                         ctrl_idx = (ctrl_idx + 1) % len(vals)
+                    elif ref == "lut_idx":
+                        lut_idx = (lut_idx + 1) % len(vals)
+                        active_profile["LU_table"] = vals[lut_idx]
+                        save_yaml(active_profile, ACTIVE_CONFIG_PATH)
                     elif ref == "overtake_idx":
                         overtake_idx = (overtake_idx + 1) % len(vals)
                     elif ref == "slam_idx":
@@ -768,6 +793,10 @@ def main():
     fm_parser.add_argument("name", type=str, help="Saved map name")
     fm_parser.add_argument("--dry-run", action="store_true", help="Print command without executing")
 
+    # edit-waypoints
+    ew_parser = subparsers.add_parser("edit-waypoints", help="Interactively adjust waypoints away from outer walls")
+    ew_parser.add_argument("map_name", nargs="?", default="track4", help="Map name to edit waypoints for")
+
     # edit-map
     em_parser = subparsers.add_parser("edit-map", help="Launch map editor")
     em_parser.add_argument("--map", type=str, help="Map name")
@@ -805,6 +834,9 @@ def main():
         handle_finish_map(args)
     elif args.command == "edit-map":
         handle_edit_map(args)
+    elif args.command == "edit-waypoints":
+        cmd = [sys.executable, os.path.join(PROJECT_ROOT, "scripts", "edit_waypoints_gui.py"), getattr(args, "map_name", "track4")]
+        subprocess.call(cmd)
 
 if __name__ == "__main__":
     main()

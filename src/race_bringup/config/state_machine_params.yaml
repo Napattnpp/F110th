@@ -1,6 +1,7 @@
 state_machine:
   ros__parameters:
     rate_hz: 40  # [hz]
+    mode: 'head_to_head' # "head_to_head", "dummy", "timetrials", "qualifying"
     initial_state: 'GB_TRACK'  # "GB_TRACK", ...
     test_on_car: True  # also set True if using on a bag
     n_loc_wpnts: 80  # number of local waypoints published, 1 waypoints every 0.1 meter
@@ -31,4 +32,5 @@ state_machine:
     q2_laps:            3    # number of laps with obstacle avoidance active
     q3_laps:            3    # number of full-speed laps after Q2
     buffer_speed_scale: 0.9  # fraction of max speed during buffer laps (0.1 – 1.0)
+    q2_speed_scale:     0.9  # fraction of max speed during Q2 avoidance laps (0.1 – 1.0)
 

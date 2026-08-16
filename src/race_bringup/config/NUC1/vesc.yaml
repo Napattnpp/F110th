@@ -16,8 +16,8 @@
     current_max: 91.53
     brake_min: -20000.0
     brake_max: 200000.0
-    speed_min: -30000.0
-    speed_max: 30000.0
+    speed_min: -25000.0
+    speed_max: 25000.0
     position_min: 0.0
     position_max: 0.0
     servo_min: 0.20
@@ -49,7 +49,7 @@ throttle_interpolator:
     servo_output_topic: commands/servo/position
 
     # servo smoother - limits acceleration and smooths anything above limit
-    max_acceleration: 4.5 # meters/second^2
+    max_acceleration: 2.0 # meters/second^2 (faster straightaway acceleration ramp)
     throttle_smoother_rate: 75.0 # messages/sec
     # servo smoother - limits rotation speed and smooths anything above limit
     max_servo_speed: 5.5 # radians/second
