@@ -93,7 +93,10 @@ class LapAnalyser(Node):
             f.write(f"Laps done on " + datetime.now().strftime('%d %b %H:%M:%S') + '\n')
 
     def marker_cb(self, data: Marker):
-            self.state_marker = data
+        self.state_marker = data
+        self.vis_pos.position.x = data.pose.position.x
+        self.vis_pos.position.y = data.pose.position.y
+        self.vis_pos.position.z = data.pose.position.z + 1.5
 
 
 

@@ -111,7 +111,7 @@ def handle_base(args):
     localize = args.localize if args.localize is not None else str(profile.get("localize", True))
     method = args.method or profile.get("localize_method", "amcl")
     trajectory = args.trajectory or profile.get("trajectory_type", "minimum_curvature")
-    disable_aeb = args.disable_aeb if args.disable_aeb is not None else str(profile.get("disable_aeb", True))
+    disable_aeb = args.disable_aeb if args.disable_aeb is not None else str(profile.get("disable_aeb", False))
 
     cmd = [
         "ros2", "launch", "race_bringup", "base_launch.py",
@@ -257,7 +257,7 @@ def run_tui():
         traj_idx = traj_options.index(curr_traj)
 
     disable_aeb_options = ["True", "False"]
-    disable_aeb_idx = 0 if str(active_profile.get("disable_aeb", True)) == "True" else 1
+    disable_aeb_idx = 0 if str(active_profile.get("disable_aeb", False)) == "True" else 1
 
     mode_options = ["h2h", "qualifying", "timetrials", "mapping"]
     mode_idx = 0
@@ -424,7 +424,6 @@ def run_tui():
                 ("Localization Method", "toggle", loc_options, "loc_idx"),
                 ("Selected Task Mode (Tier 3)", "toggle", mode_options, "mode_idx"),
                 ("Trajectory Type", "toggle", traj_options, "traj_idx"),
-                ("Disable AEB (Safety)", "toggle", disable_aeb_options, "disable_aeb_idx"),
                 ("", "separator", [], ""),
                 ("Tier 1: Launch Base System", "action", ["tier1"], ""),
                 ("Tier 2: Launch Telemetry (Foxglove)", "action", ["tier2"], ""),
@@ -646,7 +645,7 @@ def run_tui():
                                 f"racecar_version:={racecar_val}",
                                 f"localize_method:={loc_val}",
                                 f"trajectory_type:={traj_val}",
-                                f"disable_aeb:={disable_aeb_val}"
+                                "disable_aeb:=False"
                             ]
                         elif key == "tier2":
                             cmd = [

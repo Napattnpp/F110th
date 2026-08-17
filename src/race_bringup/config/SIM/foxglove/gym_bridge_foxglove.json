@@ -85,6 +85,12 @@
         "/map": {
           "visible": true
         },
+        "/telemetry_marker": {
+          "visible": true
+        },
+        "/state_marker": {
+          "visible": true
+        },
         "/move_base_simple/goal": {
           "visible": false
         },

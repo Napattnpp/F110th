@@ -1,103 +1,45 @@
 amcl:
   ros__parameters:
     use_sim_time: false
-
-    # --- Motion model (odometry noise) ---
-    # Slightly tightened vs. default: with only 1m of width to work with,
-    # letting the particle cloud spread too much on turns causes particles
-    # to "see through" walls onto the wrong track section, especially near
-    # the narrow chicane/finger sections in your layout.
-    # alpha1: Rotation noise caused by rotation (slipping while turning)
-    alpha1: 0.3
-    # alpha2: Rotation noise caused by translation (drifting sideways while driving straight)
-    alpha2: 0.3
-    # alpha3: Translation noise caused by translation (slipping forward/backward while driving straight)
-    # Increased to 0.8 because at high speed down a straight, forward slip is very high.
-    alpha3: 0.8
-    # alpha4: Translation noise caused by rotation (slipping forward/backward while turning)
-    alpha4: 0.3
-    # alpha5: Translation noise unique to omni-directional robots (unused for differential, but kept for completeness)
-    alpha5: 0.15
-    robot_model_type: "nav2_amcl::DifferentialMotionModel"
-
-    base_frame_id: "base_link"
-    odom_frame_id: "odom"
-    global_frame_id: "map"
-    scan_topic: "scan"
-
-    # --- Particle filter sizing ---
-    # Reduced from 500/2000: the RPLidar S1's ranging accuracy (~3cm) is
-    # good enough that you don't need a huge particle cloud to converge -
-    # fewer particles = less CPU per update = more stable loop timing.
-    # min_particles: Minimum number of hypotheses (guesses) AMCL keeps track of. 
-    # Lower = less CPU, but higher chance of getting lost if completely kidnapped.
-    min_particles: 1200
-    # max_particles: Maximum number of hypotheses AMCL can use when it's very confused.
-    max_particles: 3000
+    alpha1: 0.2
+    alpha2: 0.2
+    alpha3: 0.2
+    alpha4: 0.2
+    alpha5: 0.1
+    robot_model_type: nav2_amcl::DifferentialMotionModel
+    base_frame_id: base_link
+    odom_frame_id: odom
+    global_frame_id: map
+    scan_topic: scan
+    min_particles: 1000
+    max_particles: 2800
     pf_err: 0.05
     pf_z: 0.99
-    # Resample every 2nd update instead of every update. This is the main
-    # efficiency lever: it roughly halves resampling overhead for a small,
-    # usually negligible hit to convergence speed.
-    resample_interval: 2
-
-    # --- Sensor model (likelihood field) ---
-    laser_model_type: "likelihood_field"
-    # Increased to 30.0m. In long featureless straights, the LiDAR must be able to see the 
-    # wall at the end of the straight to lock onto its forward distance. If this is too short,
-    # it relies 100% on wheel odometry which causes it to break at the turn.
+    resample_interval: 1
+    laser_model_type: likelihood_field
     laser_max_range: 30.0
-    # S1's real minimum range is ~0.15m - setting this to match avoids
-    # feeding the filter bogus close-in returns as if they were valid.
     laser_min_range: 0.15
-    # S1 accuracy is good, so sigma_hit can sit tighter than a generic
-    # sensor's default - but duct-tape walls still scatter a bit, so this
-    # isn't dropped all the way back to a "rigid wall" value.
-    sigma_hit: 0.15
+    sigma_hit: 0.08
     lambda_short: 0.1
-    # z_hit: How much to trust LiDAR beams that perfectly match the map (weight for correct readings).
-    z_hit: 0.7
-    # z_short: How much to trust beams that hit earlier than expected (e.g. hitting a dynamic obstacle like a person).
+    z_hit: 0.85
     z_short: 0.05
-    # z_max: How much to trust beams that report max distance (e.g. looking into the void or glass).
     z_max: 0.05
-    # z_rand: How much to trust completely random phantom noise. Increasing this prevents AMCL from panicking if the map is dirty.
-    z_rand: 0.2
-    laser_likelihood_max_dist: 1.5
-    # S1 outputs ~900+ points/rotation at 10Hz. Subsampling to 200 keeps
-    # angular resolution well above what a 1m corridor needs, while
-    # cutting per-scan compute by more than half vs. using every beam.
-    max_beams: 200
+    z_rand: 0.05
+    laser_likelihood_max_dist: 2.0
+    max_beams: 100
     do_beamskip: false
     beam_skip_distance: 0.5
     beam_skip_error_threshold: 0.9
     beam_skip_threshold: 0.3
-
-    # --- Update thresholds ---
-    # Relaxed slightly from the tight 0.05/0.05 version: this cuts how
-    # often the filter runs at all, which is the single biggest lever for
-    # steady-state CPU load. Still tighter than the ROS default (0.1/0.1)
-    # since the corridor is only 1m wide.
-    # update_min_d: Minimum translational distance (meters) the robot must move before AMCL recalculates the particles.
-    # Setting this higher saves CPU on straights. Setting it lower tracks tight chicanes better.
-    update_min_d: 0.08
-    # update_min_a: Minimum rotational distance (radians) the robot must turn before AMCL recalculates.
-    update_min_a: 0.08
-
-    # --- Recovery ---
-    recovery_alpha_slow: 0.0
-    recovery_alpha_fast: 0.0
-
+    update_min_d: 0.05
+    update_min_a: 0.05
+    recovery_alpha_slow: 0.001
+    recovery_alpha_fast: 0.1
     save_pose_rate: 0.5
-    transform_tolerance: 1.0
-
-    # --- Initial pose ---
-    # Update x/y/yaw below to match wherever you actually place the car
-    # at the start of each run on this map - it's currently the map
-    # origin (0,0,0), which only works if you always start there.
+    transform_tolerance: 0.3
     set_initial_pose: true
     initial_pose:
-      x: 0.0
-      y: 0.0
+      x: 0.566
+      y: -8.3632
       z: 0.0
-      yaw: 0.0
+      yaw: -2.8703

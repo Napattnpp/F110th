@@ -103,7 +103,7 @@ class StateMachineParams:
             read_only=False,
             type=ParameterType.PARAMETER_DOUBLE,
             floating_point_range=[FloatingPointRange(
-                from_value=1.0,
+                from_value=0.1,
                 to_value=5.0,
                 step=0.1)])
         node.set_descriptor("splini_ttl", descriptor=descriptor)
@@ -175,7 +175,7 @@ class StateMachineParams:
             floating_point_range=[FloatingPointRange(
                 from_value=0.0,
                 to_value=2.0,
-                step=0.1)]
+                step=0.01)]
         )
         node.set_descriptor("splini_hyst_timer_sec", descriptor=descriptor)
         self.splini_hyst_timer_sec: float = node.get_parameter("splini_hyst_timer_sec").value
@@ -285,11 +285,20 @@ class StateMachineParams:
                 to_value=1.0,
                 step=0.05)]
         )
-        if node.has_parameter("q2_speed_scale"):
-            node.set_descriptor("q2_speed_scale", descriptor=descriptor)
+        descriptor = ParameterDescriptor(
+            description="Fraction of max speed published during OVERTAKE mode (0.1–1.0)\n",
+            read_only=False,
+            type=ParameterType.PARAMETER_DOUBLE,
+            floating_point_range=[FloatingPointRange(
+                from_value=0.1,
+                to_value=1.0,
+                step=0.01)]
+        )
+        if node.has_parameter("overtake_speed_scale"):
+            node.set_descriptor("overtake_speed_scale", descriptor=descriptor)
         else:
-            node.declare_parameter("q2_speed_scale", 1.0, descriptor=descriptor)
-        self.q2_speed_scale: float = node.get_parameter("q2_speed_scale").value
+            node.declare_parameter("overtake_speed_scale", 0.85, descriptor=descriptor)
+        self.overtake_speed_scale: float = node.get_parameter("overtake_speed_scale").value
 
 
 

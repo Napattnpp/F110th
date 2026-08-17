@@ -23,6 +23,7 @@ class FrenetConverter:
         prev_wpnt_y =  self.waypoints_y[0]
         for wpnt_x, wpnt_y in zip(self.waypoints_x[1:], self.waypoints_y[1:]):
             dist = np.linalg.norm([wpnt_x - prev_wpnt_x, wpnt_y - prev_wpnt_y])
+            dist = max(float(dist), 1e-4)
             prev_wpnt_x = wpnt_x
             prev_wpnt_y = wpnt_y
             self.waypoints_s.append(self.waypoints_s[-1] + dist)        
@@ -159,7 +160,7 @@ class FrenetConverter:
         Returns:
             der: dx/ds, dy/ds
         """
-        s = s%self.raceline_length
+        s = np.array(s) % self.raceline_length
 
         der = [self.spline_x(s, 1), self.spline_y(s, 1)]
         

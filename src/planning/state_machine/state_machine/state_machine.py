@@ -20,7 +20,8 @@ try:
 except:
     pass
 
-from state_machine.transitions import dummy_transition, timetrials_transition, head_to_head_transition, qualifying_transition
+import json
+from state_machine.transitions import dummy_transition, timetrials_transition, head_to_head_transition, qualifying_transition, get_qualifying_phase
 from state_machine.state_types import StateType
 from state_machine.states import DefaultStateLogic
 from race_bringup.parameter_event_handler import ParameterEventHandler
@@ -107,6 +108,7 @@ class StateMachine(Node):
             # TODO setup things for sectors and overtaking sectors
             self.only_ftg_zones = []
             self.ftg_counter = 0
+            self.gb_occupied_counter = 0
 
             self.overtake_zones = []
 
@@ -146,6 +148,9 @@ class StateMachine(Node):
             
         # PUBLICATIONS
         self.state_pub = self.create_publisher(String, 'state', 10)
+        self.qual_state_pub = self.create_publisher(String, 'qualifying_state', 10)
+        self.qual_info_pub = self.create_publisher(String, 'qualifying/info', 10)
+        self.telemetry_marker_pub = self.create_publisher(Marker, 'telemetry_marker', 10)
         self.state_marker_pub = self.create_publisher(Marker, 'state_marker', 10)
         self.loc_wpnt_pub = self.create_publisher(WpntArray, 'local_waypoints', 10)
         self.vis_loc_wpnt_pub = self.create_publisher(MarkerArray, 'local_waypoints/markers', 10)
@@ -177,6 +182,15 @@ class StateMachine(Node):
         # Get spacing between wpnts for rough approximations
         self.wpnt_dist = data.wpnts[1].s_m - data.wpnts[0].s_m
         self.gb_max_idx = data.wpnts[-1].id
+
+        if len(self.glb_wpnts) >= 2:
+            x0, y0 = self.glb_wpnts[0].x_m, self.glb_wpnts[0].y_m
+            x1, y1 = self.glb_wpnts[1].x_m, self.glb_wpnts[1].y_m
+            norm = np.linalg.norm([y1 - y0, x0 - x1])
+            if norm > 1e-4:
+                xy_norm = -np.array([y1 - y0, x0 - x1]) / norm * 1.25 * self.glb_wpnts[0].d_left
+                self.x_viz = x0 + xy_norm[0]
+                self.y_viz = y0 + xy_norm[1]
 
     def glb_wpnts_cb(self, data: WpntArray):
         if data.wpnts:
@@ -501,8 +515,14 @@ class StateMachine(Node):
         loc_wpnts.header.stamp = self.get_clock().now().to_msg()
         loc_wpnts.header.frame_id = "map"
 
-        # Apply speed scaling during qualifying buffer laps
+        # Apply speed scaling during qualifying buffer laps or OVERTAKE mode
+        active_scale = 1.0
         if self.params.mode == 'qualifying' and self.qual_speed_scale != 1.0:
+            active_scale *= self.qual_speed_scale
+        if self.state == StateType.OVERTAKE and hasattr(self.params, 'overtake_speed_scale') and self.params.overtake_speed_scale != 1.0:
+            active_scale *= self.params.overtake_speed_scale
+
+        if active_scale != 1.0:
             from f110_msgs.msg import Wpnt
             scaled_wpnts = []
             for wpnt in loc_wpnts.wpnts:
@@ -516,7 +536,7 @@ class StateMachine(Node):
                 new_wpnt.d_left = wpnt.d_left
                 new_wpnt.psi_rad = wpnt.psi_rad
                 new_wpnt.kappa_radpm = wpnt.kappa_radpm
-                new_wpnt.vx_mps = wpnt.vx_mps * self.qual_speed_scale
+                new_wpnt.vx_mps = wpnt.vx_mps * active_scale
                 new_wpnt.ax_mps2 = wpnt.ax_mps2
                 scaled_wpnts.append(new_wpnt)
             loc_wpnts.wpnts = scaled_wpnts
@@ -605,6 +625,35 @@ class StateMachine(Node):
             mrk.color.b = 0.0
         self.state_marker_pub.publish(mrk)
 
+    def pub_telemetry_marker(self, qual_phase: str):
+        mrk = Marker()
+        mrk.type = Marker.TEXT_VIEW_FACING
+        mrk.id = int(2)
+        mrk.header.frame_id = "map"
+        mrk.header.stamp = self.get_clock().now().to_msg()
+        mrk.scale.z = 0.5  # Text height
+        mrk.color.a = 1.0
+        mrk.color.r = 1.0
+        mrk.color.g = 1.0
+        mrk.color.b = 1.0
+
+        if hasattr(self, 'current_position') and self.current_position is not None:
+            mrk.pose.position.x = float(self.current_position[0])
+            mrk.pose.position.y = float(self.current_position[1])
+            mrk.pose.position.z = 1.2
+        else:
+            mrk.pose.position.x = float(self.x_viz)
+            mrk.pose.position.y = float(self.y_viz)
+            mrk.pose.position.z = 1.5
+
+        mrk.pose.orientation.w = 1.0
+        if self.params.mode == "qualifying":
+            mrk.text = f"STATE: {self.state}\nQUAL: {qual_phase} (Lap {self.lap_count})\nSPEED: {int(self.qual_speed_scale*100)}%"
+        else:
+            mrk.text = f"STATE: {self.state}\nMODE: {self.params.mode.upper()}"
+        
+        self.telemetry_marker_pub.publish(mrk)
+
     #############
     # MAIN LOOP #
     #############    
@@ -619,10 +668,34 @@ class StateMachine(Node):
             self.state = self.params.force_state_choice
         else:
             self.state = self.state_transition(self)
+
+        state_str = self.state.value if hasattr(self.state, 'value') else str(self.state)
         msg = String()
-        msg.data = str(self.state)
+        msg.data = state_str
         self.state_pub.publish(msg)
         self.visualize_state(state=self.state)
+
+        if self.params.mode == "qualifying":
+            qual_phase = get_qualifying_phase(self)
+        else:
+            qual_phase = "N/A"
+
+        # Publish qualifying state and telemetry json
+        q_state_msg = String()
+        q_state_msg.data = qual_phase
+        self.qual_state_pub.publish(q_state_msg)
+
+        q_info_msg = String()
+        q_info_msg.data = json.dumps({
+            "mode": self.params.mode,
+            "phase": qual_phase,
+            "lap": self.lap_count,
+            "speed_scale": round(float(self.qual_speed_scale), 2),
+            "state": state_str
+        })
+        self.qual_info_pub.publish(q_info_msg)
+
+        self.pub_telemetry_marker(qual_phase=qual_phase)
 
         self.local_waypoints.wpnts = self.state_logic(self)
         self._pub_local_waypoints(self.local_waypoints)

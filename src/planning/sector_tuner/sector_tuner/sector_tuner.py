@@ -209,6 +209,9 @@ class SectorTuner(Node):
 
         for i in range(n_sectors):
             s = self.sectors_params[f"Sector{i}"]['start']
+            if len(global_waypoints_vis) == 0:
+                continue
+            s = s % len(global_waypoints_vis)
             if s == (len(global_waypoints_vis) - 1):
                 theta = np.arctan2((global_waypoints_vis[0][1] - global_waypoints_vis[s][1]),(global_waypoints_vis[0][0] - global_waypoints_vis[s][0]))
             else:

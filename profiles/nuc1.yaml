@@ -8,3 +8,4 @@ map_name: "track433"
 ctrl_algo: "MAP"
 LU_table: "NUC1_hangar_pacejka"
 overtake_mode: "spliner"
+disable_aeb: false

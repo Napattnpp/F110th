@@ -35,6 +35,33 @@ def qualifying_transition(state_machine: StateMachine) -> str:
       Buffer 2  : next buf_laps laps                → GB_TRACK, slow speed
       Q3        : remaining laps                    → GB_TRACK, full speed
     """
+    phase = get_qualifying_phase(state_machine)
+    p = state_machine.params
+
+    if phase == "Q1":
+        # Q1 — full speed, no avoidance
+        state_machine.qual_speed_scale = 1.0
+        return StateType.GB_TRACK
+    elif phase == "Buffer 1":
+        # Buffer 1 — slow down, no avoidance
+        state_machine.qual_speed_scale = p.buffer_speed_scale
+        return StateType.GB_TRACK
+    elif phase == "Q2":
+        # Q2 — obstacle avoidance active at q2_speed_scale
+        state_machine.qual_speed_scale = getattr(p, 'q2_speed_scale', 1.0)
+        return head_to_head_transition(state_machine)
+    elif phase == "Buffer 2":
+        # Buffer 2 — slow down, no avoidance
+        state_machine.qual_speed_scale = p.buffer_speed_scale
+        return StateType.GB_TRACK
+    else:
+        # Q3 — full speed, no avoidance
+        state_machine.qual_speed_scale = 1.0
+        return StateType.GB_TRACK
+
+
+def get_qualifying_phase(state_machine: StateMachine) -> str:
+    """Helper function to return the active qualifying phase string."""
     p = state_machine.params
     lap = state_machine.lap_count
 
@@ -44,25 +71,16 @@ def qualifying_transition(state_machine: StateMachine) -> str:
     buf2_end  = q2_end + p.buf_laps
 
     if lap <= q1_end:
-        # Q1 — full speed, no avoidance
-        state_machine.qual_speed_scale = 1.0
-        return StateType.GB_TRACK
+        return "Q1"
     elif lap <= buf1_end:
-        # Buffer 1 — slow down, no avoidance
-        state_machine.qual_speed_scale = p.buffer_speed_scale
-        return StateType.GB_TRACK
+        return "Buffer 1"
     elif lap <= q2_end:
-        # Q2 — obstacle avoidance active at q2_speed_scale
-        state_machine.qual_speed_scale = getattr(p, 'q2_speed_scale', 1.0)
-        return head_to_head_transition(state_machine)
+        return "Q2"
     elif lap <= buf2_end:
-        # Buffer 2 — slow down, no avoidance
-        state_machine.qual_speed_scale = p.buffer_speed_scale
-        return StateType.GB_TRACK
+        return "Buffer 2"
     else:
-        # Q3 — full speed, no avoidance
-        state_machine.qual_speed_scale = 1.0
-        return StateType.GB_TRACK
+        return "Q3"
+
 
 def head_to_head_transition(state_machine: StateMachine)->str:
     match state_machine.state:

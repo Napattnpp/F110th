@@ -8,3 +8,4 @@ profile_name: nuc1
 racecar_version: NUC1
 sim: false
 slam_method: cartographer
+disable_aeb: false

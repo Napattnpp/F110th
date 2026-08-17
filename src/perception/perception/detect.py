@@ -309,7 +309,8 @@ class Detect(Node):
         return marker_array
 
     def laserPointOnTrack(self, s, d, car_s) -> bool:
-        if normalize_s(s-car_s, self.track_length) > self.max_viewing_distance:
+        dist_ahead = normalize_s(s - car_s, self.track_length)
+        if dist_ahead < 0.40 or dist_ahead > self.max_viewing_distance:
             return False
         if abs(d) >= self.biggest_d:
             return False
@@ -342,8 +343,8 @@ class Detect(Node):
         ranges = np.array(scans.ranges)
         angles = np.linspace(scans.angle_min, scans.angle_max, len(ranges))
         
-        # Filter out inf and nan values from the LiDAR scan
-        valid_idx = np.isfinite(ranges)
+        # Filter out inf, nan, and self-detection (ranges <= 0.35m hitting car's own frame/box)
+        valid_idx = np.isfinite(ranges) & (ranges > 0.35)
         valid_ranges = ranges[valid_idx]
         valid_angles = angles[valid_idx]
         

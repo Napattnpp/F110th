@@ -4,6 +4,7 @@
 #include <geometry_msgs/msg/pose_stamped.hpp>
 #include <geometry_msgs/msg/twist_stamped.hpp>
 #include <std_msgs/msg/bool.hpp>
+#include <std_msgs/msg/string.hpp>
 #include <ackermann_msgs/msg/ackermann_drive_stamped.hpp>
 #include <f110_msgs/msg/obstacle_array.hpp>
 #include <f110_msgs/msg/wpnt_array.hpp>
@@ -21,7 +22,7 @@ class SafetyNode : public rclcpp::Node {
 public:
     SafetyNode() : Node("safety_node") {
         // Parameters
-        this->declare_parameter("ttc_threshold_static", 0.35); // Seconds for static obstacles
+        this->declare_parameter("ttc_threshold_static", 0.55); // Seconds for static obstacles
         this->declare_parameter("ttc_threshold_dynamic", 0.30); // Seconds for dynamic obstacles
         this->declare_parameter("opponent_size_buffer", 0.35); // Padding around opponent size
 
@@ -46,9 +47,18 @@ public:
         waypoints_sub_ = this->create_subscription<f110_msgs::msg::WpntArray>(
             "/global_waypoints", 10, std::bind(&SafetyNode::waypoints_callback, this, std::placeholders::_1));
 
+        aeb_enabled_sub_ = this->create_subscription<std_msgs::msg::Bool>(
+            "/aeb_enabled", 10, [this](const std_msgs::msg::Bool::SharedPtr msg) {
+                std::lock_guard<std::mutex> lock(mutex_);
+                aeb_enabled_ = msg->data;
+                RCLCPP_INFO(this->get_logger(), "Automatic AEB Watchdog %s via controller button [0]", aeb_enabled_ ? "ENABLED" : "DISABLED");
+            });
+
         // Publishers
         brake_pub_ = this->create_publisher<ackermann_msgs::msg::AckermannDriveStamped>("/brake", 10);
         pause_pub_ = this->create_publisher<std_msgs::msg::Bool>("/pause_navigation", 10);
+        aeb_active_pub_ = this->create_publisher<std_msgs::msg::Bool>("/aeb_active", 10);
+        aeb_status_pub_ = this->create_publisher<std_msgs::msg::String>("/aeb_status", 10);
 
         RCLCPP_INFO(this->get_logger(), "Dynamic Safety Node Initialized.");
     }
@@ -71,6 +81,11 @@ private:
 
     void scan_callback(const sensor_msgs::msg::LaserScan::SharedPtr msg) {
         std::lock_guard<std::mutex> lock(mutex_);
+
+        if (!aeb_enabled_) {
+            release_brake();
+            return;
+        }
 
         double current_speed = ego_speed_;
         auto obstacles = latest_obstacles_;
@@ -271,7 +286,7 @@ private:
     void trigger_brake() {
         // Publish AckermannDriveStamped speed = 0.0 to /brake
         ackermann_msgs::msg::AckermannDriveStamped drive_msg;
-        drive_msg.header.stamp = this->get_clock().now();
+        drive_msg.header.stamp = this->get_clock()->now();
         drive_msg.header.frame_id = "ego_racecar/laser";
         drive_msg.drive.speed = 0.0;
         drive_msg.drive.steering_angle = 0.0;
@@ -281,6 +296,15 @@ private:
         std_msgs::msg::Bool pause_msg;
         pause_msg.data = true;
         pause_pub_->publish(pause_msg);
+
+        // Publish AEB active and status
+        std_msgs::msg::Bool active_msg;
+        active_msg.data = true;
+        aeb_active_pub_->publish(active_msg);
+
+        std_msgs::msg::String status_msg;
+        status_msg.data = "TRIGGERED";
+        aeb_status_pub_->publish(status_msg);
     }
 
     void release_brake() {
@@ -288,6 +312,15 @@ private:
         std_msgs::msg::Bool pause_msg;
         pause_msg.data = false;
         pause_pub_->publish(pause_msg);
+
+        // Publish AEB inactive and status
+        std_msgs::msg::Bool active_msg;
+        active_msg.data = false;
+        aeb_active_pub_->publish(active_msg);
+
+        std_msgs::msg::String status_msg;
+        status_msg.data = "SAFE";
+        aeb_status_pub_->publish(status_msg);
     }
 
     // ROS handles
@@ -295,15 +328,19 @@ private:
     rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_sub_;
     rclcpp::Subscription<f110_msgs::msg::ObstacleArray>::SharedPtr obstacles_sub_;
     rclcpp::Subscription<f110_msgs::msg::WpntArray>::SharedPtr waypoints_sub_;
+    rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr aeb_enabled_sub_;
 
     rclcpp::Publisher<ackermann_msgs::msg::AckermannDriveStamped>::SharedPtr brake_pub_;
     rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr pause_pub_;
+    rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr aeb_active_pub_;
+    rclcpp::Publisher<std_msgs::msg::String>::SharedPtr aeb_status_pub_;
 
     std::unique_ptr<tf2_ros::Buffer> tf_buffer_;
     std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
 
     // Variables
     double ego_speed_ = 0.0;
+    bool aeb_enabled_ = true;
     std::vector<f110_msgs::msg::Wpnt> global_waypoints_;
     std::vector<f110_msgs::msg::Obstacle> latest_obstacles_;
     std::mutex mutex_;

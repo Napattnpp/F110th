@@ -12,15 +12,14 @@ state_machine:
     ftg_disabled: True  # disable FTG (Follow the Gap) fallback mode when stuck trailing
 
 
-    splini_ttl: 2. # [s] ttl counter for validity of spliner waypoints -> NOW DYNAMIC RECONFIGURABLE
-
+    splini_ttl: 0.8 # [s] ttl counter for validity of spliner waypoints
     gb_ego_width_m: 0.4 # [m], distance from gb path for rejoining 
-    lateral_width_gb_m: 1.1 # [m] lateral width within which we consider obstacles to be on the overtaking line -> NOW DYNAMIC RECONFIGURABLE
-    gb_horizon_m: 6.9 # [m] horizon considered for the global waypoints to check for obstacles
-
-    overtaking_horizon_m: 6.9 # [m] horizon considered for overtaking
-    lateral_width_ot_m: 0.3 # [m] lateral width within which we consider opponents to be on the overtaking line -> NOW DYNAMIC RECONFIGURABLE
-    splini_hyst_timer_sec: 0.2 # [s] time we have to wait between switching from overtaking on one side to the other -> NOW DYNAMIC RECONFIGURABLE
+    lateral_width_gb_m: 1.1 # [m] lateral width within which we consider obstacles to be on the raceline
+    gb_horizon_m: 10.0 # [m] horizon considered for global waypoints obstacle checking
+    overtaking_horizon_m: 10.0 # [m] horizon considered for overtaking
+    lateral_width_ot_m: 0.3 # [m] lateral width within which we consider opponents to be on overtaking line
+    splini_hyst_timer_sec: 0.02 # [s] time we have to wait between switching sides
+    overtake_speed_scale: 0.68 # speed scaling fraction (0.1 - 1.0) applied during OVERTAKE mode
 
     ftg_threshold_speed: 0.1 # [m/s] speed threshold below which we start a timer for activating FTG
     ftg_timer_sec: 3. # [s] time we have to stay slower than the `ftg_threshold_speed` threshold before we activate FTG
@@ -31,6 +30,6 @@ state_machine:
     buf_laps:           1    # number of slow buffer laps on each side of Q2
     q2_laps:            3    # number of laps with obstacle avoidance active
     q3_laps:            3    # number of full-speed laps after Q2
-    buffer_speed_scale: 0.9  # fraction of max speed during buffer laps (0.1 – 1.0)
+    buffer_speed_scale: 0.85  # fraction of max speed during buffer laps (0.1 – 1.0)
     q2_speed_scale:     0.9  # fraction of max speed during Q2 avoidance laps (0.1 – 1.0)
 

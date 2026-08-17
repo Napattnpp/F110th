@@ -52,7 +52,7 @@ joy_teleop:
     aeb_control:
       type: topic
       interface_type: std_msgs/msg/Bool
-      topic_name: aeb_active
+      topic_name: aeb_enabled
       deadman_buttons: [0]
       toggle_mode: true
       publish_toggle_state: true

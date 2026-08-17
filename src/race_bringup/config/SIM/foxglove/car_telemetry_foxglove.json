@@ -1,0 +1,134 @@
+{
+  "configById": {
+    "3D!18i6zy7": {
+      "layers": {
+        "grid": {
+          "visible": true,
+          "frameLocked": true,
+          "label": "Grid",
+          "instanceId": "grid",
+          "layerId": "foxglove.Grid",
+          "size": 10,
+          "divisions": 10,
+          "lineWidth": 1,
+          "color": "#248eff",
+          "position": [0, 0, 0],
+          "rotation": [0, 0, 0],
+          "order": 1
+        },
+        "urdf": {
+          "displayMode": "visual",
+          "showAxis": false,
+          "axisScale": 1,
+          "showOutlines": false,
+          "opacity": 1,
+          "visible": true,
+          "label": "URDF",
+          "instanceId": "urdf",
+          "layerId": "foxglove.Urdf",
+          "sourceType": "topic",
+          "topic": "/ego_robot_description",
+          "order": 2,
+          "fallbackColor": "#ff0000"
+        }
+      },
+      "cameraState": {
+        "distance": 20,
+        "perspective": true,
+        "phi": 60,
+        "target": [0, 0, 0],
+        "targetOffset": [0, 0, 0],
+        "targetOrientation": [0, 0, 0, 1],
+        "thetaOffset": 45,
+        "fovy": 45,
+        "near": 0.5,
+        "far": 5000
+      },
+      "followMode": "follow-pose",
+      "fixedFrame": "map",
+      "topics": {
+        "/map": { "visible": true },
+        "/scan": {
+          "visible": true,
+          "colorField": "range",
+          "colorMode": "gradient",
+          "colorMap": "turbo"
+        },
+        "/telemetry_marker": { "visible": true },
+        "/state_marker": { "visible": true },
+        "/local_waypoints/markers": { "visible": true }
+      }
+    },
+    "Indicator!car_state": {
+      "path": "/state.data",
+      "label": "CAR STATE",
+      "fontSize": 24,
+      "rules": [
+        { "value": "gb_track", "color": "#2e7d32" },
+        { "value": "trailing", "color": "#0288d1" },
+        { "value": "overtake", "color": "#ed6c02" },
+        { "value": "ftgonly", "color": "#d32f2f" }
+      ]
+    },
+    "Indicator!qual_phase": {
+      "path": "/qualifying/phase.data",
+      "label": "QUALIFYING PHASE",
+      "fontSize": 24,
+      "rules": [
+        { "value": "Q1", "color": "#2e7d32" },
+        { "value": "Buffer 1", "color": "#ed6c02" },
+        { "value": "Q2", "color": "#0288d1" },
+        { "value": "Buffer 2", "color": "#ed6c02" },
+        { "value": "Q3", "color": "#9c27b0" }
+      ]
+    },
+    "Indicator!aeb_status": {
+      "path": "/aeb_status.data",
+      "label": "AEB STATUS",
+      "fontSize": 24,
+      "rules": [
+        { "value": "SAFE", "color": "#2e7d32" },
+        { "value": "TRIGGERED", "color": "#d32f2f" }
+      ]
+    },
+    "RawMessages!qual_info": {
+      "topicPath": "/qualifying/info",
+      "fontSize": 14
+    },
+    "Plot!speed_aeb": {
+      "paths": [
+        { "value": "/car_state/frenet/odom.twist.twist.linear.x", "enabled": true, "color": "#00bcd4", "label": "Car Speed (m/s)" },
+        { "value": "/aeb_active.data", "enabled": true, "color": "#f44336", "label": "AEB Active Flag" }
+      ]
+    }
+  },
+  "globalVariables": {},
+  "userNodes": {},
+  "playbackConfig": { "speed": 1 },
+  "layout": {
+    "first": "3D!18i6zy7",
+    "second": {
+      "first": {
+        "first": "Indicator!car_state",
+        "second": {
+          "first": "Indicator!qual_phase",
+          "second": "Indicator!aeb_status",
+          "direction": "row",
+          "splitPercentage": 50
+        },
+        "direction": "row",
+        "splitPercentage": 33
+      },
+      "second": {
+        "first": "Plot!speed_aeb",
+        "second": "RawMessages!qual_info",
+        "direction": "row",
+        "splitPercentage": 60
+      },
+      "direction": "column",
+      "splitPercentage": 30
+    },
+    "direction": "row",
+    "splitPercentage": 65
+  }
+}
