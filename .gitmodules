@@ -6,3 +6,7 @@
 	path = src/state_estimation/particle_filter
 	url = https://github.com/Napattnpp/particle_filter.git
 	branch = humble-synpf
+[submodule "range_libc"]
+	path = range_libc
+	url = https://github.com/Napattnpp/range_libc.git
+	branch = deploy
