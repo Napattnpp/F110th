@@ -127,6 +127,10 @@ class GlobalPlanner(Node):
             self.get_logger().info("Killing global planner...")
             import sys
             sys.exit(0)
+        elif not self.create_map:
+            self.get_logger().error("Global planner trajectory optimization failed for requested parameters. Exiting.")
+            import sys
+            sys.exit(1)
 
     def read_and_publish(self, map_editor_mode: bool, create_map: bool) -> None:
         """Reads infos serialized by the global planner and publishes them, thus decoupling ROS publishing from main logic.

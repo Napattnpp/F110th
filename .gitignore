@@ -49,7 +49,7 @@ rosbag2_*/
 docs/
 
 # Ignore assets contents but keep the directories
-assets/maps/*
+# assets/maps/*
 !assets/maps/.gitkeep
 assets/frames/*
 !assets/frames/.gitkeep

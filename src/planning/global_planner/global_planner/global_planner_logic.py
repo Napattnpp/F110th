@@ -179,7 +179,8 @@ class GlobalPlannerLogic:
         # If we are not creating a map, then we can simply compute the trajectory. No further action needed.
         if not self.create_map:
             self.loginfo("Not creating map, only computing trajectory.")
-            if self.compute_global_trajectory(cent_length=0.0):
+            success, _ = self.compute_global_trajectory(cent_length=0.0)
+            if success:
                 self.loginfo('Successfully computed trajectory.')
                 return (True, self.map_name)
             else:
@@ -213,7 +214,8 @@ class GlobalPlannerLogic:
                 self.loginfo('Saved map.')
                 if self.compute_global_traj:
                     self.loginfo(f"Approximate centerline length: {round(cent_length, 4)}m; ")
-                    if self.compute_global_trajectory(cent_length=cent_length):
+                    success, _ = self.compute_global_trajectory(cent_length=cent_length)
+                    if success:
                         self.loginfo("Successfully computed global waypoints.")
                         import subprocess
                         subprocess.Popen(args=[self.script_path, self.map_name], shell=False).wait()
@@ -271,10 +273,28 @@ class GlobalPlannerLogic:
         Returns:
             bool: Success or failure
         """
-        # open up png/pgm map from file
-        img_path = os.path.join(self.map_dir, self.map_name + '.png')
-        if not os.path.exists(img_path):
-            img_path = os.path.join(self.map_dir, self.map_name + '.pgm')
+        # Check for waypoint-generator map image (<map_name>_waypoint_gen) first, fallback to standard map
+        img_path = None
+        for candidate in [
+            f"{self.map_name}_waypoint_gen.png",
+            f"{self.map_name}_waypoint_gen.pgm",
+            f"{self.map_name}_waypoint.png",
+            f"{self.map_name}_waypoint.pgm",
+            f"{self.map_name}_raceline.png",
+            f"{self.map_name}_raceline.pgm",
+            f"{self.map_name}.png",
+            f"{self.map_name}.pgm",
+        ]:
+            cand_path = os.path.join(self.map_dir, candidate)
+            if os.path.exists(cand_path):
+                img_path = cand_path
+                self.loginfo(f"Global planner using map image: {candidate}")
+                break
+
+        if img_path is None:
+            self.logwarn(f"No map image found in {self.map_dir} for map {self.map_name}")
+            return (False, "")
+
         raw_img = cv2.imread(img_path, 0)
 
         # Dynamically compute pixel threshold from map YAML free_thresh (e.g. 0.196 -> ~205 intensity)
@@ -429,17 +449,20 @@ class GlobalPlannerLogic:
             centerline_waypoints.wpnts[i].psi_rad = psi + np.pi / 2
             centerline_waypoints.wpnts[i].kappa_radpm = kappa
 
-        self.loginfo('Start Global Trajectory optimization with minimum curvature...')
+        self.loginfo(f'Start Global Trajectory optimization with minimum curvature (safety_width={self.safety_width}m)...')
         try:
             global_trajectory_iqp, bound_r_iqp, bound_l_iqp, est_t_iqp = trajectory_optimizer(
-                input_path=self.input_path, track_name=iqp_centerline_path, curv_opt_type='mincurv', safety_width=self.safety_width, plot=(
-                    self.show_plots and not self.map_editor_mode))
+                input_path=self.input_path,
+                track_name=iqp_centerline_path,
+                curv_opt_type='mincurv',
+                safety_width=self.safety_width,
+                plot=(self.show_plots and not self.map_editor_mode)
+            )
             self.loginfo('mincurv optimization succeeded.')
         except (RuntimeError, ValueError) as e:
             import traceback
             traceback.print_exc()
-            self.logwarn(f"mincurv optimization failed, error: {e}")
-            self.loginfo('Try again later!')
+            self.logerror(f"mincurv optimization failed for safety_width={self.safety_width}m: {e}")
             return (False, "")
 
         self.map_info_str += f'IQP estimated lap time: {round(est_t_iqp, 4)}s; '

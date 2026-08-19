@@ -124,38 +124,54 @@ class MapCleanerApp:
             plt.close('all')
         print("✓ Goodbye!")
         sys.exit(0)
-    
+
+    def resolve_filepath(self, filepath):
+        """Flexible map path resolution (prefers _raw files for map_cleaner)."""
+        if not filepath:
+            return None
+        if filepath.startswith("map_name="):
+            filepath = filepath.split("=", 1)[1]
+        
+        path_obj = Path(filepath)
+        if path_obj.exists():
+            return str(path_obj)
+
+        # Normalize base map name (e.g. track7th_raw -> track7th)
+        raw_name = path_obj.stem
+        for suffix in ['_waypoint_gen', '_waypoint', '_raceline', '_raw']:
+            if raw_name.endswith(suffix):
+                raw_name = raw_name[:-len(suffix)]
+
+        # Check assets/maps/<map_name>/<map_name>_raw.yaml first
+        raw_yaml = Path("assets/maps") / raw_name / f"{raw_name}_raw.yaml"
+        if raw_yaml.exists():
+            return str(raw_yaml)
+            
+        raw_pgm = Path("assets/maps") / raw_name / f"{raw_name}_raw.pgm"
+        if raw_pgm.exists():
+            return str(raw_pgm)
+
+        base_yaml = Path("assets/maps") / raw_name / f"{raw_name}.yaml"
+        if base_yaml.exists():
+            return str(base_yaml)
+            
+        base_pgm = Path("assets/maps") / raw_name / f"{raw_name}.pgm"
+        if base_pgm.exists():
+            return str(base_pgm)
+
+        return filepath
+
     def load_file(self, filepath=None):
         """Load map file interactively."""
-        if filepath is None:
-            print("\n" + "="*60)
-            print("MAP CLEANER — Interactive Matplotlib Version")
-            print("="*60)
-            print("\nUsage examples:")
-            print("  python map_cleaner_matplotlib.py path/to/map.yaml")
-            print("  python map_cleaner_matplotlib.py path/to/map.pgm")
-            print("  python map_cleaner_matplotlib.py --demo")
-            
-            if len(sys.argv) > 1:
-                if sys.argv[1] == '--demo':
-                    print("\n→ Loading demo map...")
-                    self.raw_img = load_demo_map()
-                    self.map_path = None
-                elif os.path.exists(sys.argv[1]):
-                    print(f"\n→ Loading {sys.argv[1]}...")
-                    self.raw_img = load_map(sys.argv[1])
-                    self.map_path = sys.argv[1]
-                else:
-                    print(f"\n✗ File not found: {sys.argv[1]}")
-                    sys.exit(1)
-            else:
-                print("\n✗ No file specified. Use:")
-                print("  python map_cleaner_matplotlib.py <map.yaml|map.pgm>")
-                print("  python map_cleaner_matplotlib.py --demo")
-                sys.exit(1)
-        else:
-            self.raw_img = load_map(filepath)
-            self.map_path = filepath
+        filepath = self.resolve_filepath(filepath)
+        if filepath is None or not os.path.exists(filepath):
+            print(f"\n✗ Map file not found: {filepath}")
+            print("  Example usage: python3 map_cleaner_matplotlib.py track7th")
+            print("                 python3 map_cleaner_matplotlib.py assets/maps/track7th/track7th.yaml")
+            sys.exit(1)
+
+        self.raw_img = load_map(filepath)
+        self.map_path = filepath
         
         if self.raw_img is None:
             print("✗ Failed to load map")
@@ -402,9 +418,8 @@ class MapCleanerApp:
         plt.show()
     
     def save_map_files(self, clean_img):
-        """Rename original files to have _raw and save cleaned files as normal names."""
+        """Save clean map as <base_name>.pgm/yaml AND <base_name>_waypoint_gen.pgm/yaml, preserving _raw files."""
         if not self.map_path:
-            # If no input map (demo mode), save in current directory
             save_pgm('map.pgm', clean_img)
             cv2.imwrite('map.png', clean_img)
             print("✓ Saved demo map to map.pgm and map.png")
@@ -413,96 +428,91 @@ class MapCleanerApp:
         import shutil
         input_path = Path(self.map_path)
         input_dir = input_path.parent
+        
+        # Normalize clean base map name (e.g. track7th_raw -> track7th)
         base_name = input_path.stem
+        for suffix in ['_waypoint_gen', '_waypoint', '_raceline', '_raw']:
+            if base_name.endswith(suffix):
+                base_name = base_name[:-len(suffix)]
 
+        raw_yaml_path = input_dir / f"{base_name}_raw.yaml"
+        raw_pgm_dest = input_dir / f"{base_name}_raw.pgm"
+        
         yaml_path = input_dir / f"{base_name}.yaml"
-        # Determine raw PGM path
-        raw_pgm_path = input_dir / f"{base_name}.pgm"
+        src_yaml = raw_yaml_path if raw_yaml_path.exists() else yaml_path
         yaml_data = {}
         has_yaml = False
-
-        if yaml_path.exists():
+        if src_yaml.exists():
             has_yaml = True
             try:
-                with open(yaml_path, 'r') as f:
+                with open(src_yaml, 'r') as f:
                     yaml_data = yaml.safe_load(f)
-                    image_val = yaml_data.get('image', '')
-                    if image_val:
-                        if os.path.isabs(image_val):
-                            raw_pgm_path = Path(image_val)
-                        else:
-                            raw_pgm_path = input_dir / image_val
             except Exception as e:
                 print(f"⚠ Failed to read yaml configuration: {e}")
 
-        raw_pgm_path = raw_pgm_path.resolve()
-        raw_yaml_path = input_dir / f"{base_name}_raw.yaml"
-        raw_pgm_dest = input_dir / f"{base_name}_raw.pgm"
-
-        # 1. Rename original PGM to have _raw
-        if raw_pgm_path.exists():
+        # 1. Preserve original raw PGM & YAML
+        if not raw_pgm_dest.exists() and input_path.exists():
             try:
-                shutil.move(str(raw_pgm_path), str(raw_pgm_dest))
-                print(f"✓ Renamed original PGM: {raw_pgm_path.name} → {raw_pgm_dest.name}")
+                shutil.copy(str(input_path), str(raw_pgm_dest))
+                print(f"✓ Preserved raw PGM: {raw_pgm_dest.name}")
             except Exception as e:
-                print(f"✗ Failed to rename original PGM: {e}")
-        else:
-            print(f"⚠ Original PGM not found at {raw_pgm_path}")
+                print(f"⚠ Could not preserve raw PGM: {e}")
 
-        # 2. Rename/save original YAML to have _raw and update image key
-        if has_yaml:
+        if has_yaml and not raw_yaml_path.exists():
             try:
-                # Update image reference to point to _raw PGM
-                if 'image' in yaml_data:
-                    orig_image = yaml_data['image']
-                    if os.path.isabs(orig_image):
-                        yaml_data['image'] = str(raw_pgm_dest)
-                    else:
-                        yaml_data['image'] = raw_pgm_dest.name
-                
+                raw_yaml_data = dict(yaml_data)
+                raw_yaml_data['image'] = raw_pgm_dest.name
                 with open(raw_yaml_path, 'w') as f:
-                    yaml.safe_dump(yaml_data, f, default_flow_style=False)
+                    yaml.safe_dump(raw_yaml_data, f, default_flow_style=False)
                 print(f"✓ Created raw YAML: {raw_yaml_path.name}")
-                
-                # Delete original yaml to avoid conflicts before writing the clean one
-                if yaml_path.exists():
-                    yaml_path.unlink()
             except Exception as e:
-                print(f"✗ Failed to create raw YAML: {e}")
+                print(f"⚠ Could not create raw YAML: {e}")
 
-        # 3. Save clean PGM to normal name
+        # 2. Save clean PGM & YAML to base name (<map_name>.pgm / <map_name>.yaml)
         clean_pgm_path = input_dir / f"{base_name}.pgm"
+        clean_yaml_path = input_dir / f"{base_name}.yaml"
         try:
             save_pgm(str(clean_pgm_path), clean_img)
-            print(f"✓ Saved cleaned PGM: {clean_pgm_path.name}")
+            print(f"✓ Saved cleaned base PGM: {clean_pgm_path.name}")
         except Exception as e:
-            print(f"✗ Failed to save cleaned PGM: {e}")
+            print(f"✗ Failed to save cleaned base PGM: {e}")
 
-        # 4. Save clean YAML to normal name pointing to normal PGM
         if has_yaml:
             try:
-                if 'image' in yaml_data:
-                    if os.path.isabs(yaml_data['image']):
-                        yaml_data['image'] = str(clean_pgm_path)
-                    else:
-                        yaml_data['image'] = clean_pgm_path.name
-                
-                with open(yaml_path, 'w') as f:
-                    yaml.safe_dump(yaml_data, f, default_flow_style=False)
-                print(f"✓ Created cleaned YAML: {yaml_path.name}")
+                clean_yaml_data = dict(yaml_data)
+                clean_yaml_data['image'] = clean_pgm_path.name
+                with open(clean_yaml_path, 'w') as f:
+                    yaml.safe_dump(clean_yaml_data, f, default_flow_style=False)
+                print(f"✓ Created cleaned base YAML: {clean_yaml_path.name}")
             except Exception as e:
-                print(f"✗ Failed to save cleaned YAML: {e}")
+                print(f"✗ Failed to save cleaned base YAML: {e}")
 
-        # 5. Save preview PNG as normal name
+        # 3. Save clean PGM & YAML to waypoint_gen name (<map_name>_waypoint_gen.pgm / .yaml)
+        wp_pgm_path = input_dir / f"{base_name}_waypoint_gen.pgm"
+        wp_yaml_path = input_dir / f"{base_name}_waypoint_gen.yaml"
+        try:
+            save_pgm(str(wp_pgm_path), clean_img)
+            print(f"✓ Saved waypoint generator PGM: {wp_pgm_path.name}")
+        except Exception as e:
+            print(f"✗ Failed to save waypoint generator PGM: {e}")
+
+        if has_yaml:
+            try:
+                wp_yaml_data = dict(yaml_data)
+                wp_yaml_data['image'] = wp_pgm_path.name
+                with open(wp_yaml_path, 'w') as f:
+                    yaml.safe_dump(wp_yaml_data, f, default_flow_style=False)
+                print(f"✓ Created waypoint generator YAML: {wp_yaml_path.name}")
+            except Exception as e:
+                print(f"✗ Failed to save waypoint generator YAML: {e}")
+
+        # 4. Save preview PNG
         clean_png_path = input_dir / f"{base_name}.png"
         try:
-            success = cv2.imwrite(str(clean_png_path), clean_img)
-            if success:
-                print(f"✓ Saved preview PNG: {clean_png_path.name}")
-            else:
-                print(f"⚠ Failed to save preview PNG")
+            cv2.imwrite(str(clean_png_path), clean_img)
+            print(f"✓ Saved preview PNG: {clean_png_path.name}")
         except Exception as e:
-            print(f"✗ Failed to save preview PNG: {e}")
+            print(f"⚠ Failed to save preview PNG: {e}")
 
     def save_interactive(self):
         """Save cleaned image when user presses 'S' - auto-saves to file and closes window."""

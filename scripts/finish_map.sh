@@ -61,6 +61,24 @@ else
     ros2 run nav2_map_server map_saver_cli -f "${TARGET_DIR}/${MAP_NAME}"
 fi
 
+# 4. Initializing map file sets: base (<map_name>), raw (<map_name>_raw), and waypoint generator (<map_name>_waypoint_gen)
+if [ -f "${TARGET_DIR}/${MAP_NAME}.yaml" ] && [ -f "${TARGET_DIR}/${MAP_NAME}.pgm" ]; then
+    echo "4. Creating _raw and _waypoint_gen map file sets..."
+    
+    # Fix base YAML image path to be simple relative filename
+    sed -i "s|image: .*|image: ${MAP_NAME}.pgm|" "${TARGET_DIR}/${MAP_NAME}.yaml" 2>/dev/null || true
+    
+    # Generate _raw map files
+    cp -f "${TARGET_DIR}/${MAP_NAME}.pgm" "${TARGET_DIR}/${MAP_NAME}_raw.pgm"
+    cp -f "${TARGET_DIR}/${MAP_NAME}.yaml" "${TARGET_DIR}/${MAP_NAME}_raw.yaml"
+    sed -i "s|image: .*|image: ${MAP_NAME}_raw.pgm|" "${TARGET_DIR}/${MAP_NAME}_raw.yaml" 2>/dev/null || true
+
+    # Generate _waypoint_gen map files
+    cp -f "${TARGET_DIR}/${MAP_NAME}.pgm" "${TARGET_DIR}/${MAP_NAME}_waypoint_gen.pgm"
+    cp -f "${TARGET_DIR}/${MAP_NAME}.yaml" "${TARGET_DIR}/${MAP_NAME}_waypoint_gen.yaml"
+    sed -i "s|image: .*|image: ${MAP_NAME}_waypoint_gen.pgm|" "${TARGET_DIR}/${MAP_NAME}_waypoint_gen.yaml" 2>/dev/null || true
+fi
+
 echo ""
 echo "=================================================="
 echo " Map files successfully generated in: ${TARGET_DIR}"
