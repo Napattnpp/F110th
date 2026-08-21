@@ -85,6 +85,7 @@ def generate_launch_description():
             output='screen',
             parameters=[
                 global_planner_params,
+                PathJoinSubstitution([pkg_bringup, 'maps', LaunchConfiguration('map_name'), 'global_planner_params.yaml']),
                 {'map_editor': False},
                 {'create_map': True},
                 {'map_name': LaunchConfiguration('map_name')}
@@ -202,6 +203,7 @@ def generate_launch_description():
             output='screen',
             parameters=[
                 global_planner_params,
+                PathJoinSubstitution([pkg_bringup, 'maps', LaunchConfiguration('map_name'), 'global_planner_params.yaml']),
                 {'map_editor': True},
                 {'create_map': False},
                 {'map_name': LaunchConfiguration('map_name')}

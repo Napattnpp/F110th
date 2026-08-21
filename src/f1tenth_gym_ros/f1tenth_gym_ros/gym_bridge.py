@@ -255,9 +255,16 @@ class GymBridge(Node):
             loop_counter=loop_counter,
             compute_frenet_frame=compute_frenet,
         )
+        self.declare_parameter('enable_steer_delay', False)  # Set False for ideal sim by default; set True to enable physical delay
+        self.declare_parameter('steer_delay_steps', 6)  # 6 steps * 0.01s = 60ms physical steering latency when enabled
+
+        enable_steer_delay = self.get_parameter('enable_steer_delay').value
+        steer_delay_steps = self.get_parameter('steer_delay_steps').value if enable_steer_delay else 0
+
         control_cfg = ControlConfig(
             longitudinal_mode=LongitudinalActionType.SPEED,
             steering_mode=SteerActionType.STEERING_ANGLE,
+            steer_delay_steps=steer_delay_steps,
         )
         observation_cfg = ObservationConfig(type=ObservationType.DIRECT)
         reset_cfg = ResetConfig(strategy=ResetStrategy.MAP_RANDOM_STATIC)

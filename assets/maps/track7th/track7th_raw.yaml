@@ -1,6 +1,9 @@
+free_thresh: 0.196
 image: track7th_raw.pgm
-resolution: 0.050000
-origin: [-10.441371, -9.642390, 0.0]
 negate: 0
 occupied_thresh: 0.65
-free_thresh: 0.196
+origin:
+- -10.441371
+- -9.64239
+- 0.0
+resolution: 0.05

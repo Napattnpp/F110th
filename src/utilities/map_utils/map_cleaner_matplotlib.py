@@ -487,30 +487,35 @@ class MapCleanerApp:
             except Exception as e:
                 print(f"✗ Failed to save cleaned base YAML: {e}")
 
-        # 3. Save clean PGM & YAML to waypoint_gen name (<map_name>_waypoint_gen.pgm / .yaml)
+        # 3. Save clean PGM, PNG & YAML to waypoint_gen name (<map_name>_waypoint_gen.pgm / .png / .yaml)
+        # Convert clean_img to 100% pure 2-colour binary image (0 = wall, 255 = track) with no grey (128)
+        binary_2color = np.where(clean_img < 210, 0, 255).astype(np.uint8)
         wp_pgm_path = input_dir / f"{base_name}_waypoint_gen.pgm"
+        wp_png_path = input_dir / f"{base_name}_waypoint_gen.png"
         wp_yaml_path = input_dir / f"{base_name}_waypoint_gen.yaml"
+        
         try:
-            save_pgm(str(wp_pgm_path), clean_img)
-            print(f"✓ Saved waypoint generator PGM: {wp_pgm_path.name}")
+            save_pgm(str(wp_pgm_path), binary_2color)
+            cv2.imwrite(str(wp_png_path), binary_2color)
+            print(f"✓ Saved 2-colour waypoint generator PGM & PNG: {wp_pgm_path.name}, {wp_png_path.name}")
         except Exception as e:
-            print(f"✗ Failed to save waypoint generator PGM: {e}")
+            print(f"✗ Failed to save waypoint generator PGM/PNG: {e}")
 
         if has_yaml:
             try:
                 wp_yaml_data = dict(yaml_data)
-                wp_yaml_data['image'] = wp_pgm_path.name
+                wp_yaml_data['image'] = wp_png_path.name
                 with open(wp_yaml_path, 'w') as f:
                     yaml.safe_dump(wp_yaml_data, f, default_flow_style=False)
                 print(f"✓ Created waypoint generator YAML: {wp_yaml_path.name}")
             except Exception as e:
                 print(f"✗ Failed to save waypoint generator YAML: {e}")
 
-        # 4. Save preview PNG
+        # 4. Save base preview PNG (<map_name>.png)
         clean_png_path = input_dir / f"{base_name}.png"
         try:
             cv2.imwrite(str(clean_png_path), clean_img)
-            print(f"✓ Saved preview PNG: {clean_png_path.name}")
+            print(f"✓ Saved base preview PNG: {clean_png_path.name}")
         except Exception as e:
             print(f"⚠ Failed to save preview PNG: {e}")
 

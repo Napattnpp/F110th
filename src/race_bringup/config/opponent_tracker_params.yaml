@@ -29,7 +29,7 @@ perception:
 fake_obstacle_publisher:
   ros__parameters:
     obs_mode: "dynamic_opponent" # "dynamic_opponent", "static_ahead", or "none"
-    speed_scaler: 0.5 # for dynamic opponent
+    speed_scaler: 0.35 # for dynamic opponent (lowered to 0.35 so opponent drives slower)
     constant_speed: true
     trajectory: "min_curv"
     start_s: 0.0

@@ -1,8 +1,17 @@
-import cv2
-import csv
-import numpy as np
-from pathlib import Path
+# 1. Standard Library & System Setup
 import os
+import sys
+import csv
+from pathlib import Path
+
+# Add nested sub-packages to Python path before importing them
+_opt_dir = Path(__file__).resolve().parent / "global_racetrajectory_optimization"
+if _opt_dir.exists() and str(_opt_dir) not in sys.path:
+    sys.path.insert(0, str(_opt_dir))
+
+# 2. Third-Party Libraries
+import cv2
+import numpy as np
 import matplotlib
 if 'DISPLAY' not in os.environ or not os.environ['DISPLAY'] or os.environ.get('MPLBACKEND') == 'Agg':
     matplotlib.use('Agg')
@@ -16,9 +25,18 @@ from scipy.signal import savgol_filter
 from skimage.segmentation import watershed
 from ament_index_python.packages import get_package_share_directory
 
+# NumPy 1.24+ backward compatibility monkey-patch for legacy trajectory_planning_helpers
+if not hasattr(np, 'int'):
+    np.int = int
+if not hasattr(np, 'float'):
+    np.float = float
+if not hasattr(np, 'bool'):
+    np.bool = bool
+
 import trajectory_planning_helpers as tph
 from global_racetrajectory_optimization import helper_funcs_glob
 
+# 3. ROS 2 Messages
 from geometry_msgs.msg import Point
 from f110_msgs.msg import Wpnt, WpntArray
 from visualization_msgs.msg import Marker, MarkerArray

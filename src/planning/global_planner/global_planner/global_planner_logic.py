@@ -1,10 +1,20 @@
+# 1. Standard Library & System Setup
 import os
 import sys
-import cv2
 import copy
 import yaml
 import shutil
 import subprocess
+from pathlib import Path
+from typing import Tuple, Callable
+
+# Add nested sub-packages to Python path before importing them
+_opt_dir = Path(__file__).resolve().parent / "global_racetrajectory_optimization"
+if _opt_dir.exists() and str(_opt_dir) not in sys.path:
+    sys.path.insert(0, str(_opt_dir))
+
+# 2. Third-Party Libraries
+import cv2
 import numpy as np
 import matplotlib
 if 'DISPLAY' not in os.environ or not os.environ['DISPLAY'] or os.environ.get('MPLBACKEND') == 'Agg':
@@ -15,28 +25,35 @@ else:
     except ImportError:
         matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-from typing import Tuple, Callable
 from matplotlib.widgets import Button
-from pathlib import Path
+from scipy import interpolate, spatial
+from skimage.morphology import skeletonize
+from tf_transformations import euler_from_quaternion
 
+# NumPy 1.24+ backward compatibility monkey-patch for legacy trajectory_planning_helpers
+if not hasattr(np, 'int'):
+    np.int = int
+if not hasattr(np, 'float'):
+    np.float = float
+if not hasattr(np, 'bool'):
+    np.bool = bool
+
+# Monkeypatch to fix SciPy 1D vector dimension bug in trajectory_planning_helpers
+import trajectory_planning_helpers as tph
+import trajectory_planning_helpers.spline_approximation
+def _patched_dist_to_p(t_glob, path, p):
+    s = interpolate.splev(t_glob, path)
+    s_flat = np.array([np.atleast_1d(s[0])[0], np.atleast_1d(s[1])[0]])
+    return spatial.distance.euclidean(p, s_flat)
+trajectory_planning_helpers.spline_approximation.dist_to_p = _patched_dist_to_p
+
+# 3. ROS 2 Messages & Internal Sub-Modules
 from std_msgs.msg import Float32
 from f110_msgs.msg import WpntArray
 from nav_msgs.msg import OccupancyGrid
 from visualization_msgs.msg import MarkerArray
 from geometry_msgs.msg import Point, PoseStamped
 
-from skimage.morphology import skeletonize
-from tf_transformations import euler_from_quaternion
-
-import trajectory_planning_helpers as tph
-# --- Monkeypatch to fix scipy 1-D vector error ---
-from scipy import interpolate, spatial
-def patched_dist_to_p(t_glob, path, p):
-    s = interpolate.splev(t_glob, path)
-    s_flat = np.array([np.atleast_1d(s[0])[0], np.atleast_1d(s[1])[0]])
-    return spatial.distance.euclidean(p, s_flat)
-import trajectory_planning_helpers.spline_approximation
-trajectory_planning_helpers.spline_approximation.dist_to_p = patched_dist_to_p
 from .readwrite_global_waypoints import write_global_waypoints
 from global_racetrajectory_optimization import helper_funcs_glob
 from global_racetrajectory_optimization.trajectory_optimizer import trajectory_optimizer
@@ -522,10 +539,13 @@ class GlobalPlannerLogic:
 
         _, new_centerline_markers = write_centerline(new_cent_with_dist, sp_bool=True)
 
-        # to use iqp as new centerline, set trackname='map_centerline_2', otherwise use track_name='map_centerline'
-        # is a bit faster but cuts corner a bit more
+        # Use IQP raceline (map_centerline_2.csv) as reference for shortest path optimization
+        iqp_ref_path = os.path.join(self.map_dir, 'map_centerline_2.csv')
+        if not os.path.exists(iqp_ref_path):
+            iqp_ref_path = iqp_centerline_path
+
         global_trajectory_sp, bound_r_sp, bound_l_sp, est_t_sp = trajectory_optimizer(
-            input_path=self.input_path, track_name=iqp_centerline_path, curv_opt_type='shortest_path', safety_width=self.safety_width_sp, plot=(
+            input_path=self.input_path, track_name=iqp_ref_path, curv_opt_type='shortest_path', safety_width=self.safety_width_sp, plot=(
                 self.show_plots and not self.map_editor_mode))
 
         self.est_lap_time = Float32()  # variable which will be published and used in l1_param_optimizer

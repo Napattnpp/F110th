@@ -205,7 +205,7 @@ def launch_setup(context, *args, **kwargs):
             ])},
             {'use_sim_time': use_sim_time},
         ],
-        remappings=[('/robot_description', 'ego_robot_description')]
+        remappings=[('/robot_description', '/ego_robot_description')]
     )
     opp_robot_publisher = Node(
         package='robot_state_publisher',
@@ -218,7 +218,7 @@ def launch_setup(context, *args, **kwargs):
             ])},
             {'use_sim_time': use_sim_time},
         ],
-        remappings=[('/robot_description', 'opp_robot_description')]
+        remappings=[('/robot_description', '/opp_robot_description')]
     )
 
     # finalize

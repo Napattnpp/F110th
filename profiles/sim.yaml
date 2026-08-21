@@ -5,6 +5,6 @@ slam_method: "cartographer"
 localize: true
 localize_method: "amcl"
 map_name: "hangar_1905_v0"
-ctrl_algo: "PP"
+ctrl_algo: "MAP"
 LU_table: "NUC2_hangar_pacejka"
 overtake_mode: "spliner"

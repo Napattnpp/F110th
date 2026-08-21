@@ -1,4 +1,4 @@
-mu: 1.0489  # surface friction coefficient
+mu: 0.75  # surface friction coefficient (slippery competition floor)
 C_Sf: 4.718 # Cornering stiffness coefficient, front
 C_Sr: 5.4562 # Cornering stiffness coefficient, rear
 lf: 0.15875 # Distance from center of gravity to front axle
@@ -10,9 +10,9 @@ s_min: -0.4189 # Minimum steering angle constraint
 s_max: 0.4189 # Maximum steering angle constraint
 sv_min: -3.2 # Minimum steering velocity constraint
 sv_max: 3.2 # Maximum steering velocity constraint
-v_switch: 7.319 # Switching velocity (velocity at which the acceleration is no longer able to create wheel spin)
+v_switch: 7.319 # Switching velocity
 a_max: 9.51 # Maximum longitudinal acceleration
 v_min: -5.0 # Minimum longitudinal velocity
-v_max: 20.0 # Maximum longitudinal velocity
-width: 0.2032 # width of the vehicle in meters
-length: 0.58 # length of the vehicle in meters
+v_max: 11.0 # Maximum longitudinal velocity
+width: 0.30 # width of the vehicle in meters (including body shell)
+length: 0.535 # length of the vehicle in meters

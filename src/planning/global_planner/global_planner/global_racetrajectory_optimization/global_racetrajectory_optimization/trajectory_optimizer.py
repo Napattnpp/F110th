@@ -189,12 +189,16 @@ def trajectory_optimizer(input_path: str,
         if not os.path.exists(ggv_p):
             ggv_p = os.path.join(file_paths["inputs"], "veh_dyn_info", pars["ggv_file"])
         if not os.path.exists(ggv_p):
+            ggv_p = os.path.join(file_paths["inputs"], "global_planner", "veh_dyn_info", pars["ggv_file"])
+        if not os.path.exists(ggv_p):
             ggv_p = os.path.join(file_paths["module"], "inputs", "veh_dyn_info", pars["ggv_file"])
         file_paths["ggv_file"] = ggv_p
 
         ax_p = os.path.join(file_paths["inputs"], pars["ax_max_machines_file"])
         if not os.path.exists(ax_p):
             ax_p = os.path.join(file_paths["inputs"], "veh_dyn_info", pars["ax_max_machines_file"])
+        if not os.path.exists(ax_p):
+            ax_p = os.path.join(file_paths["inputs"], "global_planner", "veh_dyn_info", pars["ax_max_machines_file"])
         if not os.path.exists(ax_p):
             ax_p = os.path.join(file_paths["module"], "inputs", "veh_dyn_info", pars["ax_max_machines_file"])
         file_paths["ax_max_machines_file"] = ax_p

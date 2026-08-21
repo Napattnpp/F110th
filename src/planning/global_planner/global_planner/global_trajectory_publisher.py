@@ -137,6 +137,19 @@ class GlobalRepublisher(Node):
             wpnts_to_pub = self.glb_wpnts
             markers_to_pub = self.glb_markers
 
+        # Ensure all markers have frame_id set to 'map' and bright visible colors
+        for ma in [markers_to_pub, self.glb_sp_markers, self.centerline_markers, self.track_bounds]:
+            if ma is not None and hasattr(ma, 'markers'):
+                for m in ma.markers:
+                    if not m.header.frame_id:
+                        m.header.frame_id = 'map'
+                    # Force bright non-black colors so markers pop out on dark maps
+                    if m.color.r == 0.0 and m.color.g == 0.0 and m.color.b == 0.0:
+                        m.color.r = 0.0
+                        m.color.g = 0.85
+                        m.color.b = 1.0
+                        m.color.a = 1.0
+
         # Publish selected global waypoints
         if wpnts_to_pub is not None:
             self.glb_wpnts_pub.publish(wpnts_to_pub)

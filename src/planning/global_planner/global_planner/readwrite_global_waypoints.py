@@ -126,6 +126,11 @@ def read_global_waypoints(map_dir: str) -> Tuple[
     trackbounds_markers = MarkerArray()
     set_message_fields(trackbounds_markers, d['trackbounds_markers'])
 
+    for ma in [centerline_markers, global_traj_markers_iqp, global_traj_markers_sp, trackbounds_markers]:
+        for m in ma.markers:
+            if not m.header.frame_id:
+                m.header.frame_id = 'map'
+
     return map_info_str, est_lap_time, \
         centerline_markers, centerline_waypoints, \
         global_traj_markers_iqp, global_traj_wpnts_iqp, \

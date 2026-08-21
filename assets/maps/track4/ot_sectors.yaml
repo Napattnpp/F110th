@@ -6,5 +6,5 @@ ot_interpolator:
     ot_sector_begin: 0.5
     Overtaking_sector0:
       start: 0
-      end: 277
+      end: 276
       ot_flag: true

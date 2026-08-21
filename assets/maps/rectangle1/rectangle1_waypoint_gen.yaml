@@ -1,0 +1,9 @@
+free_thresh: 0.196
+image: rectangle1_waypoint_gen.png
+negate: 0
+occupied_thresh: 0.65
+origin:
+- -2.576855
+- -2.486702
+- 0.0
+resolution: 0.05

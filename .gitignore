@@ -34,6 +34,7 @@ data/
 
 # Python Virtual Environments
 .venv/
+.venv_mac/
 venv/
 env/
 dist/
@@ -45,8 +46,8 @@ rosbag2_*/
 *.mcap
 *_bag*/
 
-# Documentation folder
-docs/
+# Documentation folder (tracked in git)
+# docs/
 
 # Ignore assets contents but keep the directories
 # assets/maps/*

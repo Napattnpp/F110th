@@ -1,5 +1,5 @@
 free_thresh: 0.196
-image: track7th_waypoint_gen.pgm
+image: track7th_waypoint_gen.png
 negate: 0
 occupied_thresh: 0.65
 origin:

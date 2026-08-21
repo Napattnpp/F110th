@@ -95,6 +95,18 @@ class MapCleaner:
         if basename_fallback.exists():
             return basename_fallback
 
+        # Check for _raw.pgm / _raw.png in map folder
+        map_stem = yaml_path.stem.replace('_raw', '')
+        for candidate_name in [f"{map_stem}_raw.pgm", f"{map_stem}_raw.png", f"{map_stem}.pgm", f"{map_stem}.png"]:
+            cand_path = yaml_path.parent / candidate_name
+            if cand_path.exists():
+                return cand_path
+
+        # Any PGM or PNG in the directory
+        for ext in ['*.pgm', '*.png']:
+            for cand_path in yaml_path.parent.glob(ext):
+                return cand_path
+
         raise FileNotFoundError(f"Map image from YAML not found: {image_value}")
 
     @staticmethod

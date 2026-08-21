@@ -1,6 +1,9 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
+try:
+    from mpl_toolkits.mplot3d import Axes3D
+except Exception:
+    pass
 import trajectory_planning_helpers
 
 

@@ -7,7 +7,15 @@ package_name = 'global_planner'
 setup(
     name=package_name,
     version='0.0.0',
-    packages=find_packages(exclude=['test']),
+    packages=[
+        'global_planner',
+        'global_planner.global_racetrajectory_optimization',
+        'global_planner.global_racetrajectory_optimization.global_racetrajectory_optimization',
+        'global_planner.global_racetrajectory_optimization.global_racetrajectory_optimization.helper_funcs_glob',
+        'global_planner.global_racetrajectory_optimization.global_racetrajectory_optimization.helper_funcs_glob.src',
+        'global_planner.global_racetrajectory_optimization.global_racetrajectory_optimization.opt_mintime_traj',
+        'global_planner.global_racetrajectory_optimization.global_racetrajectory_optimization.opt_mintime_traj.src',
+    ],
     data_files=[
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
