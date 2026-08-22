@@ -6,20 +6,22 @@
 # ==============================================================================
 
 if [ -z "$1" ]; then
-    echo "Usage: ./finish_map.sh <map_name>"
+    echo "Usage: ./finish_map.sh <map_name> [subfolder=competition]"
     exit 1
 fi
 
 MAP_NAME=$1
+SUBFOLDER="${2:-competition}"
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Try to find the workspace root (where 'src' or 'assets' lives)
 PROJECT_ROOT="${SCRIPT_DIR}"
 while [ ! -d "${PROJECT_ROOT}/src" ] && [ "${PROJECT_ROOT}" != "/" ]; do
     PROJECT_ROOT="$(dirname "${PROJECT_ROOT}")"
 done
-TARGET_DIR="${PROJECT_ROOT}/assets/maps/${MAP_NAME}"
+TARGET_DIR="${PROJECT_ROOT}/assets/maps/${SUBFOLDER}/${MAP_NAME}"
 
-echo "Creating map directory in assets: ${TARGET_DIR}"
+echo "Creating map directory in assets/maps/${SUBFOLDER}: ${TARGET_DIR}"
 mkdir -p "${TARGET_DIR}"
 
 # Check active ROS 2 services to detect the SLAM system

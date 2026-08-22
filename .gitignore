@@ -56,3 +56,6 @@ assets/frames/*
 !assets/frames/.gitkeep
 assets/bags/*
 !assets/bags/.gitkeep
+assets/maps_visualization/*
+!assets/maps_visualization/.gitkeep
+!assets/maps_visualization/**/.gitkeep

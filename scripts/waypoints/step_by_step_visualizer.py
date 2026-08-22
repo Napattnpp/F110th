@@ -21,15 +21,15 @@ sys.path.insert(0, str(repo_root / "src" / "planning" / "global_planner"))
 
 from global_planner.global_planner_utils import extract_centerline, smooth_centerline
 
-map_dir = repo_root / "assets" / "maps" / "test" / "JFR_racingv6"
-out_dir = repo_root / "assets" / "maps_visualization" / "debug_steps_JFR_racingv6"
+map_dir = repo_root / "assets" / "maps" / "test" / "f"
+out_dir = repo_root / "assets" / "maps_visualization" / "debug_steps_f"
 os.makedirs(out_dir, exist_ok=True)
 
-yaml_path = map_dir / "JFR_racingv6.yaml"
+yaml_path = map_dir / "f.yaml"
 with open(yaml_path, 'r') as f:
     ydata = yaml.safe_load(f)
 
-img_name = ydata.get('image', 'JFR_racingv6.png')
+img_name = ydata.get('image', 'f.png')
 resolution = float(ydata.get('resolution', 0.05))
 origin = ydata.get('origin', [0, 0, 0])
 free_thresh = float(ydata.get('free_thresh', 0.196))
@@ -102,4 +102,4 @@ plt.tight_layout()
 fig.savefig(out_dir / "step4_smoothed_centerline.png", dpi=200, bbox_inches='tight')
 plt.close(fig)
 
-print("[SUCCESS] All step-by-step images generated in assets/maps_visualization/debug_steps_JFR_racingv6/")
+print(f"[SUCCESS] All step-by-step images generated in {out_dir}/")
