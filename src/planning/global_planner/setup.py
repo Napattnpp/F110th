@@ -32,7 +32,8 @@ setup(
     entry_points={
         'console_scripts': [
             'global_planner = global_planner.global_planner_node:main',
-            'global_trajectory_publisher = global_planner.global_trajectory_publisher:main'
+            'global_trajectory_publisher = global_planner.global_trajectory_publisher:main',
+            'manual_waypoint_logger = global_planner.manual_waypoint_logger:main'
         ],
     },
 )
