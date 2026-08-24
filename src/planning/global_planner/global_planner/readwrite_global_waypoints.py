@@ -3,6 +3,7 @@ Shared functions to read and write map information (global waypoints)
 '''
 import os
 import json
+from pathlib import Path
 from rosidl_runtime_py.convert import message_to_ordereddict
 from rosidl_runtime_py.set_message import set_message_fields
 
@@ -93,6 +94,16 @@ def read_global_waypoints(map_dir: str) -> Tuple[
         - from topic /trackbounds/markers: MarkerArray
     '''
     path = os.path.join(map_dir, 'global_waypoints.json')
+    if not os.path.exists(path):
+        base_name = os.path.basename(map_dir.rstrip('/'))
+        maps_root = Path(map_dir)
+        while maps_root.name != 'maps' and maps_root != maps_root.parent:
+            maps_root = maps_root.parent
+        if maps_root.name == 'maps' and maps_root.exists():
+            for root, dirs, files in os.walk(maps_root):
+                if os.path.basename(root) == base_name and os.path.exists(os.path.join(root, 'global_waypoints.json')):
+                    path = os.path.join(root, 'global_waypoints.json')
+                    break
 
     print(f"[INFO] READ_GLOBAL_WAYPOINTS: Reading global waypoints from {path}")
     # Deserialize JSON and Reconstruct the maps elements

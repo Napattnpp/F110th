@@ -477,10 +477,19 @@ class GlobalPlannerLogic:
             )
             self.loginfo('mincurv optimization succeeded.')
         except (RuntimeError, ValueError) as e:
-            import traceback
-            traceback.print_exc()
-            self.logerror(f"mincurv optimization failed for safety_width={self.safety_width}m: {e}")
-            return (False, "")
+            self.logwarn(f"mincurv optimization failed for safety_width={self.safety_width}m ({e}). Attempting shortest_path fallback...")
+            try:
+                global_trajectory_iqp, bound_r_iqp, bound_l_iqp, est_t_iqp = trajectory_optimizer(
+                    input_path=self.input_path,
+                    track_name=iqp_centerline_path,
+                    curv_opt_type='shortest_path',
+                    safety_width=self.safety_width,
+                    plot=(self.show_plots and not self.map_editor_mode)
+                )
+                self.loginfo('shortest_path fallback optimization succeeded.')
+            except (RuntimeError, ValueError) as e2:
+                self.logerror(f"Both mincurv and shortest_path optimization failed for safety_width={self.safety_width}m: {e2}")
+                return (False, "")
 
         self.map_info_str += f'IQP estimated lap time: {round(est_t_iqp, 4)}s; '
         self.map_info_str += f'IQP maximum speed: {round(np.amax(global_trajectory_iqp[:, 5]), 4)}m/s; '

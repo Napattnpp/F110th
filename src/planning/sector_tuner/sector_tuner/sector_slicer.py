@@ -101,10 +101,20 @@ class SectorSlicer(Node):
         x = np.array(x)
         y = np.array(y)
 
+        def draw_bounds(ax):
+            if self.track_bounds is not None and hasattr(self.track_bounds, 'markers'):
+                half = len(self.track_bounds.markers) // 2
+                r_pts = [m.pose.position for m in self.track_bounds.markers[:half]]
+                l_pts = [m.pose.position for m in self.track_bounds.markers[half:]]
+                if r_pts:
+                    ax.plot([p.x for p in r_pts], [p.y for p in r_pts], 'g-', linewidth=0.4)
+                if l_pts:
+                    ax.plot([p.x for p in l_pts], [p.y for p in l_pts], 'g-', linewidth=0.4)
+
         # plot raceline without sector points
         fig, (ax1, axslider, axselect, axfinish) = plt.subplots(4, 1, gridspec_kw={'height_ratios': [5, 1, 1, 1]})
         ax1.plot(x, y, "r-", linewidth=0.7)
-        ax1.plot([mrk.pose.position.x for mrk in self.track_bounds.markers], [mrk.pose.position.y for mrk in self.track_bounds.markers], 'g-', linewidth=0.4)
+        draw_bounds(ax1)
         ax1.grid()
         ax1.set_aspect("equal", "datalim")
         ax1.set_xlabel("east in m")
@@ -142,7 +152,7 @@ class SectorSlicer(Node):
         def update_map(x, y, cur_s):
             ax1.cla()
             ax1.plot(x, y, "r-", linewidth=0.7)
-            ax1.plot([mrk.pose.position.x for mrk in self.track_bounds.markers], [mrk.pose.position.y for mrk in self.track_bounds.markers], 'g-', linewidth=0.4)
+            draw_bounds(ax1)
             ax1.grid()
             ax1.set_aspect("equal", "datalim")
             ax1.set_xlabel("east in m")

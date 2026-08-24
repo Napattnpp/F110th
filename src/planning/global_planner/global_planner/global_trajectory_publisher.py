@@ -22,6 +22,17 @@ class GlobalRepublisher(Node):
         self.publish_markers = self.get_parameter('publish_markers').get_parameter_value().bool_value
         
 
+        # Initialize all attributes to None to avoid AttributeError during callbacks/loops
+        self.glb_wpnts = None
+        self.glb_markers = None
+        self.glb_sp_wpnts = None
+        self.glb_sp_markers = None
+        self.centerline_wpnts = None
+        self.centerline_markers = None
+        self.track_bounds = None
+        self.map_infos = None
+        self.est_lap_time = None
+
         #Declare local ros params
         if not self.has_parameter('track_length'):
             self.declare_parameter(name='track_length', value=6.9)
@@ -37,8 +48,6 @@ class GlobalRepublisher(Node):
         self.publish_shortest_path = self.get_parameter('publish_shortest_path').get_parameter_value().bool_value
         if self.publish_shortest_path:
             self.get_logger().info("Global Republisher: Publishing shortest path waypoints and markers")
-            self.glb_sp_markers = None
-            self.glb_sp_wpnts = None
             self.glb_sp_wpnts_pub = self.create_publisher(WpntArray, '/global_waypoints/shortest_path', 10)
             if self.publish_markers:
                 self.glb_sp_markers_pub = self.create_publisher(MarkerArray, '/global_waypoints/shortest_path/markers', 10)
@@ -155,6 +164,8 @@ class GlobalRepublisher(Node):
             self.glb_wpnts_pub.publish(wpnts_to_pub)
         if self.publish_markers and markers_to_pub is not None and hasattr(self, 'glb_markers_pub'):
             self.glb_markers_pub.publish(markers_to_pub)
+        if self.publish_markers and self.track_bounds is not None and hasattr(self, 'vis_track_bnds'):
+            self.vis_track_bnds.publish(self.track_bounds)
         
         # Publish shortest path
         if self.publish_shortest_path:

@@ -40,6 +40,23 @@ class GlobalPlanner(Node):
 
         # get map source path
         self.map_dir = get_data_path('maps/' + self.map_name)
+
+        # Check for per-track global_planner_params.yaml inside self.map_dir
+        track_params_file = os.path.join(self.map_dir, 'global_planner_params.yaml')
+        if os.path.exists(track_params_file):
+            try:
+                import yaml
+                with open(track_params_file, 'r') as f:
+                    pdata = yaml.safe_load(f)
+                    ros_p = pdata.get('global_planner', {}).get('ros__parameters', {})
+                    if 'safety_width' in ros_p:
+                        self.safety_width = float(ros_p['safety_width'])
+                    if 'safety_width_sp' in ros_p:
+                        self.safety_width_sp = float(ros_p['safety_width_sp'])
+                    self.get_logger().info(f"Loaded per-map config from {track_params_file}: safety_width={self.safety_width}m, safety_width_sp={self.safety_width_sp}m")
+            except Exception as e:
+                self.get_logger().warn(f"Failed to parse per-map params: {e}")
+
         # use watershed algorithm to find the centerline
         self.watershed = True
 
@@ -112,6 +129,17 @@ class GlobalPlanner(Node):
         self.logic.update_pose(data)
 
     def global_plan_callback(self):
+        # In map_editor offline mode, if global_waypoints.json already exists, skip re-optimization
+        # to preserve user's high-quality post-processed / repaired racelines unless recompute_trajectory is set.
+        recompute = self.get_parameter_or('recompute_trajectory', rclpy.parameter.Parameter('recompute_trajectory', rclpy.Parameter.Type.BOOL, False)).value
+        waypoints_file = os.path.join(self.map_dir, 'global_waypoints.json')
+        if self.map_editor and not self.create_map and os.path.exists(waypoints_file) and not recompute:
+            self.get_logger().info(f"Existing global_waypoints.json found in {self.map_dir}. Preserving existing raceline for sector tuning.")
+            self.read_and_publish(self.map_editor, self.create_map)
+            self.get_logger().info("Killing global planner...")
+            import sys
+            sys.exit(0)
+
         # Map name may be renamed from parameter if the map name already exists.
         # So look for the one returned by the function
         try:

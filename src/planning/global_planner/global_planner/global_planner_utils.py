@@ -54,11 +54,20 @@ def get_data_path(subpath=''):
             if (parent / 'docker-compose.yml').is_file() and (parent / 'assets' / 'maps').is_dir():
                 workspace_assets_path = parent / 'assets' / subpath
                 if subpath.startswith('maps/'):
+                    if workspace_assets_path.exists():
+                        return str(workspace_assets_path)
+                    # Search subfolders under assets/maps for matching map directory or yaml
+                    target = subpath[5:]
+                    maps_dir = parent / 'assets' / 'maps'
+                    for root, dirs, files in os.walk(maps_dir):
+                        rpath = Path(root)
+                        if rpath.name == target or (rpath / f"{target}.yaml").exists():
+                            return str(rpath)
                     workspace_assets_path.mkdir(parents=True, exist_ok=True)
-                return workspace_assets_path
+                return str(workspace_assets_path)
     except Exception:
         pass
-    return Path(get_package_share_directory('race_bringup')) / subpath
+    return str(Path(get_package_share_directory('race_bringup')) / subpath)
 
 
 def extract_centerline(skeleton, cent_length: float, map_resolution: float, map_editor_mode: bool) -> np.ndarray:
