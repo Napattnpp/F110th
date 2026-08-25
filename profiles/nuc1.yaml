@@ -4,7 +4,7 @@ sim: false
 slam_method: "cartographer"
 localize: true
 localize_method: "amcl"
-map_name: "track433"
+map_name: "ifac_roboracer"
 ctrl_algo: "MAP"
 LU_table: "NUC1_hangar_pacejka"
 overtake_mode: "spliner"

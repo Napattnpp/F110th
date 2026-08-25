@@ -22,9 +22,9 @@ class FTGMapperNode(Node):
         self.steering_gain = 1.0 # Less aggressive turning (was 1.2)
         
         # Mapping Slow Speeds (Slower than the racing defaults)
-        self.vel_close = 0.4
-        self.vel_mid = 0.6
-        self.vel_far = 0.7
+        self.vel_close = 1.9
+        self.vel_mid = 2.1
+        self.vel_far = 2.2
         
         self.depth_close = 1.5
         self.depth_mid = 3.0
@@ -32,12 +32,12 @@ class FTGMapperNode(Node):
         
         self.fallback_velocity = 0.4
         self.steering_smoothing = 0.6 # Heavy EMA smoothing for stable, gradual turns (was 0.3)
-        self.use_constant_speed = True # Set to False to enable dynamic speed scaling
+        self.use_constant_speed = False # Set to False to enable dynamic speed scaling
 
         # Crash Recovery Parameters
         self.recovery_speed = -0.5
         self.recovery_duration = 1.3
-        self.crash_distance = 0.25 # meters
+        self.crash_distance = 0.4 # meters
         self.crash_fov_angle_deg = 25.0 # Field of Perception for crash detection (np.pi/9)
         self.forward_clearance_fov_deg = 15.0 # FOV for forward clearance speed scaling (np.pi/12)
         
