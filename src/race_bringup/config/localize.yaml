@@ -16,8 +16,8 @@ particle_filter:
     # =========================================================================
     # 2. Particle Filter Core Sizes
     # =========================================================================
-    max_particles: 4000                  # Total number of particles. Higher number = better accuracy but more CPU/GPU load.
-    squash_factor: 2.2                   # Normalization scaling factor for weights. Prevents early particle convergence.
+    max_particles: 3000                  # Total number of particles. Higher number = better accuracy but more CPU/GPU load.
+    squash_factor: 2.0                   # Normalization scaling factor for weights. Prevents early particle convergence.
                                          # (Tune: Decrease if the cloud collapses too fast; increase if filter reacts slowly).
 
     # =========================================================================
@@ -28,18 +28,18 @@ particle_filter:
     rangelib_variant: 2                  # RangeLib variant. Variant 2 is optimal for GPU ray marching ('rmgpu').
     theta_discretization: 112            # Number of angular bins for ray matching. Leave at 112 for standard performance.
     max_range: 10                        # Max LiDAR range in meters to evaluate. Matches physical scanner limit.
-    angle_step: 6                       # Downsample step size for scan rays. Evaluating every N-th ray saves computation.
+    angle_step: 8                       # Downsample step size for scan rays. Evaluating every N-th ray saves computation.
                                          # (Tune: Increase step size if GPU/CPU usage is too high; decrease for more precision).
 
     # =========================================================================
     # 4. Sensor Model (Scan Likelihood)
     # =========================================================================
     # Total probability sum must be 1.0 (z_short + z_max + z_rand + z_hit)
-    z_hit: 0.75                          # Probability of a correct sensor reading matching the map walls
-    z_short: 0.01                        # Probability of short readings (e.g. dynamic obstacles/noise)
-    z_max: 0.07                          # Probability of erroneous maximum range measurements
+    z_hit: 0.82                          # Probability of a correct sensor reading matching the map walls
+    z_short: 0.02                        # Probability of short readings (e.g. dynamic obstacles/noise)
+    z_max: 0.04                          # Probability of erroneous maximum range measurements
     z_rand: 0.12                         # Probability of purely random noise/spikes
-    sigma_hit: 5.0                       # Measurement noise dispersion around hit walls (reduced from 8.0 for tighter wall-matching)
+    sigma_hit: 3.5                       # Measurement noise dispersion around hit walls (pixels/grid units, ~0.175m at 0.05m/cell)
 
     # =========================================================================
     # 5. Motion Model Selection
@@ -51,22 +51,22 @@ particle_filter:
     # =========================================================================
     # 6. Default Motion Model Parameters (Used only if motion_model is 'default')
     # =========================================================================
-    motion_dispersion_x: 0.05            # Standard deviation of noise along local X axis (forward/backward)
-    motion_dispersion_y: 0.025           # Standard deviation of noise along local Y axis (sideways sliding)
-    motion_dispersion_theta: 0.25        # Standard deviation of noise on orientation
+    motion_dispersion_x: 0.04            # Standard deviation of noise along local X axis (forward/backward)
+    motion_dispersion_y: 0.02            # Standard deviation of noise along local Y axis (sideways sliding)
+    motion_dispersion_theta: 0.08        # Standard deviation of noise on orientation
 
     # =========================================================================
     # 7. SynPF Arc Motion Model Parameters (Used only if motion_model is 'arc')
     # =========================================================================
-    motion_dispersion_arc_x: 0.05        # Noise coefficient scaled by forward displacement (dx)
-    motion_dispersion_arc_y: 0.025       # Noise coefficient scaled by lateral displacement (dy)
-    motion_dispersion_arc_theta: 0.25    # Noise coefficient scaled by orientation change (dtheta)
-    motion_dispersion_arc_xy: 0.0        # Extra side-slip coupling noise added to Y axis at high speeds
+    motion_dispersion_arc_x: 0.04        # Noise coefficient scaled by forward displacement (dx)
+    motion_dispersion_arc_y: 0.02        # Noise coefficient scaled by lateral displacement (dy)
+    motion_dispersion_arc_theta: 0.08    # Noise coefficient scaled by orientation change (dtheta)
+    motion_dispersion_arc_xy: 0.04       # Extra side-slip coupling noise added to Y axis at high speeds
     motion_dispersion_arc_x_min: 0.01    # Minimum noise boundary for X axis (prevents convergence when stationary)
     motion_dispersion_arc_y_min: 0.01    # Minimum noise boundary for Y axis (prevents convergence when stationary)
-    motion_dispersion_arc_y_max: 0.05    # Maximum capped noise for Y axis (limits random sideways drift)
+    motion_dispersion_arc_y_max: 0.04    # Maximum capped noise for Y axis (limits random sideways drift)
     motion_dispersion_arc_theta_min: 0.01 # Minimum noise boundary for orientation (theta)
-    motion_dispersion_arc_xy_min_x: 0.01 # Forward speed/displacement threshold before side-slip coupling triggers
+    motion_dispersion_arc_xy_min_x: 0.02 # Forward speed/displacement threshold before side-slip coupling triggers
                                          # (Tune: Set higher to avoid false slip noise on slow curves; lower for tight fast racing)
 
     # =========================================================================
@@ -81,9 +81,9 @@ particle_filter:
     # =========================================================================
     # 9. Resampling & Map Boundary Parameters
     # =========================================================================
-    ess_threshold_ratio: 0.5             # Threshold ratio for Effective Sample Size (ESS). Resampling triggers only when ESS < ess_threshold_ratio * max_particles.
+    ess_threshold_ratio: 0.6             # Threshold ratio for Effective Sample Size (ESS). Resampling triggers only when ESS < ess_threshold_ratio * max_particles.
                                          # (Tune: Increase to resample more frequently; set to 1.0 to force resampling every update; lower to preserve particle diversity when well-localized).
-    out_of_map_penalty: 0.01             # Multiplier penalty applied to weights of particles that slip outside the permissible map track.
+    out_of_map_penalty: 0.001            # Multiplier penalty applied to weights of particles that slip outside the permissible map track.
                                          # (Tune: Lower values kill out-of-bounds particles faster; set to 0.0 to eliminate them immediately).
 
     # =========================================================================
