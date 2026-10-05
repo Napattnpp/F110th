@@ -46,20 +46,45 @@ def _resolve_yaml_path(base_path: pathlib.Path) -> pathlib.Path:
     return base_path.with_suffix('.yaml')
 
 
+def _find_repo_root() -> pathlib.Path:
+    curr = pathlib.Path(__file__).resolve().parent
+    for _ in range(10):
+        if (curr / 'assets' / 'maps').exists() or (curr / '.git').exists():
+            return curr
+        if curr.parent == curr:
+            break
+        curr = curr.parent
+
+    cwd = pathlib.Path.cwd()
+    for _ in range(10):
+        if (cwd / 'assets' / 'maps').exists() or (cwd / '.git').exists():
+            return cwd
+        if cwd.parent == cwd:
+            break
+        cwd = cwd.parent
+
+    return pathlib.Path.cwd()
+
+
 def _resolve_map_yaml_path(map_path: str, package_share: str) -> pathlib.Path:
-    if map_path.startswith(('/', '\\')):
-        return _resolve_yaml_path(pathlib.Path(map_path))
-    if '/' in map_path or '\\' in map_path:
-        return _resolve_yaml_path(pathlib.Path(package_share) / map_path)
-    try:
-        from f1tenth_gym.envs.track.utils import find_track_dir
-        track_dir = find_track_dir(map_path)
-        yaml_path = track_dir / f"{track_dir.stem}.yaml"
-        if not yaml_path.exists():
-            yaml_path = track_dir / f"{track_dir.stem}_map.yaml"
-        return yaml_path
-    except Exception:
-        return _resolve_yaml_path(pathlib.Path(package_share) / 'maps' / map_path)
+    p = pathlib.Path(map_path)
+    if p.exists() or _resolve_yaml_path(p).exists():
+        return _resolve_yaml_path(p).resolve()
+
+    repo_root = _find_repo_root()
+    map_name = p.name
+    candidates = [
+        repo_root / 'assets' / 'maps' / map_path / 'clean' / f'{map_name}.yaml',
+        repo_root / 'assets' / 'maps' / map_name / 'clean' / f'{map_name}.yaml',
+        repo_root / 'assets' / 'maps' / map_name / f'{map_name}.yaml',
+        pathlib.Path(package_share) / map_path,
+        pathlib.Path(package_share) / 'maps' / map_path,
+    ]
+    for cand in candidates:
+        if cand.exists():
+            return _resolve_yaml_path(cand).resolve()
+
+    return _resolve_yaml_path(repo_root / 'assets' / 'maps' / 'ifac_roboracer' / 'clean' / 'ifac_roboracer.yaml')
 
 def launch_setup(context, *args, **kwargs):
     ld = LaunchDescription()
@@ -74,8 +99,10 @@ def launch_setup(context, *args, **kwargs):
     teleop = bridge_params['kb_teleop']
     use_sim_time = bridge_params['use_sim_time']
     map_yaml_path_str = LaunchConfiguration('map_yaml_path').perform(context)
-    if map_yaml_path_str:
-        map_yaml_path = pathlib.Path(map_yaml_path_str)
+    map_name_str = LaunchConfiguration('map_name').perform(context)
+    map_input = map_yaml_path_str if map_yaml_path_str else map_name_str
+    if map_input:
+        map_yaml_path = _resolve_map_yaml_path(map_input, package_share)
     else:
         map_path = bridge_params['map_path']
         map_yaml_path = _resolve_map_yaml_path(map_path, package_share)
@@ -277,10 +304,15 @@ def launch_setup(context, *args, **kwargs):
             condition=LaunchConfigurationEquals('foxglove_target', 'studio'),
         )
     )
+    launch_map_server_str = LaunchConfiguration('launch_map_server').perform(context)
+    launch_map_server = launch_map_server_str.lower() in ('true', '1')
+
     ld.add_action(bridge_node)
-    ld.add_action(nav_lifecycle_node)
-    ld.add_action(map_server_node)
+    if launch_map_server:
+        ld.add_action(map_server_node)
+        ld.add_action(nav_lifecycle_node)
     ld.add_action(ego_robot_publisher)
+    ld.add_action(foxglove_bridge_node)
     if has_opp:
         ld.add_action(opp_robot_publisher)
 
@@ -297,6 +329,16 @@ def generate_launch_description():
             'map_yaml_path',
             default_value='',
             description='Path to map yaml file'
+        ),
+        DeclareLaunchArgument(
+            'map_name',
+            default_value='',
+            description='Name or path of target map (e.g. ifac_roboracer)'
+        ),
+        DeclareLaunchArgument(
+            'launch_map_server',
+            default_value='true',
+            description='Whether to launch map_server and lifecycle_manager in gym_bridge_launch'
         ),
         OpaqueFunction(function=launch_setup)
     ])

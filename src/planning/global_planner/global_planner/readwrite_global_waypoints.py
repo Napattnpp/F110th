@@ -47,7 +47,10 @@ def write_global_waypoints(map_dir: str,
     - write_path: Full path of JSON file to write
     '''
 
-    path = os.path.join(map_dir, 'global_waypoints.json')
+    wp_dir = os.path.join(map_dir, 'waypoints')
+    os.makedirs(wp_dir, exist_ok=True)
+    path = os.path.join(wp_dir, 'global_waypoints.json')
+
     print(f"[INFO] WRITE_GLOBAL_WAYPOINTS: Writing global waypoints to {path}")
 
     # Dictionary will be converted into a JSON for serialization
@@ -67,43 +70,39 @@ def write_global_waypoints(map_dir: str,
         json.dump(d, f)
 
 
+def _resolve_map_dir(map_dir: str) -> str:
+    import pathlib
+    p = pathlib.Path(map_dir)
+    if (p / 'waypoints' / 'global_waypoints.json').exists() or (p / 'global_waypoints.json').exists():
+        return str(p.resolve())
+
+    curr = pathlib.Path(__file__).resolve()
+    for _ in range(6):
+        if (curr / 'assets' / 'maps').exists():
+            break
+        curr = curr.parent
+
+    repo_root = curr
+    stem = p.name
+    candidates = [
+        repo_root / 'assets' / 'maps' / map_dir,
+        repo_root / 'assets' / 'maps' / stem,
+    ]
+    for cand in candidates:
+        if (cand / 'waypoints' / 'global_waypoints.json').exists() or (cand / 'global_waypoints.json').exists():
+            return str(cand.resolve())
+
+    return map_dir
+
+
 def read_global_waypoints(map_dir: str) -> Tuple[
     String, Float32, MarkerArray, WpntArray, MarkerArray, WpntArray, MarkerArray, WpntArray, MarkerArray
 ]:
-    '''
-    Reads map information from a JSON file with path specified `map_dir`.
-
-    Outputs Message objects as follows:
-    - map_info_str
-        - from topic /map_infos: String
-    - est_lap_time
-        - from topic /estimated_lap_time: Float32
-    - centerline_markers
-        - from topic /centerline_waypoints/markers: MarkerArray
-    - centerline_waypoints
-        - from topic /centerline_waypoints: WpntArray
-    - global_traj_markers_iqp
-        - from topic /global_waypoints: MarkerArray
-    - global_traj_wpnts_iqp
-        - from topic /global_waypoints/markers: WpntArray
-    - global_traj_markers_sp
-        - from topic /global_waypoints/shortest_path: MarkerArray
-    - global_traj_wpnts_sp
-        - from topic /global_waypoitns/shortest_path/markers: WpntArray
-    - trackbounds_markers
-        - from topic /trackbounds/markers: MarkerArray
-    '''
-    path = os.path.join(map_dir, 'global_waypoints.json')
+    resolved_dir = _resolve_map_dir(map_dir)
+    wp_dir = os.path.join(resolved_dir, 'waypoints') if os.path.exists(os.path.join(resolved_dir, 'waypoints')) else resolved_dir
+    path = os.path.join(wp_dir, 'global_waypoints.json')
     if not os.path.exists(path):
-        base_name = os.path.basename(map_dir.rstrip('/'))
-        maps_root = Path(map_dir)
-        while maps_root.name != 'maps' and maps_root != maps_root.parent:
-            maps_root = maps_root.parent
-        if maps_root.name == 'maps' and maps_root.exists():
-            for root, dirs, files in os.walk(maps_root):
-                if os.path.basename(root) == base_name and os.path.exists(os.path.join(root, 'global_waypoints.json')):
-                    path = os.path.join(root, 'global_waypoints.json')
-                    break
+        raise FileNotFoundError(f"[ERROR] global_waypoints.json not found at path: {path}")
 
     print(f"[INFO] READ_GLOBAL_WAYPOINTS: Reading global waypoints from {path}")
     # Deserialize JSON and Reconstruct the maps elements

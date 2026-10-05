@@ -31,7 +31,9 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'global_planner = global_planner.global_planner_node:main',
+            'generate_waypoints = global_planner.generate_waypoints:main',
+            'set_start_line = global_planner.set_start_line:main',
+            'step_by_step_visualizer = global_planner.step_by_step_visualizer:main',
             'global_trajectory_publisher = global_planner.global_trajectory_publisher:main',
             'manual_waypoint_logger = global_planner.manual_waypoint_logger:main'
         ],

@@ -23,33 +23,25 @@ def get_launch_source(package_name, base_name):
 def generate_launch_description():
     pkg_bringup = get_package_share_directory('race_bringup')
 
-    try:
-        from race_bringup.profile_loader import load_active_profile
-        profile = load_active_profile()
-    except ImportError:
-        profile = {}
-
-    map_name = profile.get('map_name', 'N18')
-
-    # Arguments
+    # Arguments read directly from environment or explicit defaults
     racecar_version_arg = DeclareLaunchArgument(
         'racecar_version',
-        default_value=profile.get('racecar_version', 'NUC1'),
-        description='NUC version (e.g. NUC1)'
+        default_value=os.environ.get('RACECAR_VERSION', 'NUC1'),
+        description='NUC / Jetson version (e.g. NUC1, JET1)'
     )
     lu_table_arg = DeclareLaunchArgument(
         'LU_table',
-        default_value=profile.get('LU_table', 'NUC1_hangar_pacejka'),
+        default_value='NUC1_hangar_pacejka',
         description='LU table parameter'
     )
     overtake_mode_arg = DeclareLaunchArgument(
         'overtake_mode',
-        default_value=profile.get('overtake_mode', 'spliner'),
+        default_value='spliner',
         description='Overtake mode: spliner / graph_based'
     )
     ctrl_algo_arg = DeclareLaunchArgument(
         'ctrl_algo',
-        default_value=profile.get('ctrl_algo', 'MAP'),
+        default_value='MAP',
         description='Control algorithm: MAP / PP'
     )
     measure_arg = DeclareLaunchArgument(
@@ -57,9 +49,14 @@ def generate_launch_description():
         default_value='False',
         description='Measure execution time'
     )
+    map_name_arg = DeclareLaunchArgument(
+        'map_name',
+        default_value='ifac_roboracer',
+        description='Target map name (e.g. ifac_roboracer)'
+    )
     sim_arg = DeclareLaunchArgument(
         'sim',
-        default_value=str(profile.get('sim', False)),
+        default_value='false',
         description='True/False if you want to run simulation'
     )
 
@@ -103,8 +100,7 @@ def generate_launch_description():
                 name='ot_interpolator',
                 output='screen',
                 parameters=[
-                    os.path.join(pkg_bringup, 'maps', map_name, 'ot_sectors.yaml'),
-                    {'map_name': map_name}
+                    {'map_name': LaunchConfiguration('map_name')}
                 ]
             )
         ]
@@ -125,6 +121,7 @@ def generate_launch_description():
         overtake_mode_arg,
         ctrl_algo_arg,
         measure_arg,
+        map_name_arg,
         sim_arg,
     ]
     actions.extend([
@@ -136,3 +133,4 @@ def generate_launch_description():
     ])
 
     return LaunchDescription(actions)
+

@@ -48,7 +48,7 @@
     scan_angle_max: 135.0 # 135°
 
     # map parameters
-    map_path: 'maps/levine/levine'
+    map_path: 'ifac_roboracer'
     map_img_ext: '.png'
 
     # car parameters and scale

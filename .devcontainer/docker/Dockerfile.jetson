@@ -17,9 +17,9 @@ RUN apt-get update && apt-get install -y locales \
 ENV LANG=en_US.UTF-8
 ENV ROS_DISTRO=humble
 
-# 3. Cyclone DDS Configuration for Shared Memory
-COPY ./.devcontainer/docker/cyclonedds.xml /cyclonedds.xml
-ENV CYCLONEDDS_URI=file:///cyclonedds.xml
+# 3. Cyclone DDS Configuration
+COPY ./configs/dds/cyclonedds_car.xml /etc/cyclonedds.xml
+ENV CYCLONEDDS_URI=file:///etc/cyclonedds.xml
 
 # 4. Additional installations
 # NOTE: micro-ROS is NOT installed here. The dustynv base image provides

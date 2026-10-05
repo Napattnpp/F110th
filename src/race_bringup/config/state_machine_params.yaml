@@ -24,6 +24,17 @@ state_machine:
     ftg_threshold_speed: 0.1 # [m/s] speed threshold below which we start a timer for activating FTG
     ftg_timer_sec: 3. # [s] time we have to stay slower than the `ftg_threshold_speed` threshold before we activate FTG
 
+    # Autonomous Crash Recovery parameters
+    enable_recovery: True # enable/disable autonomous recovery state machine
+    crash_dist_threshold: 0.25 # [m] front LiDAR distance threshold to trigger crash/stuck detection
+    stuck_speed_threshold: 0.1 # [m/s] speed threshold below which car is considered stuck
+    stuck_time_threshold: 0.6 # [s] duration car must be stuck before triggering recovery
+    recovery_reverse_speed: -0.7 # [m/s] reverse speed during recovery maneuver
+    recovery_max_reverse_time: 1.5 # [s] maximum time allowed for reversing
+    recovery_align_time: 0.8 # [s] stabilization time in FTG mode after reversing
+    recovery_rear_min_dist: 0.35 # [m] minimum rear clearance to prevent reversing into opposite wall
+    recovery_front_safe_dist: 0.70 # [m] required front clearance to finish reversing
+
     # Qualifying mode — lap-based auto-switch
     # Q1 (fast) -> Buffer 1 (slow) -> Q2 (avoidance ON) -> Buffer 2 (slow) -> Q3 (fast)
     q1_laps:            3    # number of full-speed laps before Q2
@@ -32,4 +43,5 @@ state_machine:
     q3_laps:            3    # number of full-speed laps after Q2
     buffer_speed_scale: 0.85  # fraction of max speed during buffer laps (0.1 – 1.0)
     q2_speed_scale:     0.9  # fraction of max speed during Q2 avoidance laps (0.1 – 1.0)
+
 

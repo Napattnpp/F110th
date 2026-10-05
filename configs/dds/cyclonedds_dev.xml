@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<CycloneDDS xmlns="https://cdds.io/config" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="https://cdds.io/config https://raw.githubusercontent.com/eclipse-cyclonedds/cyclonedds/master/etc/cyclonedds.xsd">
+    <!--
+      F1TENTH Local Development & Simulation CycloneDDS Profile
+      ==========================================================
+      - Automatic multicast discovery for single-machine simulation & lab dev.
+      - 20MB kernel socket receive buffer to prevent LiDAR/TF packet drops.
+    -->
+    <Domain id="any">
+        <General>
+            <AllowMulticast>true</AllowMulticast>
+            <MaxMessageSize>65500B</MaxMessageSize>
+            <FragmentSize>4000B</FragmentSize>
+        </General>
+
+        <Discovery>
+            <ParticipantIndex>auto</ParticipantIndex>
+        </Discovery>
+
+        <Internal>
+            <!-- 20MB socket buffer: Prevents packet drops under 40-100Hz LiDAR, TF arrays, & OccupancyGrids -->
+            <SocketReceiveBufferSize min="20MB"/>
+        </Internal>
+
+        <SharedMemory>
+            <Enable>false</Enable>
+            <LogLevel>warn</LogLevel>
+        </SharedMemory>
+    </Domain>
+</CycloneDDS>

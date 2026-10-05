@@ -14,18 +14,14 @@ from nav_msgs.msg import Odometry
 from geometry_msgs.msg import PoseStamped, Point
 from f110_msgs.msg import WpntArray, OTWpntArray, ObstacleArray, Obstacle
 import random
-from visualization_msgs.msg import Marker, MarkerArray
-try:
-    from vesc_msgs.msg import VescStateStamped
-except:
-    pass
-
+from sensor_msgs.msg import LaserScan
 import json
-from state_machine.transitions import dummy_transition, timetrials_transition, head_to_head_transition, qualifying_transition, get_qualifying_phase
-from state_machine.state_types import StateType
+from state_machine.transitions import dummy_transition, timetrials_transition, head_to_head_transition, qualifying_transition, get_qualifying_phase, hierarchical_transition
+from state_machine.state_types import StateType, TopLevelMode
 from state_machine.states import DefaultStateLogic
 from race_bringup.parameter_event_handler import ParameterEventHandler
 from state_machine.state_machine_params import StateMachineParams
+
 
 def time_to_float(time_instant: Time):
     return time_instant.sec + time_instant.nanosec * 1e-9
@@ -112,10 +108,17 @@ class StateMachine(Node):
 
             self.overtake_zones = []
 
+        # HSM & RECOVERY INITIALIZATIONS
+        self.top_level_mode = TopLevelMode.NORMAL_RACING
+        self.recovery_start_time = 0.0
+        self.recovery_substate_start = 0.0
+        self.recovery_steer_dir = 0.0  # +1.0 for left, -1.0 for right steer during reverse
+        self.stuck_counter = 0
+        self.latest_scan = None
+        self.scan_sub = self.create_subscription(LaserScan, '/scan', self.scan_cb, 10)
+
         # INITIALIZATIONS        
         self.waypoints_dist = 0.1
-        
-        # Fake obstacle generation parameters have been moved to fake_obstacle_publisher in perception package.
         
         self.state = StateType(self.params.initial_state)
         self.local_waypoints = WpntArray()
@@ -131,17 +134,9 @@ class StateMachine(Node):
         # Speed scale for qualifying buffer laps (1.0 = full speed)
         self.qual_speed_scale = 1.0
 
-        # choose how to transition between states
-        if self.params.mode == 'dummy':
-            self.state_transition = dummy_transition
-        elif self.params.mode == 'timetrials':
-            self.state_transition = timetrials_transition
-        elif self.params.mode == 'head_to_head':
-            self.state_transition = head_to_head_transition
-        elif self.params.mode == 'qualifying':
-            self.state_transition = qualifying_transition
-        else:
-            raise NotImplementedError(f"Mode {self.params.mode} not recognized")
+        # Hierarchical State Machine transition logic
+        self.state_transition = hierarchical_transition
+
                 
         # choose what to do in the different states
         self.state_logic = DefaultStateLogic
@@ -166,6 +161,10 @@ class StateMachine(Node):
     #############
     def battery_cb(self, msg: VescStateStamped):
         self.battery_level = msg.state.voltage_input
+
+    def scan_cb(self, msg: LaserScan):
+        self.latest_scan = msg
+
 
     def glb_wpnts_scaled_cb(self, data: WpntArray):
         """
@@ -245,9 +244,75 @@ class StateMachine(Node):
 
         self.current_position = [x, y, theta]
     
+    @property
+    def _check_stuck(self) -> bool:
+        """Evaluates if car has crashed or is stuck against a wall."""
+        if not self.params.enable_recovery:
+            return False
+
+        front_dist, _ = self._evaluate_scan_clearance()
+        is_slow = abs(self.cur_vs) < self.params.stuck_speed_threshold
+        is_front_blocked = front_dist < self.params.crash_dist_threshold
+
+        if is_front_blocked or (is_slow and front_dist < 0.4):
+            self.stuck_counter += 1
+        else:
+            self.stuck_counter = max(0, self.stuck_counter - 1)
+
+        threshold_ticks = int(self.params.stuck_time_threshold * self.params.rate_hz)
+        return self.stuck_counter >= threshold_ticks
+
+    def _evaluate_scan_clearance(self) -> tuple[float, float]:
+        """Calculates front clearance and rear clearance from LiDAR scans."""
+        if self.latest_scan is None or len(self.latest_scan.ranges) == 0:
+            return 1.0, 1.0
+
+        ranges = np.array(self.latest_scan.ranges)
+        ranges = np.nan_to_num(ranges, nan=10.0, posinf=10.0, neginf=0.0)
+
+        n = len(ranges)
+        # Front cone: ~[-20 deg, +20 deg] around index n//2
+        front_window = int(n * (40.0 / 360.0))
+        front_start = max(0, n // 2 - front_window // 2)
+        front_end = min(n, n // 2 + front_window // 2)
+        front_dist = float(np.min(ranges[front_start:front_end])) if front_end > front_start else 1.0
+
+        # Rear cone: first 10% and last 10% of array (assuming scan starts near rear -180 deg)
+        rear_window = int(n * (30.0 / 360.0))
+        rear_ranges = np.concatenate((ranges[:rear_window], ranges[-rear_window:]))
+        rear_dist = float(np.min(rear_ranges)) if len(rear_ranges) > 0 else 1.0
+
+        return front_dist, rear_dist
+
+    def _evaluate_recovery_steer_dir(self):
+        """Compares left vs right side LiDAR clearance to choose reverse steering direction."""
+        if self.latest_scan is None or len(self.latest_scan.ranges) == 0:
+            self.recovery_steer_dir = 1.0
+            return
+
+        ranges = np.array(self.latest_scan.ranges)
+        ranges = np.nan_to_num(ranges, nan=10.0, posinf=10.0, neginf=0.0)
+        n = len(ranges)
+
+        # Left arc (25% to 45% of scan points) vs Right arc (55% to 75% of scan points)
+        left_arc = ranges[int(n * 0.25):int(n * 0.45)]
+        right_arc = ranges[int(n * 0.55):int(n * 0.75)]
+
+        mean_left = float(np.mean(left_arc)) if len(left_arc) > 0 else 1.0
+        mean_right = float(np.mean(right_arc)) if len(right_arc) > 0 else 1.0
+
+        # If left has more clearance, steer right when reversing (swings front left)
+        if mean_left >= mean_right:
+            self.recovery_steer_dir = -1.0  # right steer while reversing
+        else:
+            self.recovery_steer_dir = 1.0   # left steer while reversing
+
+        self.get_logger().info(f"[RECOVERY] Side clearance - Left: {mean_left:.2f}m, Right: {mean_right:.2f}m -> Reverse steer dir: {self.recovery_steer_dir}")
+
     ### Properties to evaulate state transitions
     @property
     def _low_bat(self)->bool:
+
         if self.battery_level < self.params.volt_threshold:
             return True
         else:
@@ -623,6 +688,10 @@ class StateMachine(Node):
             mrk.color.r = 1.0
             mrk.color.g = 0.0
             mrk.color.b = 0.0
+        elif state in [StateType.RECOVERY_STUCK, StateType.RECOVERY_REVERSE, StateType.RECOVERY_ALIGN]:
+            mrk.color.r = 1.0
+            mrk.color.g = 0.5  # Orange for recovery
+            mrk.color.b = 0.0
         self.state_marker_pub.publish(mrk)
 
     def pub_telemetry_marker(self, qual_phase: str):
@@ -647,12 +716,16 @@ class StateMachine(Node):
             mrk.pose.position.z = 1.5
 
         mrk.pose.orientation.w = 1.0
+        mode_str = self.top_level_mode.value if hasattr(self.top_level_mode, 'value') else str(self.top_level_mode)
+        state_str = self.state.value if hasattr(self.state, 'value') else str(self.state)
+
         if self.params.mode == "qualifying":
-            mrk.text = f"STATE: {self.state}\nQUAL: {qual_phase} (Lap {self.lap_count})\nSPEED: {int(self.qual_speed_scale*100)}%"
+            mrk.text = f"MODE: {mode_str}\nSTATE: {state_str}\nQUAL: {qual_phase} (Lap {self.lap_count})"
         else:
-            mrk.text = f"STATE: {self.state}\nMODE: {self.params.mode.upper()}"
+            mrk.text = f"MODE: {mode_str}\nSTATE: {state_str}"
         
         self.telemetry_marker_pub.publish(mrk)
+
 
     #############
     # MAIN LOOP #

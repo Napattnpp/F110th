@@ -612,12 +612,27 @@ class Controller(Node):
     # MAIN LOOP #
     #############
     def control_loop(self):
-        if self.mode == "MAP":
+        # Top-Level Mode / Recovery State Handling
+        if self.state == "RECOVERY_REVERSE":
+            # Closed-loop reverse drive command
+            speed = -0.7
+            # Steer angle: default to opposite steering lock if not provided
+            steer = 0.35 if getattr(self, 'recovery_steer_dir', 1.0) >= 0 else -0.35
+            self.get_logger().info(f"[RECOVERY_REVERSE] Executing reverse maneuver (v={speed} m/s, steer={steer:.2f} rad)", throttle_duration_sec=0.5)
+        elif self.state in ["RECOVERY_STUCK", "RECOVERY_ALIGN"]:
+            speed, steer = self.ftg_cycle()
+            if self.state == "RECOVERY_ALIGN":
+                speed = min(speed, 1.2)  # Cap initial speed during re-alignment phase
+            self.get_logger().info(f"[{self.state}] Executing FTG alignment cycle (v={speed:.2f} m/s)", throttle_duration_sec=0.5)
+        elif self.mode == "MAP":
             speed, steer = self.map_cycle()
         elif self.mode == "PP":
             speed, steer = self.pp_cycle()
         elif self.mode == "FTG":
             speed, steer = self.ftg_cycle()
+        else:
+            speed, steer = 0.0, 0.0
+
 
         ack_msg = AckermannDriveStamped()
         ack_msg.header.stamp = self.get_clock().now().to_msg()

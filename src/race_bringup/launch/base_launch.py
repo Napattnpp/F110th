@@ -30,37 +30,31 @@ def package_exists(package_name):
 def generate_launch_description():
     pkg_bringup = get_package_share_directory('race_bringup')
 
-    try:
-        from race_bringup.profile_loader import load_active_profile
-        profile = load_active_profile()
-    except ImportError:
-        profile = {}
-
-    # Arguments
+    # Arguments read directly from environment or explicit defaults
     racecar_version_arg = DeclareLaunchArgument(
         'racecar_version',
-        default_value=profile.get('racecar_version', 'NUC1'),
-        description='NUC version (e.g. NUC1)'
+        default_value=os.environ.get('RACECAR_VERSION', 'NUC1'),
+        description='NUC / Jetson version (e.g. NUC1, JET1)'
     )
     map_name_arg = DeclareLaunchArgument(
         'map_name',
-        default_value=profile.get('map_name', 'latest'),
-        description='Map name in race_bringup/maps'
+        default_value='ifac_roboracer',
+        description='Map target path (e.g. ifac_roboracer or rectangle1)'
     )
     sim_arg = DeclareLaunchArgument(
         'sim',
-        default_value=str(profile.get('sim', False)),
+        default_value='false',
         description='True/False if you want to run simulation'
     )
     localize_arg = DeclareLaunchArgument(
         'localize',
-        default_value=str(profile.get('localize', True)),
+        default_value='true',
         description='Whether to run absolute map-based localization node'
     )
     localize_method_arg = DeclareLaunchArgument(
         'localize_method',
-        default_value=profile.get('localize_method', 'amcl'),
-        description="Localization method: 'amcl' / 'cartographer' / 'particle_filter'"
+        default_value='pf',
+        description="Localization method: 'pf' (Particle Filter) / 'amcl' / 'cartographer'"
     )
 
     trajectory_type_arg = DeclareLaunchArgument(
@@ -163,11 +157,11 @@ def generate_launch_description():
     )
     physical_actions.append(amcl_group)
 
-    # 5. Particle Filter Localization (Conditional on localize == True and localize_method == particle_filter)
+    # 5. Particle Filter Localization (Conditional on localize == True and localize_method == pf / particle_filter)
     pf_source = get_launch_source('particle_filter', 'localize_launch')
     if pf_source is not None:
         pf_group = GroupAction(
-            condition=IfCondition(PythonExpression(["'", LaunchConfiguration('localize'), "'.lower() in ['true', '1'] and '", LaunchConfiguration('localize_method'), "' == 'particle_filter'"])),
+            condition=IfCondition(PythonExpression(["'", LaunchConfiguration('localize'), "'.lower() in ['true', '1'] and '", LaunchConfiguration('localize_method'), "'.lower() in ['pf', 'particle_filter']"])),
             actions=[
                 IncludeLaunchDescription(
                     pf_source,
@@ -180,6 +174,7 @@ def generate_launch_description():
             ]
         )
         physical_actions.append(pf_group)
+
 
     physical_group = GroupAction(
         condition=UnlessCondition(LaunchConfiguration('sim')),
@@ -209,28 +204,6 @@ def generate_launch_description():
             'map_path': map_path,
             'trajectory_type': LaunchConfiguration('trajectory_type')
         }.items()
-    )
-
-    sector_tuner_node = Node(
-        package='sector_tuner',
-        executable='sector_tuner',
-        name='sector_tuner',
-        output='screen',
-        parameters=[
-            PathJoinSubstitution([map_path, 'speed_scaling.yaml']),
-            {'map_name': LaunchConfiguration('map_name')}
-        ]
-    )
-
-    ot_interpolator_node = Node(
-        package='sector_tuner',
-        executable='ot_interpolator',
-        name='ot_interpolator',
-        output='screen',
-        parameters=[
-            PathJoinSubstitution([map_path, 'ot_sectors.yaml']),
-            {'map_name': LaunchConfiguration('map_name')}
-        ]
     )
 
     optional_nodes = []
@@ -270,7 +243,6 @@ def generate_launch_description():
         physical_group,
         global_parameters_node,
         global_trajectory_pub,
-        sector_tuner_node,
-        ot_interpolator_node,
         *optional_nodes
     ])
+

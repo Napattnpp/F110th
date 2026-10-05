@@ -1,0 +1,10 @@
+free_thresh: 0.25
+image: e7_floor5_square.pgm
+mode: trinary
+negate: 0
+occupied_thresh: 0.65
+origin:
+- -18.8
+- -34.1
+- 0
+resolution: 0.05

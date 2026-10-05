@@ -1,0 +1,11 @@
+[Unit]
+Description=Lock NVIDIA Jetson Clocks to Maximum Performance Mode
+After=syslog.target NVPower.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/jetson_clocks
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

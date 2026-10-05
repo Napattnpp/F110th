@@ -17,7 +17,7 @@ particle_filter:
     # 2. Particle Filter Core Sizes
     # =========================================================================
     max_particles: 4000                  # Total number of particles. Higher number = better accuracy but more CPU/GPU load.
-    squash_factor: 2.2                   # Normalization scaling factor for weights. Prevents early particle convergence.
+    squash_factor: 1.1                   # Normalization scaling factor for weights. (Tuned: 1.1 for sharp weight resolution)
                                          # (Tune: Decrease if the cloud collapses too fast; increase if filter reacts slowly).
 
     # =========================================================================
@@ -39,7 +39,7 @@ particle_filter:
     z_short: 0.01                        # Probability of short readings (e.g. dynamic obstacles/noise)
     z_max: 0.07                          # Probability of erroneous maximum range measurements
     z_rand: 0.12                         # Probability of purely random noise/spikes
-    sigma_hit: 5.0                       # Measurement noise dispersion around hit walls (reduced from 8.0 for tighter wall-matching)
+    sigma_hit: 3.0                       # Measurement noise dispersion around hit walls (Tuned: 3.0 for sharp wall-matching)
 
     # =========================================================================
     # 5. Motion Model Selection
@@ -51,21 +51,21 @@ particle_filter:
     # =========================================================================
     # 6. Default Motion Model Parameters (Used only if motion_model is 'default')
     # =========================================================================
-    motion_dispersion_x: 0.05            # Standard deviation of noise along local X axis (forward/backward)
-    motion_dispersion_y: 0.025           # Standard deviation of noise along local Y axis (sideways sliding)
-    motion_dispersion_theta: 0.25        # Standard deviation of noise on orientation
+    motion_dispersion_x: 0.015           # Standard deviation of noise along local X axis (forward/backward)
+    motion_dispersion_y: 0.008           # Standard deviation of noise along local Y axis (sideways sliding)
+    motion_dispersion_theta: 0.05        # Standard deviation of noise on orientation
 
     # =========================================================================
     # 7. SynPF Arc Motion Model Parameters (Used only if motion_model is 'arc')
     # =========================================================================
-    motion_dispersion_arc_x: 0.05        # Noise coefficient scaled by forward displacement (dx)
-    motion_dispersion_arc_y: 0.025       # Noise coefficient scaled by lateral displacement (dy)
-    motion_dispersion_arc_theta: 0.25    # Noise coefficient scaled by orientation change (dtheta)
+    motion_dispersion_arc_x: 0.015       # Noise coefficient scaled by forward displacement (dx)
+    motion_dispersion_arc_y: 0.008       # Noise coefficient scaled by lateral displacement (dy)
+    motion_dispersion_arc_theta: 0.05    # Noise coefficient scaled by orientation change (dtheta)
     motion_dispersion_arc_xy: 0.0        # Extra side-slip coupling noise added to Y axis at high speeds
-    motion_dispersion_arc_x_min: 0.01    # Minimum noise boundary for X axis (prevents convergence when stationary)
-    motion_dispersion_arc_y_min: 0.01    # Minimum noise boundary for Y axis (prevents convergence when stationary)
-    motion_dispersion_arc_y_max: 0.05    # Maximum capped noise for Y axis (limits random sideways drift)
-    motion_dispersion_arc_theta_min: 0.01 # Minimum noise boundary for orientation (theta)
+    motion_dispersion_arc_x_min: 0.005   # Minimum noise boundary for X axis (prevents convergence when stationary)
+    motion_dispersion_arc_y_min: 0.005   # Minimum noise boundary for Y axis (prevents convergence when stationary)
+    motion_dispersion_arc_y_max: 0.02    # Maximum capped noise for Y axis (limits random sideways drift)
+    motion_dispersion_arc_theta_min: 0.005 # Minimum noise boundary for orientation (theta)
     motion_dispersion_arc_xy_min_x: 0.01 # Forward speed/displacement threshold before side-slip coupling triggers
                                          # (Tune: Set higher to avoid false slip noise on slow curves; lower for tight fast racing)
 
@@ -96,5 +96,5 @@ particle_filter:
 
 map_server:
   ros__parameters:
-    # Assuming map file is located in particle_filter/maps
-    map: 'levine'
+    # Assuming map file is located in assets/maps
+    map: 'ifac_roboracer'

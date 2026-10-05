@@ -126,48 +126,51 @@ class MapCleanerApp:
         sys.exit(0)
 
     def resolve_filepath(self, filepath):
-        """Flexible map path resolution (prefers _raw files for map_cleaner)."""
+        """Strictly resolves map name argument to assets/maps/<map_name>/raw/<map_name>_raw.yaml."""
         if not filepath:
             return None
         if filepath.startswith("map_name="):
             filepath = filepath.split("=", 1)[1]
         
-        path_obj = Path(filepath)
-        if path_obj.exists():
-            return str(path_obj)
+        p = Path(filepath)
 
-        # Normalize base map name (e.g. track7th_raw -> track7th)
-        raw_name = path_obj.stem
+        # Extract map stem name (e.g. track4, assets/maps/track4, clean/track4.yaml -> track4)
+        map_name = p.stem
         for suffix in ['_waypoint_gen', '_waypoint', '_raceline', '_raw']:
-            if raw_name.endswith(suffix):
-                raw_name = raw_name[:-len(suffix)]
+            if map_name.endswith(suffix):
+                map_name = map_name[:-len(suffix)]
 
-        # Check assets/maps/<map_name>/<map_name>_raw.yaml first
-        raw_yaml = Path("assets/maps") / raw_name / f"{raw_name}_raw.yaml"
+        # Search inside assets/maps/<map_name>
+        maps_root = Path("assets/maps")
+        map_dir = maps_root / map_name
+        if not map_dir.exists() and maps_root.exists():
+            for root, dirs, _ in os.walk(maps_root):
+                if Path(root).name == map_name:
+                    map_dir = Path(root)
+                    break
+
+        raw_yaml = map_dir / "raw" / f"{map_name}_raw.yaml"
         if raw_yaml.exists():
             return str(raw_yaml)
-            
-        raw_pgm = Path("assets/maps") / raw_name / f"{raw_name}_raw.pgm"
+
+        raw_pgm = map_dir / "raw" / f"{map_name}_raw.pgm"
         if raw_pgm.exists():
             return str(raw_pgm)
 
-        base_yaml = Path("assets/maps") / raw_name / f"{raw_name}.yaml"
-        if base_yaml.exists():
-            return str(base_yaml)
-            
-        base_pgm = Path("assets/maps") / raw_name / f"{raw_name}.pgm"
-        if base_pgm.exists():
-            return str(base_pgm)
+        raw_png = map_dir / "raw" / f"{map_name}_raw.png"
+        if raw_png.exists():
+            return str(raw_png)
 
-        return filepath
+        return None
 
     def load_file(self, filepath=None):
         """Load map file interactively."""
         filepath = self.resolve_filepath(filepath)
         if filepath is None or not os.path.exists(filepath):
-            print(f"\n✗ Map file not found: {filepath}")
-            print("  Example usage: python3 map_cleaner_matplotlib.py track7th")
-            print("                 python3 map_cleaner_matplotlib.py assets/maps/track7th/track7th.yaml")
+            print(f"\n✗ Raw map file not found for specified track.")
+            print("  Usage:   python3 src/utilities/map_utils/map_cleaner_matplotlib.py <track_name>")
+            print("  Example: python3 src/utilities/map_utils/map_cleaner_matplotlib.py track4")
+            print("  (Ensure assets/maps/<track_name>/raw/ exists. Run 'python3 scripts/map_tools/init_map.py <track_name>' if needed).")
             sys.exit(1)
 
         self.raw_img = load_map(filepath)
@@ -429,17 +432,30 @@ class MapCleanerApp:
         input_path = Path(self.map_path)
         input_dir = input_path.parent
         
+        # Determine track root directory & subfolders
+        if input_dir.name in ["raw", "clean", "waypoint_gen", "waypoints"]:
+            map_root_dir = input_dir.parent
+        else:
+            map_root_dir = input_dir
+
+        raw_dir = map_root_dir / "raw"
+        clean_dir = map_root_dir / "clean"
+        wp_gen_dir = map_root_dir / "waypoint_gen"
+
+        for d in [raw_dir, clean_dir, wp_gen_dir]:
+            d.mkdir(parents=True, exist_ok=True)
+
         # Normalize clean base map name (e.g. track7th_raw -> track7th)
         base_name = input_path.stem
         for suffix in ['_waypoint_gen', '_waypoint', '_raceline', '_raw']:
             if base_name.endswith(suffix):
                 base_name = base_name[:-len(suffix)]
 
-        raw_yaml_path = input_dir / f"{base_name}_raw.yaml"
-        raw_pgm_dest = input_dir / f"{base_name}_raw.pgm"
+        raw_yaml_path = raw_dir / f"{base_name}_raw.yaml"
+        raw_pgm_dest = raw_dir / f"{base_name}_raw.pgm"
         
         yaml_path = input_dir / f"{base_name}.yaml"
-        src_yaml = raw_yaml_path if raw_yaml_path.exists() else yaml_path
+        src_yaml = raw_yaml_path if raw_yaml_path.exists() else (input_dir / f"{input_path.stem}.yaml")
         yaml_data = {}
         has_yaml = False
         if src_yaml.exists():
@@ -468,12 +484,12 @@ class MapCleanerApp:
             except Exception as e:
                 print(f"⚠ Could not create raw YAML: {e}")
 
-        # 2. Save clean PGM & YAML to base name (<map_name>.pgm / <map_name>.yaml)
-        clean_pgm_path = input_dir / f"{base_name}.pgm"
-        clean_yaml_path = input_dir / f"{base_name}.yaml"
+        # 2. Save clean PGM & YAML to clean/ subfolder (<map_name>.pgm / <map_name>.yaml)
+        clean_pgm_path = clean_dir / f"{base_name}.pgm"
+        clean_yaml_path = clean_dir / f"{base_name}.yaml"
         try:
             save_pgm(str(clean_pgm_path), clean_img)
-            print(f"✓ Saved cleaned base PGM: {clean_pgm_path.name}")
+            print(f"✓ Saved cleaned base PGM: {clean_pgm_path.relative_to(REPO_ROOT if 'REPO_ROOT' in globals() else map_root_dir)}")
         except Exception as e:
             print(f"✗ Failed to save cleaned base PGM: {e}")
 
@@ -487,12 +503,12 @@ class MapCleanerApp:
             except Exception as e:
                 print(f"✗ Failed to save cleaned base YAML: {e}")
 
-        # 3. Save clean PGM, PNG & YAML to waypoint_gen name (<map_name>_waypoint_gen.pgm / .png / .yaml)
+        # 3. Save clean PGM, PNG & YAML to waypoint_gen/ subfolder (<map_name>_waypoint_gen.pgm / .png / .yaml)
         # Convert clean_img to 100% pure 2-colour binary image (0 = wall, 255 = track) with no grey (128)
         binary_2color = np.where(clean_img < 210, 0, 255).astype(np.uint8)
-        wp_pgm_path = input_dir / f"{base_name}_waypoint_gen.pgm"
-        wp_png_path = input_dir / f"{base_name}_waypoint_gen.png"
-        wp_yaml_path = input_dir / f"{base_name}_waypoint_gen.yaml"
+        wp_pgm_path = wp_gen_dir / f"{base_name}_waypoint_gen.pgm"
+        wp_png_path = wp_gen_dir / f"{base_name}_waypoint_gen.png"
+        wp_yaml_path = wp_gen_dir / f"{base_name}_waypoint_gen.yaml"
         
         try:
             save_pgm(str(wp_pgm_path), binary_2color)

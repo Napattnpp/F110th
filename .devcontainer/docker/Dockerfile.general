@@ -14,9 +14,9 @@ RUN apt-get update && apt-get install -y locales \
 ENV LANG=en_US.UTF-8
 ENV ROS_DISTRO=humble
 
-# 3. Cyclone DDS Configuration for Shared Memory
-COPY ./.devcontainer/docker/cyclonedds.xml /cyclonedds.xml
-ENV CYCLONEDDS_URI=file:///cyclonedds.xml
+# 3. Cyclone DDS Configuration
+COPY ./configs/dds/cyclonedds_dev.xml /etc/cyclonedds.xml
+ENV CYCLONEDDS_URI=file:///etc/cyclonedds.xml
 
 # 4. Additional installations
 RUN apt-get update && apt-get install -y \
@@ -66,7 +66,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Install additional Python packages
-RUN python3 -m pip install uv && python3 -m uv pip install --system smbus2 transforms3d tqdm "numpy<2" scikit-image trajectory-planning-helpers casadi scikit-learn filterpy numba pandas matplotlib pynput quadprog==0.1.11 git+https://github.com/f1tenth/f1tenth_gym.git@dev-humble
+RUN python3 -m pip install uv && python3 -m uv pip install --system smbus2 transforms3d tqdm "numpy<2" scikit-image trajectory-planning-helpers casadi==3.6.3 scikit-learn filterpy numba pandas matplotlib pynput quadprog==0.1.11 git+https://github.com/f1tenth/f1tenth_gym.git@dev-humble
 
 # 5. Micro ROS (general image only)
 SHELL ["/bin/bash", "-c"]

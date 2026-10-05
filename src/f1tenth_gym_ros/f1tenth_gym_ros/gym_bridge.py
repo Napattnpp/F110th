@@ -83,8 +83,11 @@ def _resolve_yaml_path(base_path: pathlib.Path) -> pathlib.Path:
 def _resolve_map_yaml_path(map_path: str) -> pathlib.Path | None:
     path = pathlib.Path(map_path)
     if not path.is_absolute():
-        share_dir = pathlib.Path(get_package_share_directory("f1tenth_gym_ros"))
-        path = share_dir / map_path
+        if path.exists() or _resolve_yaml_path(path).exists():
+            path = path.resolve()
+        else:
+            share_dir = pathlib.Path(get_package_share_directory("f1tenth_gym_ros"))
+            path = share_dir / map_path
     yaml_path = _resolve_yaml_path(path)
     return yaml_path if yaml_path.exists() else None
 
@@ -152,7 +155,7 @@ class GymBridge(Node):
         self.declare_parameter('scan_range_max', 30.0)
         self.declare_parameter('scan_angle_min', -135.0)
         self.declare_parameter('scan_angle_max', 135.0)
-        self.declare_parameter('map_path', 'levine')
+        self.declare_parameter('map_path', 'ifac_roboracer')
         self.declare_parameter('map_img_ext', '.png')
         self.declare_parameter('num_agent', 1)
         self.declare_parameter('sx', 0.0)

@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<CycloneDDS xmlns="https://cdds.io/config" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="https://cdds.io/config https://raw.githubusercontent.com/eclipse-cyclonedds/cyclonedds/master/etc/cyclonedds.xsd">
+    <!--
+      F1TENTH Onboard Jetson Hardware CycloneDDS Profile (Impenetrable Loopback)
+      ========================================================================
+      - All ROS 2 nodes & Foxglove Bridge run onboard the vehicle.
+      - Locked strictly to 127.0.0.1 loopback (0% venue Wi-Fi noise impact).
+      - Telemetry streams to Pit Mac via Foxglove Bridge WebSocket (ws://<car-ip>:8765).
+    -->
+    <Domain id="any">
+        <General>
+            <!-- Lock DDS strictly to onboard loopback (DDS never leaves vehicle RAM/kernel) -->
+            <NetworkInterfaceAddress>127.0.0.1</NetworkInterfaceAddress>
+            <AllowMulticast>true</AllowMulticast>
+            <MaxMessageSize>65500B</MaxMessageSize>
+            <FragmentSize>4000B</FragmentSize>
+        </General>
+
+        <Discovery>
+            <ParticipantIndex>auto</ParticipantIndex>
+        </Discovery>
+
+        <Internal>
+            <!-- 20MB socket buffer: Prevents packet drops under 40-100Hz LiDAR, TF arrays, & OccupancyGrids -->
+            <SocketReceiveBufferSize min="20MB"/>
+        </Internal>
+
+        <SharedMemory>
+            <Enable>false</Enable>
+            <LogLevel>warn</LogLevel>
+        </SharedMemory>
+    </Domain>
+</CycloneDDS>
+

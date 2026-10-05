@@ -1,16 +1,15 @@
 # F110th
 
-F1TENTH racing stack. Runs entirely inside Docker.
+F1TENTH racing stack running entirely inside Docker.
 
-> **TL;DR:** Edit [`f110th.config`](./f110th.config), run `./setup.sh`, use `make` commands.
+> **TL;DR:** Clone the repo and run `make setup` for an interactive setup wizard.
 
 | Resource | Description |
 |----------|-------------|
-| [`f110th.config`](./f110th.config) | ✏️ **Edit this** — your configuration |
-| [`setup.sh`](./setup.sh) | ▶️ **Run this** — one-time setup |
-| [`Makefile`](./Makefile) | 🔧 Day-to-day commands (`make help`) |
-| [`docs/QUICK_REF.md`](./docs/QUICK_REF.md) | 📋 Cheat-sheet card |
-| [`docs/MAINTAINER.md`](./docs/MAINTAINER.md) | 🛠️ Developer / maintainer guide |
+| [`.env`](./.env) | ✏️ **Local configuration** (auto-configured via `make setup` wizard or copied from [`configs/.env.example`](./configs/.env.example)) |
+| [`Makefile`](./Makefile) | 🔧 Workflows & container controls (`make setup`, `make attach`, `make help`) |
+| [`docs/QUICK_REF.md`](./docs/QUICK_REF.md) | 📋 Quick reference guide |
+| [`docs/MAINTAINER.md`](./docs/MAINTAINER.md) | 🛠️ Maintainer & architecture guide |
 
 ---
 
@@ -19,80 +18,50 @@ F1TENTH racing stack. Runs entirely inside Docker.
 ### 1. Prerequisites
 
 - [Docker](https://docs.docker.com/get-docker/) installed and running
-- On **Jetson**: also run the Jetson host setup first (see below)
+- On **NVIDIA Jetson**: sudo access to apply hardware performance optimizations
 
-### 2. Clone the repo
+### 2. Run Interactive Setup
 
 ```bash
 git clone -b humble-dev https://github.com/Napattnpp/F110th.git ~/F110th
 cd ~/F110th
+make setup
 ```
 
-### 3. Configure
-
-Edit [`f110th.config`](./f110th.config) to match your setup:
-
-```bash
-# Key settings to change:
-ROS_DOMAIN_ID=22          # Must match all machines in the same session
-RACECAR_VERSION=NUC1      # NUC1, NUC2, JET1, ...
-DOCKER_PROFILE=general    # 'general' (laptop/x86) or 'jetson' (on-car)
-```
-
-### 4. Run setup
-
-```bash
-./setup.sh
-```
-
-This will automatically:
-- Detect your platform (x86 / Apple Silicon / Jetson)
-- Build the Docker image
-- Launch the container
-
-> **Note:** This project runs entirely inside Docker. Native ROS 2 installation on the host is not required and not supported by this script.
+`make setup` will launch an **Interactive Setup Wizard** in your terminal:
+- Interactively configures your **`F110_ROLE`** (`vehicle` \| `simulation`)
+- Prompts for your **`ROS_DOMAIN_ID`** (0–101) to prevent team network cross-talk
+- Prompts for your target **`RACECAR_ID`** (e.g. `car01`)
+- Auto-detects your platform architecture (x86 / Mac / Jetson Tegra)
+- Builds and launches the Docker container stack
 
 ---
 
 ## Day-to-Day Commands
 
 ```bash
-make launch     # Start the container
-make attach     # Get a shell inside the container
-make stop       # Stop the container
-make build      # Rebuild the image (after Dockerfile changes)
-make push       # Push image to DockerHub
-```
-
-Or manually:
-```bash
-docker compose --profile general up -d       # laptop
-docker compose --profile jetson up -d        # Jetson
-docker compose exec general /bin/bash        # attach
+make up        # Launch the container stack in detached mode
+make attach     # Get an interactive bash shell inside the container
+make stop      # Stop the container stack
+make build     # Rebuild the Docker image
+make push      # Build and push image to DockerHub
+make clean     # Clean colcon build output directory (out/)
+make prune     # Full reset (stop containers, remove volumes and .env)
 ```
 
 ---
 
-## VSCode Dev Container
+## Jetson Host Optimization
 
-Open the repo in VSCode and click **"Reopen in Container"**.
-
-- **Laptop / x86**: uses `.devcontainer/devcontainer.json` → `general` service
-- **Jetson**: uses `.devcontainer/jetson/devcontainer.json` → `jetson` service
-
-Extensions (ROS, C++, Python, clang-format, etc.) are installed automatically.
-
----
-
-## Jetson Host Setup
-
-Run once on a new Jetson to configure the host OS (udev rules, UDP buffers, clocks, aliases):
-
-```bash
-cd ~/F110th && ./setup_jetson_host.sh
-```
-
-Then reboot, and run `./setup.sh` as normal.
+When running on an NVIDIA Jetson, the host script automatically configures:
+- NVPModel MAXN power profile (`nvpmodel -m 0`)
+- Maximum clock frequencies (`jetson_clocks` persistent systemd service)
+- 2GB kernel UDP socket buffer ceiling (`/etc/sysctl.d/99-f1tenth-network.conf`)
+- Real-time priority & memory locking (`/etc/security/limits.d/99-f1tenth-realtime.conf`)
+- USB autosuspend disable & 1024MB USB memory limit (`extlinux.conf`)
+- CPU governor set to `performance`
+- Wi-Fi latency tuning (NetworkManager powersave off, Intel `iwlwifi` & Realtek `rtw88` driver performance mode)
+- Serial device symlinks for VESC, micro-ROS MKR Zero, and RPLidar S1 (`/etc/udev/rules.d/99-f1tenth-serial.rules`)
 
 ---
 
@@ -121,35 +90,6 @@ ros2 launch stack_master base_system_launch.xml sim:=true
 ros2 launch stack_master mapping_launch.xml map_name:=<map_name>
 ```
 
-### Time trials
-
-```bash
-ros2 launch stack_master time_trials_launch.xml
-```
-
-### micro-ROS agent (general image only)
-
-```bash
-ros2 run micro_ros_agent micro_ros_agent serial --dev /dev/sensors/micro_ros
-```
-
-### Foxglove bridge
-
-```bash
-ros2 launch foxglove_bridge foxglove_bridge_launch.xml
-```
-
-### SLAM
-
-```bash
-# Create map
-ros2 launch slam_toolbox online_async_launch.py \
-  params_file:=/home/$USER/F110th/src/f1tenth_system/f1tenth_stack/config/f1tenth_online_async.yaml
-
-# Save map
-ros2 run nav2_map_server map_saver_cli -f <map_name>
-```
-
 ### Algorithms
 
 ```bash
@@ -159,36 +99,33 @@ ros2 run gap_follow reactive_node_cpp          # Follow the gap
 ros2 launch pure_pursuit sim_pure_pursuit_launch.py  # Pure pursuit
 ```
 
-### Recording
-
-```bash
-ros2 bag record -s mcap -o <file_name> -a     # MCAP format
-ros2 bag record -o <file_name> -a              # .db3 format
-```
-
 ---
 
 ## Project Structure
 
 ```
 F110th/
-├── f110th.config          ← Edit this to configure your setup
-├── setup.sh               ← Run this once to set everything up
-├── Makefile               ← Day-to-day Docker commands
-├── docker-compose.yml
-├── requirements.txt       ← Host-side Python tools (.venv)
-│
-├── docker/                ← Docker build files
-│   ├── Dockerfile.general
-│   ├── Dockerfile.jetson
-│   ├── cyclonedds.xml
-│   └── ros_entrypoint.sh
-│
-├── .devcontainer/         ← VSCode Dev Container configs
-│   ├── devcontainer.json          (general)
-│   └── jetson/devcontainer.json   (Jetson)
-│
-├── src/                   ← ROS 2 packages
-├── configs/               ← udev rules, system configs
-└── out/          ← colcon build output (gitignored)
+├── .env                   ← Active local configuration (from configs/.env.example)
+├── Makefile               ← Task & container runner (`make setup`, `make attach`, `make up`)
+├── docker-compose.yml     ← Container stack definition
+├── configs/               ← Passive project configurations (declarative settings only)
+│   ├── .env.example       ← Configuration template
+│   ├── cyclonedds.xml     ← Single Source of Truth DDS configuration
+│   ├── tmux.conf          ← Tmux dotfile configuration
+│   ├── requirements.txt   ← Host developer python packages
+│   └── jetson/            ← Versioned Jetson host performance files
+│       ├── 99-f1tenth-serial.rules
+│       ├── 99-f1tenth-network.conf
+│       ├── 20-f1tenth-wifi-powersave.conf
+│       ├── iwlwifi.conf
+│       ├── rtw88.conf
+│       ├── 99-f1tenth-realtime.conf
+│       └── f1tenth-jetson-clocks.service
+├── scripts/
+│   ├── setup/             ← Setup automation (bootstrap.sh, configure.sh)
+│   ├── host/              ← Host OS installer (setup-jetson.sh)
+│   ├── ops/               ← Vehicle operations & connectivity (connect_car.sh)
+│   ├── waypoints/         ← Waypoint tools & visualizers
+│   └── tuning_and_benchmarks/ ← Optimization & profiling benchmarks
+└── src/                   ← ROS 2 nodes & packages
 ```

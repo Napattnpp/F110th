@@ -1,0 +1,10 @@
+free_thresh: 0.25
+image: pingpong_clean.pgm
+mode: trinary
+negate: 0
+occupied_thresh: 0.65
+origin:
+- -13.1
+- -8.16
+- 0
+resolution: 0.1

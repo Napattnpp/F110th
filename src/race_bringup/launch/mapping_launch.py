@@ -24,31 +24,25 @@ def get_launch_source(package_name, base_name):
 def generate_launch_description():
     pkg_bringup = get_package_share_directory('race_bringup')
 
-    try:
-        from race_bringup.profile_loader import load_active_profile
-        profile = load_active_profile()
-    except ImportError:
-        profile = {}
-
-    # Arguments
+    # Arguments read directly from environment or explicit defaults
     racecar_version_arg = DeclareLaunchArgument(
         'racecar_version',
-        default_value=profile.get('racecar_version', 'NUC1'),
-        description='NUC version (e.g., NUC1)'
+        default_value=os.environ.get('RACECAR_VERSION', 'NUC1'),
+        description='NUC / Jetson version (e.g. NUC1, JET1)'
     )
     map_name_arg = DeclareLaunchArgument(
         'map_name',
-        default_value=profile.get('map_name', 'latest'),
+        default_value='competition/rectangle1',
         description='Name of the map to be created'
     )
     sim_arg = DeclareLaunchArgument(
         'sim',
-        default_value=str(profile.get('sim', False)),
+        default_value='false',
         description='Whether to run in simulation mode'
     )
     slam_method_arg = DeclareLaunchArgument(
         'slam_method',
-        default_value=profile.get('slam_method', 'cartographer'),
+        default_value='cartographer',
         description="SLAM method: 'cartographer' / 'slam_toolbox'"
     )
     run_ftg_arg = DeclareLaunchArgument(
@@ -76,23 +70,6 @@ def generate_launch_description():
     # 1. On Physical System (sim is False)
     physical_actions = []
     
-    # Global planner node
-    physical_actions.append(
-        Node(
-            package='global_planner',
-            executable='global_planner',
-            name='global_planner',
-            output='screen',
-            parameters=[
-                global_planner_params,
-                PathJoinSubstitution([pkg_bringup, 'maps', LaunchConfiguration('map_name'), 'global_planner_params.yaml']),
-                {'map_editor': False},
-                {'create_map': True},
-                {'map_name': LaunchConfiguration('map_name')}
-            ]
-        )
-    )
-    
     # Bringup launch
     bringup_source = get_launch_source('f1tenth_stack', 'bringup_launch')
     if bringup_source is not None:
@@ -106,8 +83,8 @@ def generate_launch_description():
                     'mux_config': mux_config,
                     'icm20948_config': icm20948_config
                 }.items()
+            )
         )
-    )
         
     # ftg_mapper node to drive around during mapping (optional)
     physical_actions.append(
@@ -194,23 +171,6 @@ def generate_launch_description():
     # 2. On Sim (sim is True)
     sim_actions = []
     
-    # Global planner node
-    sim_actions.append(
-        Node(
-            package='global_planner',
-            executable='global_planner',
-            name='global_planner',
-            output='screen',
-            parameters=[
-                global_planner_params,
-                PathJoinSubstitution([pkg_bringup, 'maps', LaunchConfiguration('map_name'), 'global_planner_params.yaml']),
-                {'map_editor': True},
-                {'create_map': False},
-                {'map_name': LaunchConfiguration('map_name')}
-            ]
-        )
-    )
-    
     # Gym bridge launch
     gym_bridge_source = get_launch_source('race_bringup', 'gym_bridge_launch')
     if gym_bridge_source is not None:
@@ -228,34 +188,6 @@ def generate_launch_description():
         actions=sim_actions
     )
 
-    # 3. Common nodes
-    sector_slicer = Node(
-        package='sector_tuner',
-        executable='sector_slicer',
-        name='sector_slicer',
-        output='screen',
-        parameters=[{'map_name': LaunchConfiguration('map_name')}]
-    )
-
-    ot_sector_slicer = Node(
-        package='sector_tuner',
-        executable='ot_sector_slicer',
-        name='ot_sector_slicer',
-        output='screen',
-        parameters=[{'map_name': LaunchConfiguration('map_name')}]
-    )
-
-    # Include global trajectory publisher
-    global_trajectory_pub = None
-    global_trajectory_pub_source = get_launch_source('global_planner', 'global_trajectory_publisher_launch')
-    if global_trajectory_pub_source is not None:
-        global_trajectory_pub = IncludeLaunchDescription(
-            global_trajectory_pub_source,
-            launch_arguments={
-                'map_path': [map_src_path, '/', LaunchConfiguration('map_name')]
-            }.items()
-        )
-
     ld = LaunchDescription([
         racecar_version_arg,
         map_name_arg,
@@ -263,12 +195,7 @@ def generate_launch_description():
         slam_method_arg,
         run_ftg_arg,
         physical_group,
-        sim_group,
-        sector_slicer,
-        ot_sector_slicer
+        sim_group
     ])
-
-    if global_trajectory_pub is not None:
-        ld.add_action(global_trajectory_pub)
 
     return ld

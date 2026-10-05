@@ -17,10 +17,11 @@ def DefaultStateLogic(state_machine: StateMachine) -> List[Wpnt]:
             return Trailing(state_machine)
         case StateType.OVERTAKE:
             return Overtaking(state_machine)
-        case StateType.FTGONLY:
+        case StateType.FTGONLY | StateType.RECOVERY_STUCK | StateType.RECOVERY_REVERSE | StateType.RECOVERY_ALIGN | StateType.LOW_BAT:
             return FTGOnly(state_machine)
         case _:
             raise NotImplementedError(f"State {state_machine.state} not recognized")
+
 
 """
 Here we define the behaviour in the different states.

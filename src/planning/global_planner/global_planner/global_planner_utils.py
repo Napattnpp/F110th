@@ -53,17 +53,6 @@ def get_data_path(subpath=''):
             # Identify workspace root dynamically by checking for unique root markers
             if (parent / 'docker-compose.yml').is_file() and (parent / 'assets' / 'maps').is_dir():
                 workspace_assets_path = parent / 'assets' / subpath
-                if subpath.startswith('maps/'):
-                    if workspace_assets_path.exists():
-                        return str(workspace_assets_path)
-                    # Search subfolders under assets/maps for matching map directory or yaml
-                    target = subpath[5:]
-                    maps_dir = parent / 'assets' / 'maps'
-                    for root, dirs, files in os.walk(maps_dir):
-                        rpath = Path(root)
-                        if rpath.name == target or (rpath / f"{target}.yaml").exists():
-                            return str(rpath)
-                    workspace_assets_path.mkdir(parents=True, exist_ok=True)
                 return str(workspace_assets_path)
     except Exception:
         pass

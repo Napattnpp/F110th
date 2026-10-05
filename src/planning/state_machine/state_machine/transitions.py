@@ -2,10 +2,101 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from state_machine.state_types import StateType
+from state_machine.state_types import StateType, TopLevelMode
 
 if TYPE_CHECKING:
     from state_machine.state_machine import StateMachine
+
+
+def hierarchical_transition(state_machine: StateMachine) -> StateType:
+    """Top-Level Hierarchical State Transition Dispatcher."""
+    p = state_machine.params
+
+    # 1. Top-Level Mode Safety Check
+    if state_machine._low_bat:
+        state_machine.top_level_mode = TopLevelMode.SAFETY
+        return StateType.LOW_BAT
+
+    # 2. Check for Recovery Trigger
+    if p.enable_recovery and state_machine.top_level_mode != TopLevelMode.RECOVERY:
+        if state_machine._check_stuck:
+            state_machine.get_logger().warn("[HSM] Crash / Stuck condition detected! Switching to RECOVERY mode.")
+            state_machine.top_level_mode = TopLevelMode.RECOVERY
+            state_machine.recovery_start_time = state_machine.get_clock().now().nanoseconds * 1e-9
+            state_machine.recovery_substate_start = state_machine.recovery_start_time
+            state_machine._evaluate_recovery_steer_dir()
+            return StateType.RECOVERY_STUCK
+
+    # 3. Handle Active Top-Level Mode
+    if state_machine.top_level_mode == TopLevelMode.RECOVERY:
+        return recovery_transition(state_machine)
+    elif state_machine.top_level_mode == TopLevelMode.SAFETY:
+        return StateType.LOW_BAT
+    else:
+        # TopLevelMode.NORMAL_RACING
+        if p.mode == 'dummy':
+            return dummy_transition(state_machine)
+        elif p.mode == 'timetrials':
+            return timetrials_transition(state_machine)
+        elif p.mode == 'head_to_head':
+            return head_to_head_transition(state_machine)
+        elif p.mode == 'qualifying':
+            return qualifying_transition(state_machine)
+        else:
+            return StateType.GB_TRACK
+
+
+def recovery_transition(state_machine: StateMachine) -> StateType:
+    """Sub-state transitions within RECOVERY mode."""
+    p = state_machine.params
+    now_sec = state_machine.get_clock().now().nanoseconds * 1e-9
+    substate_elapsed = now_sec - state_machine.recovery_substate_start
+
+    front_clear, rear_clear = state_machine._evaluate_scan_clearance()
+
+    if state_machine.state == StateType.RECOVERY_STUCK:
+        # Evaluate wall angles & switch immediately to RECOVERY_REVERSE
+        state_machine._evaluate_recovery_steer_dir()
+        state_machine.recovery_substate_start = now_sec
+        return StateType.RECOVERY_REVERSE
+
+    elif state_machine.state == StateType.RECOVERY_REVERSE:
+        # Exit conditions to RECOVERY_ALIGN:
+        # 1. Front distance is clear
+        # 2. Rear distance is blocked (avoid crashing into opposite wall)
+        # 3. Reverse timeout reached
+        if front_clear > p.recovery_front_safe_dist:
+            state_machine.get_logger().info(f"[RECOVERY] Front clearance restored ({front_clear:.2f}m). Moving to ALIGN.")
+            state_machine.recovery_substate_start = now_sec
+            return StateType.RECOVERY_ALIGN
+
+        if rear_clear < p.recovery_rear_min_dist:
+            state_machine.get_logger().warn(f"[RECOVERY] Rear obstruction detected ({rear_clear:.2f}m). Stopping reverse, moving to ALIGN.")
+            state_machine.recovery_substate_start = now_sec
+            return StateType.RECOVERY_ALIGN
+
+        if substate_elapsed >= p.recovery_max_reverse_time:
+            state_machine.get_logger().info(f"[RECOVERY] Reverse timer expired ({substate_elapsed:.2f}s). Moving to ALIGN.")
+            state_machine.recovery_substate_start = now_sec
+            return StateType.RECOVERY_ALIGN
+
+        return StateType.RECOVERY_REVERSE
+
+    elif state_machine.state == StateType.RECOVERY_ALIGN:
+        # Stay in ALIGN (FTG mode stabilization) for recovery_align_time
+        if substate_elapsed >= p.recovery_align_time:
+            state_machine.get_logger().info("[RECOVERY] Recovery sequence complete! Resuming NORMAL_RACING.")
+            state_machine.top_level_mode = TopLevelMode.NORMAL_RACING
+            state_machine.stuck_counter = 0
+            return StateType.GB_TRACK
+
+        return StateType.RECOVERY_ALIGN
+
+    else:
+        # Default fallback
+        state_machine.top_level_mode = TopLevelMode.NORMAL_RACING
+        return StateType.GB_TRACK
+
 
 
 def dummy_transition(state_machine: StateMachine)->str:

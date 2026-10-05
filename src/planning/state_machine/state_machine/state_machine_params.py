@@ -300,6 +300,22 @@ class StateMachineParams:
             node.declare_parameter("overtake_speed_scale", 0.85, descriptor=descriptor)
         self.overtake_speed_scale: float = node.get_parameter("overtake_speed_scale").value
 
+        # RECOVERY PARAMETERS
+        def _get_or_decl(name, default):
+            if not node.has_parameter(name):
+                node.declare_parameter(name, default)
+            return node.get_parameter(name).value
+
+        self.enable_recovery: bool = bool(_get_or_decl("enable_recovery", True))
+        self.crash_dist_threshold: float = float(_get_or_decl("crash_dist_threshold", 0.25))
+        self.stuck_speed_threshold: float = float(_get_or_decl("stuck_speed_threshold", 0.1))
+        self.stuck_time_threshold: float = float(_get_or_decl("stuck_time_threshold", 0.6))
+        self.recovery_reverse_speed: float = float(_get_or_decl("recovery_reverse_speed", -0.7))
+        self.recovery_max_reverse_time: float = float(_get_or_decl("recovery_max_reverse_time", 1.5))
+        self.recovery_align_time: float = float(_get_or_decl("recovery_align_time", 0.8))
+        self.recovery_rear_min_dist: float = float(_get_or_decl("recovery_rear_min_dist", 0.35))
+        self.recovery_front_safe_dist: float = float(_get_or_decl("recovery_front_safe_dist", 0.70))
+
 
 
     def parameters_callback(self, parameters: List[Parameter]) -> SetParametersResult:

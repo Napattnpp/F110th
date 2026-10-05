@@ -23,26 +23,20 @@ def get_launch_source(package_name, base_name):
 def generate_launch_description():
     pkg_bringup = get_package_share_directory('race_bringup')
 
-    try:
-        from race_bringup.profile_loader import load_active_profile
-        profile = load_active_profile()
-    except ImportError:
-        profile = {}
-
-    # Arguments
+    # Arguments read directly from environment or explicit defaults
     racecar_version_arg = DeclareLaunchArgument(
         'racecar_version',
-        default_value=profile.get('racecar_version', 'NUC1'),
-        description='NUC version (e.g. NUC1)'
+        default_value=os.environ.get('RACECAR_VERSION', 'NUC1'),
+        description='NUC / Jetson version (e.g. NUC1, JET1)'
     )
     lu_table_arg = DeclareLaunchArgument(
         'LU_table',
-        default_value=profile.get('LU_table', 'NUC1_hangar_pacejka'),
+        default_value='NUC1_hangar_pacejka',
         description='LU table parameter'
     )
     ctrl_algo_arg = DeclareLaunchArgument(
         'ctrl_algo',
-        default_value=profile.get('ctrl_algo', 'MAP'),
+        default_value='MAP',
         description='Control algorithm: MAP / PP'
     )
     measure_arg = DeclareLaunchArgument(

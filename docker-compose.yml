@@ -1,43 +1,39 @@
 # ── Shared YAML anchors ───────────────────────────────────────────────────────
 
 x-common-build-args: &common-build-args
-  USER: ${USER}
+  USER: ${USER:-ros}
   UID: ${HOST_UID:-1000}
   GID: ${HOST_GID:-1000}
 
 x-common-settings: &common-settings
   restart: unless-stopped
   network_mode: host
-  ipc: host
-  pid: host
-  privileged: true
   shm_size: "1gb"
   stdin_open: true
   tty: true
   environment:
     - DISPLAY=${DISPLAY}
-    - XAUTHORITY=${XAUTHORITY}
-    - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-21}
-    - RMW_IMPLEMENTATION=${RMW_IMPLEMENTATION:-rmw_zenoh_cpp}
-    - CYCLONEDDS_URI=file:///cyclonedds.xml
-    - RACECAR_VERSION=${RACECAR_VERSION:-NUC1}
-    - USER=${USER}
+    - XAUTHORITY=${XAUTHORITY:-}
+    - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:?ROS_DOMAIN_ID is required in .env to prevent vehicle network cross-talk}
+    - ROS_AUTOMATIC_DISCOVERY_RANGE=${ROS_AUTOMATIC_DISCOVERY_RANGE:-SUBNET}
+    - RMW_IMPLEMENTATION=${RMW_IMPLEMENTATION:-rmw_cyclonedds_cpp}
+    - CYCLONEDDS_URI=file:///etc/cyclonedds.xml
+    - RACECAR_ID=${RACECAR_ID:?RACECAR_ID is required in .env (e.g. car01)}
+    - RACECAR_VERSION=${RACECAR_ID:?RACECAR_ID is required in .env (e.g. car01)}
+    - F110_ROLE=${F110_ROLE:-simulation}
+    - USER=${USER:-ros}
   volumes:
-    # Hardware & device access (Linux host only - disabled for macOS devcontainer compatibility)
-    # - /dev:/dev
-    # - /run/udev:/run/udev:ro
-    # - /var/run/dbus/system_bus_socket:/var/run/dbus/system_bus_socket
     # X11 display & authentication
     - /tmp/.X11-unix:/tmp/.X11-unix
     - ${XAUTHORITY:-/tmp/.docker.xauth}:${XAUTHORITY:-/tmp/.docker.xauth}
     # Source code (repo root → workspace inside container)
-    - .:/home/${USER}/F110th
-    # Fast build outputs volume (prevents slow macOS host sync)
-    - f110th_build_cache:/home/${USER}/F110th/out
-    # CycloneDDS configuration override (disables shared memory to prevent RouDi timeouts)
-    - ./.devcontainer/docker/cyclonedds.xml:/cyclonedds.xml:ro
+    - .:/home/${USER:-ros}/F110th
+    # Fast build outputs volume (prevents slow filesystem sync)
+    - f110th_build_cache:/home/${USER:-ros}/F110th/out
+    # CycloneDDS configuration (Mounts cyclonedds_dev.xml or cyclonedds_car.xml via CYCLONEDDS_PROFILE env)
+    - ./configs/dds/${CYCLONEDDS_PROFILE:-cyclonedds_dev.xml}:/etc/cyclonedds.xml:ro
     # Global Tmux configuration
-    - ./configs/.tmux.conf:/home/${USER}/.tmux.conf:ro
+    - ./configs/tmux.conf:/home/${USER:-ros}/.tmux.conf:ro
   command: /bin/bash
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -54,9 +50,12 @@ services:
       args:
         <<: *common-build-args
     container_name: f1tenth_jetson
-    image: ${DOCKERHUB_USER:-napattnpp}/${IMAGE_NAME:-f110th_img}:humble-jetson
+    image: ${DOCKERHUB_USER:-f110th}/${IMAGE_NAME:-f110th_img}:humble-jetson
     profiles: ["jetson"]
     runtime: nvidia
+    ipc: host
+    pid: host
+    privileged: true
     deploy:
       resources:
         reservations:
@@ -66,18 +65,23 @@ services:
               capabilities: [ gpu ]
     <<: *common-settings
     volumes:
-      # Hardware & device access
+      # X11 display & authentication
+      - /tmp/.X11-unix:/tmp/.X11-unix
+      - ${XAUTHORITY:-/tmp/.docker.xauth}:${XAUTHORITY:-/tmp/.docker.xauth}
+      # Source code
+      - .:/home/${USER:-ros}/F110th
+      # Fast build outputs volume
+      - f110th_build_cache:/home/${USER:-ros}/F110th/out
+      # CycloneDDS & Tmux configs
+      - ./configs/dds/${CYCLONEDDS_PROFILE:-cyclonedds_dev.xml}:/etc/cyclonedds.xml:ro
+      - ./configs/tmux.conf:/home/${USER:-ros}/.tmux.conf:ro
+      # Hardware & device access (Jetson-specific on-car physical hardware)
       - /dev:/dev
       - /run/udev:/run/udev:ro
+
       - /var/run/dbus/system_bus_socket:/var/run/dbus/system_bus_socket
       # Nvidia camera access (Jetson-specific)
       - /tmp/argus_socket:/tmp/argus_socket
-      # X11 display
-      - /tmp/.X11-unix:/tmp/.X11-unix
-      # Source code
-      - .:/home/${USER}/F110th
-      # Fast build outputs volume (prevents slow filesystem sync)
-      - f110th_build_cache:/home/${USER}/F110th/out
 
   # --------------------------------------------------------------------------
   # general — x86 / ARM laptop (development & simulation)
@@ -89,7 +93,7 @@ services:
       args:
         <<: *common-build-args
     container_name: f1tenth_general
-    image: ${DOCKERHUB_USER:-napattnpp}/${IMAGE_NAME:-f110th_img}:humble-general
+    image: ${DOCKERHUB_USER:-f110th}/${IMAGE_NAME:-f110th_img}:humble-general
     profiles: ["general"]
     <<: *common-settings
 

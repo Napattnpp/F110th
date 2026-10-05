@@ -15,6 +15,7 @@ from f110_msgs.msg import Wpnt, WpntArray
 
 import trajectory_planning_helpers as tph
 from global_planner.readwrite_global_waypoints import write_global_waypoints
+from global_planner.global_planner_utils import get_data_path
 
 class ManualWaypointLogger(Node):
     """
@@ -74,7 +75,6 @@ class ManualWaypointLogger(Node):
         if not self.is_recording:
             return
 
-        x = msg.pose.header.frame_id # placeholder check
         x = msg.pose.position.x
         y = msg.pose.position.y
         v = self.default_speed
@@ -190,12 +190,7 @@ class ManualWaypointLogger(Node):
             markers_msg.markers.append(mk)
 
         # Map directory target
-        workspace_root = Path(__file__).resolve().parents[4]
-        map_dir = workspace_root / "assets" / "maps" / self.map_name
-
-        if not map_dir.exists():
-            map_dir = Path("/home/napat/F110th/assets/maps") / self.map_name
-
+        map_dir = Path(get_data_path(f"maps/{self.map_name}"))
         map_dir.mkdir(parents=True, exist_ok=True)
 
         # Write to global_waypoints.json

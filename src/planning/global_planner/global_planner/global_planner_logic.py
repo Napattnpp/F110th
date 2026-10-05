@@ -134,16 +134,22 @@ class GlobalPlannerLogic:
         self.map_info_str = ""
 
         if not self.create_map:
-            with open(os.path.join(self.map_dir, self.map_name + '.yaml')) as f:
-                data = yaml.safe_load(f)
-                # only need resolution and origin for waypoints
-                self.map_resolution = data['resolution']
-                self.map_origin.x = data['origin'][0]
-                self.map_origin.y = data['origin'][1]
-                self.free_thresh = float(data.get('free_thresh', 0.196))
-                self.map_valid: bool = True
-
-                self.initial_position = [self.map_origin.x, self.map_origin.y, 0]
+            yaml_candidates = [
+                os.path.join(self.map_dir, "waypoint_gen", self.map_name + "_waypoint_gen.yaml"),
+                os.path.join(self.map_dir, "clean", self.map_name + ".yaml"),
+                os.path.join(self.map_dir, "waypoints", self.map_name + ".yaml"),
+                os.path.join(self.map_dir, self.map_name + ".yaml"),
+            ]
+            yaml_path = next((c for c in yaml_candidates if os.path.exists(c)), None)
+            if yaml_path:
+                with open(yaml_path) as f:
+                    data = yaml.safe_load(f)
+                    self.map_resolution = data['resolution']
+                    self.map_origin.x = data['origin'][0]
+                    self.map_origin.y = data['origin'][1]
+                    self.free_thresh = float(data.get('free_thresh', 0.196))
+                    self.map_valid = True
+                    self.initial_position = [self.map_origin.x, self.map_origin.y, 0]
 
         self.pose_valid: bool = False
         '''updated in pose callback'''
@@ -290,26 +296,22 @@ class GlobalPlannerLogic:
         Returns:
             bool: Success or failure
         """
-        # Check for waypoint-generator map image (<map_name>_waypoint_gen) first, fallback to standard map
+        # Strictly require waypoint-generator map image inside waypoint_gen/
         img_path = None
-        for candidate in [
+        wp_gen_dir = os.path.join(self.map_dir, "waypoint_gen")
+        filenames = [
             f"{self.map_name}_waypoint_gen.png",
             f"{self.map_name}_waypoint_gen.pgm",
-            f"{self.map_name}_waypoint.png",
-            f"{self.map_name}_waypoint.pgm",
-            f"{self.map_name}_raceline.png",
-            f"{self.map_name}_raceline.pgm",
-            f"{self.map_name}.png",
-            f"{self.map_name}.pgm",
-        ]:
-            cand_path = os.path.join(self.map_dir, candidate)
+        ]
+        for fname in filenames:
+            cand_path = os.path.join(wp_gen_dir, fname)
             if os.path.exists(cand_path):
                 img_path = cand_path
-                self.loginfo(f"Global planner using map image: {candidate}")
+                self.loginfo(f"Global planner using map image: {cand_path}")
                 break
 
         if img_path is None:
-            self.logwarn(f"No map image found in {self.map_dir} for map {self.map_name}")
+            self.logerror(f"Missing required map image: {wp_gen_dir}/{self.map_name}_waypoint_gen.png. Please run 'python3 scripts/map_tools/init_map.py {self.map_name}' first.")
             return (False, "")
 
         raw_img = cv2.imread(img_path, 0)
@@ -589,8 +591,10 @@ class GlobalPlannerLogic:
         import csv
         from .global_planner_utils import conv_psi
 
+        wp_dir = os.path.join(self.map_dir, 'waypoints') if os.path.isdir(os.path.join(self.map_dir, 'waypoints')) else self.map_dir
+
         # 1. Centerline CSV
-        centerline_csv_path = os.path.join(self.map_dir, self.map_name + '_centerline.csv')
+        centerline_csv_path = os.path.join(wp_dir, self.map_name + '_centerline.csv')
         with open(centerline_csv_path, 'w', newline='') as file:
             writer = csv.writer(file)
             writer.writerow(['x_m', 'y_m'])
@@ -598,7 +602,7 @@ class GlobalPlannerLogic:
                 writer.writerow([row[0], row[1]])
 
         # 2. Raceline CSV (using shortest path)
-        raceline_csv_path = os.path.join(self.map_dir, self.map_name + '_raceline.csv')
+        raceline_csv_path = os.path.join(wp_dir, self.map_name + '_raceline.csv')
         with open(raceline_csv_path, 'w', newline='') as file:
             writer = csv.writer(file, delimiter=';')
             writer.writerow(['# Shortest path raceline generated from global_waypoints.json'])
