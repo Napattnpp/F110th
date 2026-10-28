@@ -692,12 +692,42 @@ class StateMachine(Node):
         return splini_glob
 
     def init_ot_params(self):
-        """Obtain the initial overtaking parameters from the parameter server.
-        Then instantiate a parameter event handler to get the updates on those parameters.
+        """Obtain overtaking sector definitions from the active map's ot_sectors.yaml file,
+        or fall back to the parameter server if running graph_based mode.
         """
         self.n_ot_sectors = None
         self.ot_param_names = None
         self.ot_sectors = []
+
+        # 1. Attempt direct YAML load from maps folder (Single Source of Truth for both spliner & graph_based)
+        map_name = getattr(self.params, 'map_name', 'ifac_roboracer')
+        candidates = [
+            f"/home/napat/F110th/assets/maps/{map_name}/waypoints/ot_sectors.yaml",
+            f"/home/napat/F110th/assets/maps/{map_name}/ot_sectors.yaml",
+            f"/Users/napat/Developer/F110th/assets/maps/{map_name}/waypoints/ot_sectors.yaml",
+            f"/Users/napat/Developer/F110th/assets/maps/{map_name}/ot_sectors.yaml",
+        ]
+        for c in candidates:
+            if os.path.exists(c):
+                try:
+                    with open(c, 'r') as f:
+                        data = yaml.safe_load(f)
+                    ot_params = data.get('ot_interpolator', {}).get('ros__parameters', {})
+                    n_sectors = ot_params.get('n_sectors', 0)
+                    for i in range(n_sectors):
+                        sec = ot_params.get(f'Overtaking_sector{i}', {})
+                        if 'start' in sec and 'end' in sec:
+                            self.ot_sectors.append({
+                                'start': int(sec['start']),
+                                'end': int(sec['end']),
+                                'ot_flag': bool(sec.get('ot_flag', False))
+                            })
+                    if len(self.ot_sectors) > 0:
+                        self.n_ot_sectors = len(self.ot_sectors)
+                        self.get_logger().info(f"[State Machine] Successfully loaded {self.n_ot_sectors} OT sectors from {c}: {self.ot_sectors}")
+                        return
+                except Exception as e:
+                    self.get_logger().warn(f"[State Machine] Error parsing {c}: {e}")
 
         if self.params.overtake_mode != "graph_based":
             return

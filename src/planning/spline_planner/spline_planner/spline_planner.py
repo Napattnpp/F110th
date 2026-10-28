@@ -588,14 +588,17 @@ class ObstacleSpliner(Node):
                     (self.post_apex_1, 0.40 * cand_d_apex),
                     (self.post_apex_2, 0.0),
                 ]
+                # Bounded avoidance corridor: dynamically scaled by speed but strictly clamped
+                # to prevent oversized splines wrapping around hairpins or bleeding into parallel lanes
+                speed_scale = np.clip(1.0 + 0.3 * (self.cur_vs / max(self.gb_vmax, 1.0)), 1.0, 1.25)
+                max_evasion_span = min(9.0, 0.22 * self.gb_max_s)
+                nominal_span = (evasion_offsets[-1][0] - evasion_offsets[0][0]) * speed_scale
+                span_scale = (max_evasion_span / nominal_span) if nominal_span > max_evasion_span else 1.0
+
                 evasion_points = []
-                speed_scale = np.clip(1.0 + self.cur_vs / self.gb_vmax, 1.0, 1.5)
                 for dst, di in evasion_offsets:
-                    scaled_dst = dst * speed_scale
-                    if outside == cand_side:
-                        si = s_apex + scaled_dst * 1.75
-                    else:
-                        si = s_apex + scaled_dst
+                    scaled_dst = dst * speed_scale * span_scale
+                    si = s_apex + scaled_dst
                     evasion_points.append([si, di])
                 evasion_points = np.array(evasion_points)
 

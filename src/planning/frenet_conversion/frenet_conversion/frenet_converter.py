@@ -31,26 +31,25 @@ class FrenetConverter:
         self.spline_y = CubicSpline(self.waypoints_s, self.waypoints_y)
         self.raceline_length = self.waypoints_s[-1]
 
-    def get_frenet(self, x, y, s=None) -> np.array:
+    def get_frenet(self, x, y, s=None, theta=None) -> np.array:
         # Compute Frenet coordinates for a given (x, y) point
-        self.closest_index = self.get_closest_index(x, y) #update idx for other functionalities
+        self.closest_index = self.get_closest_index(x, y, theta=theta) #update idx for other functionalities
         if s is None:
-            s = self.get_approx_s(x, y)
+            s = self.closest_index * self.waypoints_distance_m
             s, d = self.get_frenet_coord(x, y, s)
         else:
             s, d = self.get_frenet_coord(x, y, s)
 
         return np.array([s, d])
 
-    def get_approx_s(self, x, y) -> float:
+    def get_approx_s(self, x, y, theta=None) -> float:
         """
         Finds the s-coordinate of the given point by finding the nearest waypoint.
         """
-        # get distance with broadcasting multiple arrays
-        lenx = len(x)
-        dist_x = x - np.tile(self.waypoints_x, (lenx, 1)).T
-        dist_y = y - np.tile(self.waypoints_y, (lenx, 1)).T
-        return np.argmin(np.linalg.norm([dist_x.T, dist_y.T], axis=0), axis=1)*self.waypoints_distance_m
+        if self.closest_index is not None and len(self.closest_index) == len(x):
+            return self.closest_index * self.waypoints_distance_m
+        idxs = self.get_closest_index(x, y, theta=theta)
+        return idxs * self.waypoints_distance_m
     
     def get_frenet_velocities(self, vx, vy, theta) -> np.array:
         """
@@ -72,22 +71,47 @@ class FrenetConverter:
         
         return np.array([s_dot, d_dot])
 
-    def get_closest_index(self, x, y) -> int:
+    def get_closest_index(self, x, y, theta=None) -> int:
         """
-        Finds the index of the closest waypoint to the given point.
+        Finds the index of the closest waypoint to the given point, with optional heading
+        rejection and temporal tracking window to prevent snapping across walls to parallel tracks.
         
         Args:
             x (float): x-coordinate of the point
             y (float): y-coordinate of the point
+            theta (float, optional): heading orientation of vehicle in radians
             
         Returns:
-            int: index of the closest waypoint
+            int or array: index of the closest waypoint
         """
         # get distance with broadcasting multiple arrays
         lenx = len(x)
         dist_x = x - np.tile(self.waypoints_x, (lenx, 1)).T
         dist_y = y - np.tile(self.waypoints_y, (lenx, 1)).T
-        self.closest_index = np.argmin(np.linalg.norm([dist_x.T, dist_y.T], axis=0), axis=1)
+        dists = np.linalg.norm([dist_x.T, dist_y.T], axis=0)  # shape: (lenx, n_wpnts)
+
+        # 1. Heading Alignment Gating: penalize opposing lane waypoints (cos(delta_psi) < 0)
+        if theta is not None:
+            theta_arr = np.atleast_1d(theta)
+            for j in range(lenx):
+                th = theta_arr[min(j, len(theta_arr) - 1)]
+                cos_diff = np.cos(th - self.waypoints_psi)
+                opposing_mask = cos_diff < 0.0
+                dists[j, opposing_mask] += 1000.0
+
+        # 2. Temporal Window Continuity: if previously tracked single vehicle, prioritize local forward window
+        if self.closest_index is not None and lenx == 1:
+            prev_idx = int(self.closest_index[0] if hasattr(self.closest_index, '__len__') else self.closest_index)
+            num_pts = len(self.waypoints_x)
+            window_indices = np.array([(prev_idx + offset) % num_pts for offset in range(-15, 45)])
+            local_dists = dists[0, window_indices]
+            best_local_offset = np.argmin(local_dists)
+            if local_dists[best_local_offset] < 3.0:  # Valid track proximity
+                best_idx = np.array([window_indices[best_local_offset]])
+                self.closest_index = best_idx
+                return self.closest_index
+
+        self.closest_index = np.argmin(dists, axis=1)
         return self.closest_index
 
 

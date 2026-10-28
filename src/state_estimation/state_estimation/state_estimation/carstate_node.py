@@ -134,8 +134,8 @@ class Carstate(Node):
         q_cart = odom_cart.pose.pose.orientation
         theta = euler_from_quaternion([q_cart.x, q_cart.y, q_cart.z, q_cart.w])[2]
 
-        # get frenet coordinates and velocities
-        frenet_pos = self.frenet_converter.get_frenet([x_cart], [y_cart])
+        # get frenet coordinates and velocities with heading gating to prevent parallel wall snaps
+        frenet_pos = self.frenet_converter.get_frenet([x_cart], [y_cart], theta=theta)
         frenet_vel = self.frenet_converter.get_frenet_velocities(vx, vy, theta)
 
         s = frenet_pos[0, 0]

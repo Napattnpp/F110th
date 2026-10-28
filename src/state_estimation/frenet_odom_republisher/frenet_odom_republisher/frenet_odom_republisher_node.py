@@ -55,11 +55,11 @@ class FrenetOdomRepublisher(Node):
             odom_vel = msg.twist.twist.linear
             theta = euler_from_quaternion([odom_quat.x, odom_quat.y, odom_quat.z, odom_quat.w])[2]
 
-            frenet_pos = self.converter.get_frenet([odom_pos.x], [odom_pos.y])
+            frenet_pos = self.converter.get_frenet([odom_pos.x], [odom_pos.y], theta=theta)
             frenet_vel = self.converter.get_frenet_velocities(odom_vel.x, odom_vel.y, theta)
             
             frenet_msg = msg
-            idx = str(self.converter.get_closest_index([odom_pos.x], [odom_pos.y])[0])
+            idx = str(self.converter.get_closest_index([odom_pos.x], [odom_pos.y], theta=theta)[0])
             frenet_msg.child_frame_id = idx
             frenet_msg.pose.pose.position.x = frenet_pos[0, 0]
             frenet_msg.pose.pose.position.y = frenet_pos[1, 0]

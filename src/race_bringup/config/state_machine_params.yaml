@@ -2,6 +2,7 @@ state_machine:
   ros__parameters:
     rate_hz: 40  # [hz]
     mode: 'head_to_head' # "head_to_head", "dummy", "timetrials", "qualifying"
+    map_name: 'ifac_roboracer'
     initial_state: 'GB_TRACK'  # "GB_TRACK", ...
     test_on_car: True  # also set True if using on a bag
     n_loc_wpnts: 80  # number of local waypoints published, 1 waypoints every 0.1 meter

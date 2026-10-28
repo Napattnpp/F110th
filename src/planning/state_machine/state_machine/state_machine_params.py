@@ -67,6 +67,18 @@ class StateMachineParams:
         node.set_descriptor("n_loc_wpnts", descriptor=descriptor)
         self.n_loc_wpnts: int = node.get_parameter("n_loc_wpnts").value
         
+        descriptor = ParameterDescriptor(
+            description="Active map name for loading track and sector parameters\n",
+            type=ParameterType.PARAMETER_STRING,
+            read_only=False,
+        )
+        if not node.has_parameter("map_name"):
+            node.declare_parameter("map_name", "ifac_roboracer", descriptor=descriptor)
+        else:
+            node.set_descriptor("map_name", descriptor=descriptor)
+        map_val = node.get_parameter("map_name").value
+        self.map_name: str = str(map_val) if map_val is not None else "ifac_roboracer"
+
         self.overtake_mode = "spliner"
         """Overtake mode\nOnly spliner is supported at the moment"""
         
