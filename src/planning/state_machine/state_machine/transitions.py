@@ -247,13 +247,13 @@ def SpliniOvertakingTransition(state_machine: StateMachine) -> StateType:
         o_free = state_machine._check_ofree
         dwell_time = getattr(state_machine, 'state_dwell_time', 1.0)
 
-        # If raceline is free and the ego car has passed the obstacle or rejoined the raceline: return to GB_TRACK
-        if state_machine._check_gbfree and (not state_machine._check_enemy_in_front or state_machine._check_close_to_raceline):
-            return StateType.GB_TRACK
-
-        # Minimum dwell time hysteresis: prevent 30Hz flutter back to TRAILING during active overtake
-        if dwell_time < 0.4 and (spline_valid or state_machine.last_valid_avoidance_wpnts is not None):
+        # Minimum dwell time hysteresis: prevent high-frequency chatter back to TRAILING/GB_TRACK during active overtake
+        if dwell_time < 0.5 and (spline_valid or state_machine.last_valid_avoidance_wpnts is not None):
             return StateType.OVERTAKE
+
+        # Return to GB_TRACK once the obstacle is passed, raceline is free, and car has rejoined near raceline
+        if state_machine._check_gbfree and not state_machine._check_enemy_in_front and state_machine._check_close_to_raceline:
+            return StateType.GB_TRACK
 
         # If spline is on an obstacle we trail
         if not o_free:

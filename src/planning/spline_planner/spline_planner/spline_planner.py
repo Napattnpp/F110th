@@ -1,6 +1,7 @@
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile
+from rclpy.duration import Duration
 from rcl_interfaces.msg import FloatingPointRange, ParameterDescriptor, SetParametersResult, ParameterType
 from rclpy.parameter import Parameter
 
@@ -421,10 +422,10 @@ class ObstacleSpliner(Node):
                 w_pred = wpnts_list[int(np.argmin(s_diffs))]
                 obs_rad = max(0.15, abs(obs.d_left - obs.d_right) / 2.0)
                 d_max_allowed = w_pred.d_left - obs_rad
-                d_min_allowed = w_pred.d_right + obs_rad
+                d_min_allowed = -abs(w_pred.d_right) + obs_rad
                 obs.d_center = float(np.clip(obs.d_center, d_min_allowed, d_max_allowed))
-                obs.d_left = float(np.clip(obs.d_left, d_min_allowed, d_max_allowed))
-                obs.d_right = float(np.clip(obs.d_right, d_min_allowed, d_max_allowed))
+                obs.d_left = obs.d_center + obs_rad
+                obs.d_right = obs.d_center - obs_rad
 
             resp = self.converter.get_cartesian([obs.s_center], [obs.d_center])
 
@@ -445,38 +446,26 @@ class ObstacleSpliner(Node):
         return True
 
     def _more_space(self, obstacle: Obstacle, gb_wpnts: List[Any], gb_idxs: List[int]) -> Tuple[str, float]:
-        left_gap = abs(gb_wpnts[gb_idxs[0]].d_left - obstacle.d_left)
-        right_gap = abs(gb_wpnts[gb_idxs[0]].d_right + obstacle.d_right)
+        left_gap = gb_wpnts[gb_idxs[0]].d_left - obstacle.d_left
+        right_gap = abs(gb_wpnts[gb_idxs[0]].d_right) + obstacle.d_right
         min_space = self.evasion_dist + self.spline_bound_mindist
 
         if right_gap > min_space and left_gap < min_space:
             # Compute apex distance to the right of the opponent
             d_apex_right = obstacle.d_right - self.evasion_dist
-            # If we overtake to the right of the opponent BUT the apex is to the left of the raceline, then we set the apex to 0
-            if d_apex_right > 0:
-                d_apex_right = 0
             return "right", d_apex_right
 
         elif left_gap > min_space and right_gap < min_space:
             # Compute apex distance to the left of the opponent
             d_apex_left = obstacle.d_left + self.evasion_dist
-            # If we overtake to the left of the opponent BUT the apex is to the right of the raceline, then we set the apex to 0
-            if d_apex_left < 0:
-                d_apex_left = 0
             return "left", d_apex_left
         else:
             candidate_d_apex_left = obstacle.d_left + self.evasion_dist
             candidate_d_apex_right = obstacle.d_right - self.evasion_dist
 
             if abs(candidate_d_apex_left) <= abs(candidate_d_apex_right):
-                # If we overtake to the left of the opponent BUT the apex is to the right of the raceline, then we set the apex to 0
-                if candidate_d_apex_left < 0:
-                    candidate_d_apex_left = 0
                 return "left", candidate_d_apex_left
             else:
-                # If we overtake to the right of the opponent BUT the apex is to the left of the raceline, then we set the apex to 0
-                if candidate_d_apex_right > 0:
-                    candidate_d_apex_right = 0
                 return "right", candidate_d_apex_right
 
     #################### MAIN FUNCTIONS####################
@@ -572,12 +561,8 @@ class ObstacleSpliner(Node):
                 # Compute apex distance for this candidate side
                 if cand_side == "right":
                     cand_d_apex = closest_obs.d_right - self.evasion_dist
-                    if cand_d_apex > 0:
-                        cand_d_apex = 0.0
                 else:
                     cand_d_apex = closest_obs.d_left + self.evasion_dist
-                    if cand_d_apex < 0:
-                        cand_d_apex = 0.0
 
                 # Form 7 control points along the evasion trajectory
                 evasion_points = []
@@ -603,10 +588,9 @@ class ObstacleSpliner(Node):
                 # Fit smooth cubic spline
                 spatial_spline = Spline(x=evasion_points[:, 0], y=evasion_points[:, 1])
                 s_cand = np.arange(evasion_points[0, 0], evasion_points[-1, 0], spline_res)
-                if cand_d_apex < 0:
-                    d_cand = np.clip(spatial_spline(s_cand), cand_d_apex, 0.0)
-                else:
-                    d_cand = np.clip(spatial_spline(s_cand), 0.0, cand_d_apex)
+                d_min_clip = min(0.0, cand_d_apex)
+                d_max_clip = max(0.0, cand_d_apex)
+                d_cand = np.clip(spatial_spline(s_cand), d_min_clip, d_max_clip)
                 s_cand_wrapped = s_cand % self.gb_max_s
 
                 # Feasibility Check A (Priority 2): Full-Horizon Track Boundary Clearance
@@ -615,7 +599,7 @@ class ObstacleSpliner(Node):
                     idx = int((s_cand_wrapped[i] / wpnt_dist) % self.gb_max_idx)
                     w = gb_wpnts[idx]
                     di = d_cand[i]
-                    if di > 0:
+                    if di >= 0:
                         clearance = w.d_left - di
                     else:
                         clearance = abs(w.d_right) - abs(di)
@@ -659,6 +643,11 @@ class ObstacleSpliner(Node):
                 danger_flag = True
                 wpnts.wpnts = []
                 mrks.markers = []
+                del_mrk = Marker()
+                del_mrk.header.frame_id = "map"
+                del_mrk.header.stamp = self.get_clock().now().to_msg()
+                del_mrk.action = Marker.DELETEALL
+                mrks.markers.append(del_mrk)
                 wpnts.side_switch = True
                 self.last_switch_time = self.get_clock().now().to_msg()
                 return wpnts, mrks
@@ -716,11 +705,11 @@ class ObstacleSpliner(Node):
             wpnts.header.frame_id = "map"
             wpnts.ot_side = chosen_side
             wpnts.ot_line = outside
-            wpnts.side_switch = True if self.last_ot_side != chosen_side else False
-            wpnts.last_switch_time = self.last_switch_time
-
-            if self.last_ot_side != chosen_side:
+            is_switch = (self.last_ot_side != "" and self.last_ot_side != chosen_side)
+            wpnts.side_switch = is_switch
+            if is_switch:
                 self.last_switch_time = self.get_clock().now().to_msg()
+            wpnts.last_switch_time = self.last_switch_time
             self.last_ot_side = chosen_side
 
         else:
@@ -790,6 +779,7 @@ class ObstacleSpliner(Node):
             mrk.color.g = 0.75
 
         mrk.id = len(mrks.markers)
+        mrk.lifetime = Duration(seconds=0.25).to_msg()
         mrk.pose.position.x = float(x)
         mrk.pose.position.y = float(y)
         mrk.pose.position.z = v / float(self.gb_vmax / 2)

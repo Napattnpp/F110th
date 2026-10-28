@@ -495,11 +495,15 @@ class StateMachine(Node):
                         if min_s_diff < (obs_len / 2.0 + 0.45):
                             ot_d = self.last_valid_avoidance_wpnts[avoid_wpnt_idx].d_m
                             obs_d_center = obs.d_center
+                            obs_rad = max(0.15, abs(getattr(obs, 'd_left', obs_d_center + 0.15) - getattr(obs, 'd_right', obs_d_center - 0.15)) / 2.0)
+                            obs_d_left = obs_d_center + obs_rad
+                            obs_d_right = obs_d_center - obs_rad
+
                             # Check clearance to obstacle boundary bounds
-                            if ot_d > obs_d_center:
-                                clearance = ot_d - getattr(obs, 'd_left', obs_d_center)
+                            if ot_d >= obs_d_center:
+                                clearance = ot_d - obs_d_left
                             else:
-                                clearance = getattr(obs, 'd_right', obs_d_center) - ot_d
+                                clearance = obs_d_right - ot_d
 
                             if clearance < self.params.lateral_width_ot_m:
                                 o_free = False

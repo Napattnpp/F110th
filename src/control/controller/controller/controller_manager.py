@@ -559,7 +559,6 @@ class Controller(Node):
         self.l1_pub.publish(Point(x=float(idx_nearest_waypoint), y=L1_distance))
         
         self.waypoint_safety_counter += 1
-        print(self.waypoint_safety_counter, self.rate, self.state_machine_rate)
         if self.waypoint_safety_counter >= self.rate/self.state_machine_rate* 10: #we can use the same waypoints for 5 cycles
             self.get_logger().warning("[controller_manager] Received no local wpnts. STOPPING!!")
             speed = 0.0

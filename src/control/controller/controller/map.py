@@ -386,9 +386,11 @@ class MAP_Controller:
 
     def waypoint_at_distance_before_car(self, distance, waypoints, idx_waypoint_behind_car):
         """
-        Calculates the waypoint at a certain frenet distance in front of the car,
+        Calculates the waypoint at a certain distance in front of the car along the local waypoints path,
         using true cumulative Euclidean distance along the path segments with linear interpolation.
-        Supports closed-loop tracks by wrapping around the waypoints array.
+        Operates on open local waypoint paths without circular wrapping to index 0 (which points backwards).
+        If the requested distance extends beyond the local window, projects forward along the tangent
+        of the final segment.
         """
         if distance is None:
             distance = self.t_clip_min
@@ -400,23 +402,29 @@ class MAP_Controller:
             return np.array(waypoints[0])
 
         accumulated_dist = 0.0
-        curr_idx = idx_waypoint_behind_car
+        curr_idx = max(0, min(idx_waypoint_behind_car, n_waypoints - 2))
 
-        # Traverse segments, wrapping around indices for closed loops
-        for _ in range(n_waypoints):
-            p1 = waypoints[curr_idx % n_waypoints]
-            p2 = waypoints[(curr_idx + 1) % n_waypoints]
+        # Traverse segments linearly forward along the path WITHOUT circular wrapping
+        for i in range(curr_idx, n_waypoints - 1):
+            p1 = waypoints[i]
+            p2 = waypoints[i + 1]
             segment_dist = np.linalg.norm(p2 - p1)
             
             if accumulated_dist + segment_dist >= distance:
                 # Target is on this segment! Interpolate to find the exact point
                 rem_dist = distance - accumulated_dist
                 t = rem_dist / segment_dist if segment_dist > 1e-6 else 0.0
-                interpolated_pt = p1 + t * (p2 - p1)
-                return interpolated_pt
+                return p1 + t * (p2 - p1)
 
             accumulated_dist += segment_dist
-            curr_idx += 1
 
-        # Fallback if distance is larger than the entire track length
-        return np.array(waypoints[curr_idx % n_waypoints]) 
+        # If requested distance extends beyond the end of the local window,
+        # extrapolate along the tangent of the final segment (p[-1] - p[-2])
+        p_last = waypoints[-1]
+        p_prev = waypoints[-2]
+        final_dir = p_last - p_prev
+        final_dist = np.linalg.norm(final_dir)
+        if final_dist > 1e-6:
+            rem_dist = distance - accumulated_dist
+            return p_last + (rem_dist / final_dist) * final_dir
+        return np.array(p_last) 
