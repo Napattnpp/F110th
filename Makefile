@@ -114,6 +114,17 @@ start_line: ## Set Start/Finish Line & AMCL initial pose on host: make start_lin
 	@echo "Launching Start Line selector using $(PYTHON)..."
 	@$(PYTHON) src/planning/global_planner/global_planner/set_start_line.py $(MAP)
 
+map_status: ## Inspect ADR-004 map compliance across tracks: make map_status [MAP=rectangle1]
+	@$(PYTHON) scripts/map/manage_map.py status $(MAP)
+
+clean_map: ## Clean occupancy grid & generate binary mask (Headless/0% X11): make clean_map MAP=rectangle1
+	@[ -n "$(MAP)" ] || (echo "[!] Error: MAP argument required (e.g. make clean_map MAP=rectangle1)"; exit 1)
+	@$(PYTHON) scripts/map/manage_map.py clean $(MAP)
+
+map_pipeline: ## End-to-end automated map build (init -> clean -> optimize): make map_pipeline MAP=rectangle1
+	@[ -n "$(MAP)" ] || (echo "[!] Error: MAP argument required (e.g. make map_pipeline MAP=rectangle1)"; exit 1)
+	@$(PYTHON) scripts/map/manage_map.py pipeline $(MAP)
+
 init_map: ## Initialize 4-subfolder architecture for a map: make init_map MAP=rectangle1
 	@[ -n "$(MAP)" ] || (echo "[!] Error: MAP argument required (e.g. make init_map MAP=rectangle1)"; exit 1)
 	@echo "Standardizing Map structure using $(PYTHON)..."
