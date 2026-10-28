@@ -61,6 +61,8 @@ class LapAnalyser(Node):
         self.lap_analy_sub = self.create_subscription(Empty, '/lap_analyser/start', self.start_log_cb, 10)
 
         # Real-time Telemetry Publishers (for Foxglove dashboards & gauges)
+        self.speed_ms_pub = self.create_publisher(Float32, '/telemetry/speed_ms', 10)
+        self.target_speed_ms_pub = self.create_publisher(Float32, '/telemetry/target_speed_ms', 10)
         self.speed_kmh_pub = self.create_publisher(Float32, '/telemetry/speed_kmh', 10)
         self.steering_deg_pub = self.create_publisher(Float32, '/telemetry/steering_deg', 10)
         self.target_speed_kmh_pub = self.create_publisher(Float32, '/telemetry/target_speed_kmh', 10)
@@ -114,19 +116,21 @@ class LapAnalyser(Node):
             f.write(f"Laps done on " + datetime.now().strftime('%d %b %H:%M:%S') + '\n')
 
     def odom_cb(self, msg: Odometry):
-        """Publish actual vehicle speed in km/h."""
+        """Publish actual vehicle speed in m/s and km/h."""
         vx = msg.twist.twist.linear.x
         vy = msg.twist.twist.linear.y
         speed_ms = float(np.hypot(vx, vy))
+        self.speed_ms_pub.publish(Float32(data=speed_ms))
         self.speed_kmh_pub.publish(Float32(data=float(speed_ms * 3.6)))
 
     def drive_cb(self, msg: AckermannDriveStamped):
-        """Publish steering angle in degrees and commanded speed in km/h."""
+        """Publish steering angle in degrees and commanded speed in m/s and km/h."""
         steer_rad = float(msg.drive.steering_angle)
         steer_deg = float(np.degrees(steer_rad))
-        target_speed_kmh = float(msg.drive.speed * 3.6)
+        target_speed_ms = float(msg.drive.speed)
         self.steering_deg_pub.publish(Float32(data=steer_deg))
-        self.target_speed_kmh_pub.publish(Float32(data=target_speed_kmh))
+        self.target_speed_ms_pub.publish(Float32(data=target_speed_ms))
+        self.target_speed_kmh_pub.publish(Float32(data=float(target_speed_ms * 3.6)))
         self.target_steering_deg_pub.publish(Float32(data=steer_deg))
 
     def pose_cb(self, msg: PoseStamped):
