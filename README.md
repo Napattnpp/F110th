@@ -122,10 +122,10 @@ F110th/
 │       ├── 99-f1tenth-realtime.conf
 │       └── f1tenth-jetson-clocks.service
 ├── scripts/
-│   ├── setup/             ← Setup automation (bootstrap.sh, configure.sh)
-│   ├── host/              ← Host OS installer (setup-jetson.sh)
-│   ├── ops/               ← Vehicle operations & connectivity (connect_car.sh)
-│   ├── waypoints/         ← Waypoint tools & visualizers
-│   └── tuning_and_benchmarks/ ← Optimization & profiling benchmarks
+│   ├── setup/             ← Setup automation & host installers (bootstrap.sh, configure.sh, setup-jetson.sh)
+│   ├── map/               ← Map lifecycle tools (init_map.py, finish_map.sh)
+│   ├── race/              ← Trackside race operations & web sector tuner (connect_car.sh, sector_tuner_web.py)
+│   ├── benchmarks/        ← Offline algorithm & hardware benchmarks (benchmark_optimizers.py, run_eval.py)
+│   └── profile/           ← Unified vehicle profile CLI (manage_profile.py)
 └── src/                   ← ROS 2 nodes & packages
 ```

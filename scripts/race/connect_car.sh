@@ -1,7 +1,7 @@
 #!/bin/bash
 # ==============================================================================
 #  F110th — Connect to Remote Racecar
-#  Usage:  source scripts/ops/connect_car.sh [optional_ip_override]
+#  Usage:  source scripts/race/connect_car.sh [optional_ip_override]
 # ==============================================================================
 
 get_realpath() {

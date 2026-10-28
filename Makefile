@@ -8,7 +8,7 @@ ORIGINAL_XAUTHORITY := $(XAUTHORITY)
 -include .env
 export
 
-.PHONY: help setup bootstrap configure build up attach stop clean push prune tuner optimize start_line benchmark monitor profile
+.PHONY: help setup bootstrap configure build up attach stop clean push prune tuner optimize start_line benchmark monitor profile init_map finish_map
 
 PYTHON := $(if $(wildcard .venv/bin/python),.venv/bin/python,python3)
 
@@ -103,7 +103,7 @@ prune: stop ## Stop containers, remove volumes, and clean generated build output
 # --- Host Tooling (via .venv) ------------------------------------------------
 tuner: ## Launch Web Sector Tuner (speed & overtaking sectors): make tuner [PORT=8050]
 	@echo "Launching Web Sector Tuner using $(PYTHON)..."
-	@$(PYTHON) scripts/tuning_and_benchmarks/sector_tuner_web.py --port $(or $(PORT),8050)
+	@$(PYTHON) scripts/race/sector_tuner_web.py --port $(or $(PORT),8050)
 
 optimize: ## Run offline waypoint optimizer on host: make optimize [MAP=rectangle1]
 	@echo "Running Waypoint Optimizer using $(PYTHON)..."
@@ -114,9 +114,19 @@ start_line: ## Set Start/Finish Line & AMCL initial pose on host: make start_lin
 	@echo "Launching Start Line selector using $(PYTHON)..."
 	@$(PYTHON) src/planning/global_planner/global_planner/set_start_line.py $(MAP)
 
+init_map: ## Initialize 4-subfolder architecture for a map: make init_map MAP=rectangle1
+	@[ -n "$(MAP)" ] || (echo "[!] Error: MAP argument required (e.g. make init_map MAP=rectangle1)"; exit 1)
+	@echo "Standardizing Map structure using $(PYTHON)..."
+	@$(PYTHON) scripts/map/init_map.py $(MAP)
+
+finish_map: ## Save SLAM map and organize into 4-subfolder assets: make finish_map MAP=rectangle1
+	@[ -n "$(MAP)" ] || (echo "[!] Error: MAP argument required (e.g. make finish_map MAP=rectangle1)"; exit 1)
+	@echo "Finishing SLAM map and organizing assets..."
+	@bash scripts/map/finish_map.sh $(MAP)
+
 benchmark: ## Run raceline benchmark comparison across tracks
 	@echo "Running Benchmarks using $(PYTHON)..."
-	@$(PYTHON) scripts/tuning_and_benchmarks/benchmark_optimizers.py
+	@$(PYTHON) scripts/benchmarks/benchmark_optimizers.py
 
 monitor: ## Open Foxglove Studio / Web connected to live vehicle bridge (ws://localhost:8765)
 	@echo "Connecting to Foxglove WebSocket on ws://localhost:8765..."

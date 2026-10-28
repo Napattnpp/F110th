@@ -170,7 +170,7 @@ class MapCleanerApp:
             print(f"\n✗ Raw map file not found for specified track.")
             print("  Usage:   python3 src/utilities/map_utils/map_cleaner_matplotlib.py <track_name>")
             print("  Example: python3 src/utilities/map_utils/map_cleaner_matplotlib.py track4")
-            print("  (Ensure assets/maps/<track_name>/raw/ exists. Run 'python3 scripts/map_tools/init_map.py <track_name>' if needed).")
+            print("  (Ensure assets/maps/<track_name>/raw/ exists. Run 'python3 scripts/map/init_map.py <track_name>' if needed).")
             sys.exit(1)
 
         self.raw_img = load_map(filepath)

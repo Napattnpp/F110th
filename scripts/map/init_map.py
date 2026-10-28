@@ -22,11 +22,11 @@ standardized subfolder architecture:
       └── global_waypoints.json
 
 Usage:
-  python3 scripts/map_tools/init_map.py <map_name_or_directory>
+  python3 scripts/map/init_map.py <map_name_or_directory>
 
 Examples:
-  python3 scripts/map_tools/init_map.py rectangle1
-  python3 scripts/map_tools/init_map.py assets/maps/provided_track
+  python3 scripts/map/init_map.py rectangle1
+  python3 scripts/map/init_map.py assets/maps/provided_track
 """
 
 import os

@@ -311,7 +311,7 @@ class GlobalPlannerLogic:
                 break
 
         if img_path is None:
-            self.logerror(f"Missing required map image: {wp_gen_dir}/{self.map_name}_waypoint_gen.png. Please run 'python3 scripts/map_tools/init_map.py {self.map_name}' first.")
+            self.logerror(f"Missing required map image: {wp_gen_dir}/{self.map_name}_waypoint_gen.png. Please run 'python3 scripts/map/init_map.py {self.map_name}' first.")
             return (False, "")
 
         raw_img = cv2.imread(img_path, 0)

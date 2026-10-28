@@ -65,7 +65,7 @@ if [ -f /etc/nv_tegra_release ]; then
     read -p "Run Jetson host performance & latency optimization (sudo required)? (y/n) " -n 1 -r
     echo ""
     if [[ $REPLY =~ ^[Yy]$ ]]; then
-        bash "$REPO_DIR/scripts/host/setup-jetson.sh"
+        bash "$REPO_DIR/scripts/setup/setup-jetson.sh"
     else
         warn "Jetson host optimization skipped."
     fi
@@ -74,7 +74,7 @@ elif [ "$(uname)" = "Linux" ]; then
     read -p "Run Linux host network UDP buffer & Wi-Fi latency tuning (sudo required)? (y/n) " -n 1 -r
     echo ""
     if [[ $REPLY =~ ^[Yy]$ ]]; then
-        bash "$REPO_DIR/scripts/host/setup-network-host.sh"
+        bash "$REPO_DIR/scripts/setup/setup-network-host.sh"
     else
         warn "Linux host network latency tuning skipped."
     fi
