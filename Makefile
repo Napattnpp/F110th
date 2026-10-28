@@ -8,7 +8,9 @@ ORIGINAL_XAUTHORITY := $(XAUTHORITY)
 -include .env
 export
 
-.PHONY: help setup bootstrap configure build up attach stop clean push prune
+.PHONY: help setup bootstrap configure build up attach stop clean push prune tuner optimize start_line benchmark
+
+PYTHON := $(if $(wildcard .venv/bin/python),.venv/bin/python,python3)
 
 HOST_OS := $(shell uname)
 ifeq ($(HOST_OS),Darwin)
@@ -60,7 +62,8 @@ up: ## Launch container stack in background
 
 attach: ## Attach interactive bash session inside active container
 	@if [ "$(HOST_OS)" != "Darwin" ] && [ -n "$$DISPLAY" ]; then \
-		true > /tmp/.docker.xauth 2>/dev/null || true; \
+		if [ -d /tmp/.docker.xauth ]; then rm -rf /tmp/.docker.xauth; fi; \
+		touch /tmp/.docker.xauth 2>/dev/null || true; \
 		if command -v xauth >/dev/null 2>&1; then \
 			if [ -n "$(ORIGINAL_XAUTHORITY)" ]; then \
 				XAUTHORITY="$(ORIGINAL_XAUTHORITY)" xauth nlist "$$DISPLAY" | sed -e 's/^..../ffff/' | xauth -f /tmp/.docker.xauth nmerge - >/dev/null 2>&1 || true; \
@@ -79,7 +82,7 @@ stop: ## Stop active container stack
 colcon_build: ## Build workspace natively into out/
 	@echo "Building with colcon to out/ ..."
 	@mkdir -p out/build out/install out/logs
-	@bash -c "source /opt/ros/humble/setup.bash && colcon --log-base out/logs build --build-base out/build --install-base out/install --symlink-install"
+	@bash -c "source /opt/ros/humble/setup.bash && colcon --log-base out/logs build --base-paths src --build-base out/build --install-base out/install --symlink-install"
 
 clean: ## Remove colcon build outputs (out/)
 	@echo "Removing out/ build contents..."
@@ -96,3 +99,21 @@ prune: stop ## Stop containers, remove volumes, and clean generated build output
 	docker compose --profile $(SERVICE) down --volumes --remove-orphans
 	rm -rf out/ .env
 	@echo "Workspace fully pruned."
+
+# --- Host Tooling (via .venv) ------------------------------------------------
+tuner: ## Launch Web Sector Tuner (speed & overtaking sectors): make tuner [PORT=8050]
+	@echo "Launching Web Sector Tuner using $(PYTHON)..."
+	@$(PYTHON) scripts/tuning_and_benchmarks/sector_tuner_web.py --port $(or $(PORT),8050)
+
+optimize: ## Run offline waypoint optimizer on host: make optimize [MAP=rectangle1]
+	@echo "Running Waypoint Optimizer using $(PYTHON)..."
+	@$(PYTHON) src/planning/global_planner/global_planner/generate_waypoints.py $(if $(MAP),-m $(MAP),)
+
+start_line: ## Set Start/Finish Line & AMCL initial pose on host: make start_line MAP=rectangle1
+	@[ -n "$(MAP)" ] || (echo "[!] Error: MAP argument required (e.g. make start_line MAP=rectangle1)"; exit 1)
+	@echo "Launching Start Line selector using $(PYTHON)..."
+	@$(PYTHON) src/planning/global_planner/global_planner/set_start_line.py $(MAP)
+
+benchmark: ## Run raceline benchmark comparison across tracks
+	@echo "Running Benchmarks using $(PYTHON)..."
+	@$(PYTHON) scripts/tuning_and_benchmarks/benchmark_optimizers.py

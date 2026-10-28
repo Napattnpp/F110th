@@ -1,9 +1,0 @@
-free_thresh: 0.196
-image: Silverstone_map_waypoint_gen.png
-negate: 0
-occupied_thresh: 0.45
-origin:
-- -43.82482139791572
-- -52.30388391024793
-- 0.0
-resolution: 0.07712

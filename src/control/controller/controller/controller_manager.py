@@ -128,6 +128,10 @@ class Controller(Node):
         self.waypoint_array_buf = MarkerArray()
         self.markers_buf = [Marker() for _ in range(1000)]
 
+        # Always initialize FTG controller as reactive fallback for recovery and FTG states
+        self.ftg_controller = None
+        self.init_ftg_controller()
+
         # controller choice
         # TODO having to set prioritize_dyn like this is really ugly.
         if self.mode == "MAP":
@@ -139,8 +143,7 @@ class Controller(Node):
             self.init_pp_controller()
             self.prioritize_dyn = self.l1_params["prioritize_dyn"]
         elif self.mode == "FTG":
-            self.get_logger().info("Initializing FTG controller")
-            self.init_ftg_controller()
+            self.get_logger().info("Initializing FTG controller mode")
             self.prioritize_dyn = False
         else:
             self.get_logger().error(f"Invalid mode: {self.mode}")
@@ -261,9 +264,12 @@ class Controller(Node):
 
         # get l1 parameres
         bringup_path = get_package_share_directory('race_bringup')
-        config_path = os.path.join(bringup_path, 'config', self.racecar_version, 'l1_params.yaml')
-        if not os.path.exists(config_path):
+        if self.sim:
             config_path = os.path.join(bringup_path, 'config', 'SIM', 'l1_params.yaml')
+        else:
+            config_path = os.path.join(bringup_path, 'config', self.racecar_version, 'l1_params.yaml')
+            if not os.path.exists(config_path):
+                config_path = os.path.join(bringup_path, 'config', 'SIM', 'l1_params.yaml')
         with open(config_path, 'r') as f:
             self.l1_params = yaml.safe_load(f)
             self.l1_params = self.l1_params['controller']['ros__parameters']
@@ -297,10 +303,13 @@ class Controller(Node):
 
         # get l1 parameres
         bringup_path = get_package_share_directory('race_bringup')
-        config_path = os.path.join(bringup_path, 'config', self.racecar_version, 'l1_params.yaml')
-        if not os.path.exists(config_path):
-            # Fall back to the generic 'SIM' directory
+        if self.sim:
             config_path = os.path.join(bringup_path, 'config', 'SIM', 'l1_params.yaml')
+        else:
+            config_path = os.path.join(bringup_path, 'config', self.racecar_version, 'l1_params.yaml')
+            if not os.path.exists(config_path):
+                # Fall back to the generic 'SIM' directory
+                config_path = os.path.join(bringup_path, 'config', 'SIM', 'l1_params.yaml')
             
         with open(config_path, 'r') as f:
             self.l1_params = yaml.safe_load(f)
@@ -593,8 +602,13 @@ class Controller(Node):
         return speed, steering_angle
 
     def ftg_cycle(self):
+        if self.ftg_controller is None:
+            self.get_logger().error("[controller_manager] FTG controller not initialized! Emergency stopping.")
+            return 0.0, 0.0
+        if self.scan is None or len(self.scan.ranges) == 0:
+            return 0.0, 0.0
         speed, steer = self.ftg_controller.process_lidar(self.scan.ranges)
-        self.get_logger().warning("[STATE MACHINE] FTGONLY!!!")
+        self.get_logger().warning("[STATE MACHINE] FTG active", throttle_duration_sec=1.0)
         return speed, steer
     
     def create_pid_msg(self, should, actual, error, d_value, i_value, input):
@@ -613,17 +627,31 @@ class Controller(Node):
     #############
     def control_loop(self):
         # Top-Level Mode / Recovery State Handling
-        if self.state == "RECOVERY_REVERSE":
+        if self.state == "RECOVERY_STUCK":
+            # Complete emergency stop when crashed before initiating reverse maneuver
+            speed = 0.0
+            steer = 0.0
+            self.get_logger().info(f"[RECOVERY_STUCK] Car crashed! Coming to a complete stop before recovery", throttle_duration_sec=0.5)
+        elif self.state == "RECOVERY_REVERSE":
             # Closed-loop reverse drive command
             speed = -0.7
-            # Steer angle: default to opposite steering lock if not provided
-            steer = 0.35 if getattr(self, 'recovery_steer_dir', 1.0) >= 0 else -0.35
+            if self.scan is not None and len(self.scan.ranges) > 0:
+                n = len(self.scan.ranges)
+                # In ROS LaserScan (-135 to +135 deg):
+                # Indices [0.25n:0.45n] are -67.5 to -13.5 deg (RIGHT side)
+                # Indices [0.55n:0.75n] are +13.5 to +67.5 deg (LEFT side)
+                right_mean = float(np.nanmean(self.scan.ranges[int(n*0.25):int(n*0.45)]))
+                left_mean = float(np.nanmean(self.scan.ranges[int(n*0.55):int(n*0.75)]))
+                # If left wall is closer (left_mean <= right_mean), reverse-steer left (+0.22)
+                # so the rear swings left and the front swings RIGHT into open space away from the left wall
+                steer = 0.22 if left_mean <= right_mean else -0.22
+            else:
+                steer = 0.22 if getattr(self, 'recovery_steer_dir', 1.0) >= 0 else -0.22
             self.get_logger().info(f"[RECOVERY_REVERSE] Executing reverse maneuver (v={speed} m/s, steer={steer:.2f} rad)", throttle_duration_sec=0.5)
-        elif self.state in ["RECOVERY_STUCK", "RECOVERY_ALIGN"]:
+        elif self.state == "RECOVERY_ALIGN":
             speed, steer = self.ftg_cycle()
-            if self.state == "RECOVERY_ALIGN":
-                speed = min(speed, 1.2)  # Cap initial speed during re-alignment phase
-            self.get_logger().info(f"[{self.state}] Executing FTG alignment cycle (v={speed:.2f} m/s)", throttle_duration_sec=0.5)
+            speed = min(speed, 1.2)  # Cap initial speed during re-alignment phase
+            self.get_logger().info(f"[RECOVERY_ALIGN] Executing FTG alignment cycle (v={speed:.2f} m/s)", throttle_duration_sec=0.5)
         elif self.mode == "MAP":
             speed, steer = self.map_cycle()
         elif self.mode == "PP":

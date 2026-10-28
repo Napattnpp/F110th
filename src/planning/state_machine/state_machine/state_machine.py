@@ -12,9 +12,15 @@ from ament_index_python import get_package_share_directory
 from std_msgs.msg import String
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import PoseStamped, Point
-from f110_msgs.msg import WpntArray, OTWpntArray, ObstacleArray, Obstacle
+from typing import List
+from f110_msgs.msg import Wpnt, WpntArray, OTWpntArray, ObstacleArray, Obstacle
 import random
+from visualization_msgs.msg import Marker, MarkerArray
 from sensor_msgs.msg import LaserScan
+try:
+    from vesc_msgs.msg import VescStateStamped
+except ImportError:
+    VescStateStamped = None
 import json
 from state_machine.transitions import dummy_transition, timetrials_transition, head_to_head_transition, qualifying_transition, get_qualifying_phase, hierarchical_transition
 from state_machine.state_types import StateType, TopLevelMode
@@ -57,7 +63,8 @@ class StateMachine(Node):
         if self.params.test_on_car:
             self.battery_sub = self.create_subscription(VescStateStamped, "/vesc/sensors/core", self.battery_cb, 10)
         else:
-            self.battery_level = self.params.volt_threshold + 1
+            volt_thresh = self.params.volt_threshold if self.params.volt_threshold is not None else 9.5
+            self.battery_level = volt_thresh + 1
         self.max_speed = None
         self.create_subscription(WpntArray, "/global_waypoints", self.glb_wpnts_cb, 10)
         while self.max_speed is None: # equivalent of wait for message
@@ -119,8 +126,11 @@ class StateMachine(Node):
 
         # INITIALIZATIONS        
         self.waypoints_dist = 0.1
+        self.glb_s_array = np.array([])
         
         self.state = StateType(self.params.initial_state)
+        self.state_start_time = self.get_clock().now()
+        self.state_dwell_time = 0.0
         self.local_waypoints = WpntArray()
         self.first_visualization = True
         self.x_viz = 0
@@ -175,11 +185,23 @@ class StateMachine(Node):
         data
             Data received from velocity interpolator topic
         """
-        self.glb_wpnts = data.wpnts[:-1]  # exclude last point (because last point == first point)
+        if len(data.wpnts) >= 2:
+            p0 = data.wpnts[0]
+            p_last = data.wpnts[-1]
+            # Check if last point is a closing duplicate of first point
+            if np.hypot(p_last.x_m - p0.x_m, p_last.y_m - p0.y_m) < 0.02:
+                self.glb_wpnts = data.wpnts[:-1]
+            else:
+                self.glb_wpnts = data.wpnts
+        else:
+            self.glb_wpnts = data.wpnts
+
         self.num_glb_wpnts = len(self.glb_wpnts)
         self.track_length = data.wpnts[-1].s_m
+        self.glb_s_array = np.array([w.s_m for w in self.glb_wpnts])
         # Get spacing between wpnts for rough approximations
-        self.wpnt_dist = data.wpnts[1].s_m - data.wpnts[0].s_m
+        self.wpnt_dist = data.wpnts[1].s_m - data.wpnts[0].s_m if len(data.wpnts) >= 2 else 0.1
+        self.waypoints_dist = self.wpnt_dist
         self.gb_max_idx = data.wpnts[-1].id
 
         if len(self.glb_wpnts) >= 2:
@@ -221,12 +243,9 @@ class StateMachine(Node):
         if len(data.wpnts) > 0:
             self.splini_ttl_counter = int(self.params.splini_ttl * self.params.rate_hz)
             self.avoidance_wpnts = data
+            self.last_valid_avoidance_wpnts = data.wpnts.copy()
         else:
-            # If the spliner explicitly publishes empty waypoints, we clear our cache immediately
-            # to allow fast transition back to TRAILING or GB_TRACK
-            self.splini_ttl_counter = 0
             self.avoidance_wpnts = data
-            self.last_valid_avoidance_wpnts = None
 
     def obstacles_cb(self, data):
         if len(data.obstacles) != 0:
@@ -294,18 +313,21 @@ class StateMachine(Node):
         ranges = np.nan_to_num(ranges, nan=10.0, posinf=10.0, neginf=0.0)
         n = len(ranges)
 
-        # Left arc (25% to 45% of scan points) vs Right arc (55% to 75% of scan points)
-        left_arc = ranges[int(n * 0.25):int(n * 0.45)]
-        right_arc = ranges[int(n * 0.55):int(n * 0.75)]
+        # In ROS LaserScan (-135 to +135 deg):
+        # Indices [0.25n:0.45n] are -67.5 to -13.5 deg (RIGHT side)
+        # Indices [0.55n:0.75n] are +13.5 to +67.5 deg (LEFT side)
+        right_arc = ranges[int(n * 0.25):int(n * 0.45)]
+        left_arc = ranges[int(n * 0.55):int(n * 0.75)]
 
-        mean_left = float(np.mean(left_arc)) if len(left_arc) > 0 else 1.0
         mean_right = float(np.mean(right_arc)) if len(right_arc) > 0 else 1.0
+        mean_left = float(np.mean(left_arc)) if len(left_arc) > 0 else 1.0
 
-        # If left has more clearance, steer right when reversing (swings front left)
-        if mean_left >= mean_right:
-            self.recovery_steer_dir = -1.0  # right steer while reversing
+        # If left wall is closer (left <= right), steer left (+1.0) while reversing
+        # so the rear swings left and the front swings RIGHT into open space away from the left wall
+        if mean_left <= mean_right:
+            self.recovery_steer_dir = 1.0   # steer left -> front swings right away from wall
         else:
-            self.recovery_steer_dir = 1.0   # left steer while reversing
+            self.recovery_steer_dir = -1.0  # steer right -> front swings left away from wall
 
         self.get_logger().info(f"[RECOVERY] Side clearance - Left: {mean_left:.2f}m, Right: {mean_right:.2f}m -> Reverse steer dir: {self.recovery_steer_dir}")
 
@@ -323,8 +345,9 @@ class StateMachine(Node):
         ftg_only = False
         # check if the car is in a ftg only zone, but only if there is an only ftg zone
         if len(self.only_ftg_zones) != 0:
+            cur_idx = self.get_closest_glb_wpnt_idx(self.cur_s if self.cur_s is not None else 0.0)
             for sector in self.only_ftg_zones:
-                if sector[0] <= self.cur_s / self.waypoints_dist <= sector[1]:
+                if sector[0] <= cur_idx <= sector[1]:
                     ftg_only = True
                     # rospy.logwarn(f"[{self.name}] IN FTG ONLY ZONE")
                     break  # cannot be in two ftg zones
@@ -336,9 +359,12 @@ class StateMachine(Node):
 
     @property
     def _check_ot_sector(self) -> bool:
+        if self.params.overtake_mode == "spliner":
+            return True
+        cur_idx = self.get_closest_glb_wpnt_idx(self.cur_s if self.cur_s is not None else 0.0)
         for sector in self.ot_sectors:
             if sector['ot_flag']:
-                if (sector['start'] <= self.cur_s / self.waypoints_dist <= (sector['end']+1)):
+                if (sector['start'] <= cur_idx <= (sector['end']+1)):
                     return True
         return False
 
@@ -347,24 +373,28 @@ class StateMachine(Node):
         o_free = True
 
         if self.params.overtake_mode == "spliner":
-            if self.last_valid_avoidance_wpnts is not None:
+            if self.last_valid_avoidance_wpnts is not None and len(self.last_valid_avoidance_wpnts) > 0:
                 horizon = self.params.overtaking_horizon_m  # Horizon in front of cur_s [m]
 
                 for obs in self.obstacles:
                     obs_s = obs.s_center
-                    # Wrapping madness to check if infront
+                    # Wrapping distance to check if in front
                     dist_to_obj = (obs_s - self.cur_s) % self.track_length
-                    if dist_to_obj < horizon and len(self.last_valid_avoidance_wpnts):
+                    if dist_to_obj < horizon:
                         obs_d = obs.d_center
-                        # Get d wrt to mincurv from the overtaking line
+                        # Circular difference to find corresponding waypoint on avoidance spline
+                        half_track = self.track_length / 2.0
                         avoid_wpnt_idx = np.argmin(
-                            np.array([abs(avoid_s.s_m - obs_s) for avoid_s in self.last_valid_avoidance_wpnts])
+                            np.array([
+                                abs((avoid_s.s_m - obs_s + half_track) % self.track_length - half_track)
+                                for avoid_s in self.last_valid_avoidance_wpnts
+                            ])
                         )
                         ot_d = self.last_valid_avoidance_wpnts[avoid_wpnt_idx].d_m
                         ot_obs_dist = ot_d - obs_d
                         if abs(ot_obs_dist) < self.params.lateral_width_ot_m:
                             o_free = False
-                            self.get_logger().info(f"O_FREE False, obs dist to ot lane: {ot_obs_dist} m")
+                            self.get_logger().info(f"O_FREE False, obs dist to ot lane: {ot_obs_dist:.3f} m", throttle_duration_sec=1.0)
                             break
             else:
                 o_free = True
@@ -463,8 +493,57 @@ class StateMachine(Node):
             emergency_break = False
         return emergency_break
     ###########
-    # HELPERS #
-    ###########
+    def get_closest_glb_wpnt_idx(self, s: float) -> int:
+        """Find the index of the global waypoint with s_m closest to the given s."""
+        if self.glb_wpnts is None or self.num_glb_wpnts == 0:
+            return 0
+        if not hasattr(self, 'glb_s_array') or len(self.glb_s_array) == 0:
+            self.glb_s_array = np.array([w.s_m for w in self.glb_wpnts])
+        s_wrapped = s % self.track_length if self.track_length > 0 else s
+        idx = int(np.searchsorted(self.glb_s_array, s_wrapped))
+        if idx >= self.num_glb_wpnts:
+            idx = 0
+        elif idx > 0:
+            if abs(self.glb_s_array[idx - 1] - s_wrapped) < abs(self.glb_s_array[idx] - s_wrapped):
+                idx = idx - 1
+        return idx
+
+    def get_avoidance_local_wpnts(self) -> List[Wpnt]:
+        """Directly construct the continuous n_loc_wpnts local trajectory from the
+        avoidance spline ahead of the car, seamlessly continuing on the global path.
+        """
+        avoid_wpnts = self.last_valid_avoidance_wpnts
+        if avoid_wpnts is None or len(avoid_wpnts) == 0:
+            s_idx = self.get_closest_glb_wpnt_idx(self.cur_s if self.cur_s is not None else 0.0)
+            return [self.glb_wpnts[(s_idx + i) % self.num_glb_wpnts] for i in range(self.params.n_loc_wpnts)]
+
+        cur_s = (self.cur_s % self.track_length) if (self.cur_s is not None and self.track_length > 0) else 0.0
+        # Determine if avoidance spline wraps around the track end
+        wraps = avoid_wpnts[-1].s_m < avoid_wpnts[0].s_m
+
+        # Filter avoidance waypoints ahead of the car
+        if wraps:
+            ahead_avoid = [w for w in avoid_wpnts if w.s_m >= cur_s or w.s_m <= avoid_wpnts[-1].s_m]
+        else:
+            ahead_avoid = [w for w in avoid_wpnts if w.s_m >= cur_s]
+
+        # If car is past the avoidance spline or empty, fallback to global
+        if len(ahead_avoid) == 0:
+            s_idx = self.get_closest_glb_wpnt_idx(cur_s)
+            return [self.glb_wpnts[(s_idx + i) % self.num_glb_wpnts] for i in range(self.params.n_loc_wpnts)]
+
+        # Cap avoidance points to n_loc_wpnts
+        ahead_avoid = ahead_avoid[:self.params.n_loc_wpnts]
+
+        # Seamlessly pad the remaining waypoints from the global raceline resuming after the spline
+        needed = self.params.n_loc_wpnts - len(ahead_avoid)
+        if needed > 0:
+            end_s = avoid_wpnts[-1].s_m
+            resume_idx = (self.get_closest_glb_wpnt_idx(end_s) + 1) % self.num_glb_wpnts
+            resume_pts = [self.glb_wpnts[(resume_idx + i) % self.num_glb_wpnts] for i in range(needed)]
+            return ahead_avoid + resume_pts
+        return ahead_avoid
+
     def get_splini_wpts(self) -> WpntArray:
         """Obtain the waypoints by fusing those obtained by spliner with the
         global ones.
@@ -475,19 +554,19 @@ class StateMachine(Node):
         if self.last_valid_avoidance_wpnts is not None:
             if len(self.last_valid_avoidance_wpnts) == 0:
                 splini_idxs = [] # Avoid index error if empty
-            elif self.last_valid_avoidance_wpnts[-1].s_m > self.last_valid_avoidance_wpnts[0].s_m:
-                start_s = int(self.last_valid_avoidance_wpnts[0].s_m / self.waypoints_dist + 0.5)
-                end_s = int(self.last_valid_avoidance_wpnts[-1].s_m / self.waypoints_dist + 0.5)
-                splini_idxs = [s % self.num_glb_wpnts for s in range(start_s, end_s)]
             else:
-                start_s = int(self.last_valid_avoidance_wpnts[0].s_m / self.waypoints_dist + 0.5)
-                end_s = int((self.track_length + self.last_valid_avoidance_wpnts[-1].s_m) / self.waypoints_dist + 0.5)
-                splini_idxs = [s % self.num_glb_wpnts for s in range(start_s, end_s)]
+                start_s = self.get_closest_glb_wpnt_idx(self.last_valid_avoidance_wpnts[0].s_m)
+                end_s = self.get_closest_glb_wpnt_idx(self.last_valid_avoidance_wpnts[-1].s_m)
+                if end_s >= start_s:
+                    splini_idxs = list(range(start_s, end_s + 1))
+                else:
+                    splini_idxs = list(range(start_s, self.num_glb_wpnts)) + list(range(0, end_s + 1))
 
-            # with self.lock:  # was needed in ROS1 but hopefuly in ROS2 were fine
-            for i, s in enumerate(splini_idxs):
-                # splini_glob[s] = self.last_valid_avoidance_wpnts[i]
-                splini_glob[s] = self.last_valid_avoidance_wpnts[min(i, len(self.last_valid_avoidance_wpnts) - 1)]
+            M = len(self.last_valid_avoidance_wpnts)
+            K = len(splini_idxs)
+            for j, s in enumerate(splini_idxs):
+                i = round(j * (M - 1) / (K - 1)) if K > 1 else 0
+                splini_glob[s] = self.last_valid_avoidance_wpnts[min(i, M - 1)]
 
         # If the last valid points have been reset, then we just pass the global waypoints
         else:
@@ -500,11 +579,17 @@ class StateMachine(Node):
         """Obtain the initial overtaking parameters from the parameter server.
         Then instantiate a parameter event handler to get the updates on those parameters.
         """
-        self.parameter_client = self.create_client(GetParameters, '/ot_interpolator/get_parameters')
-        self.parameter_client.wait_for_service()
         self.n_ot_sectors = None
         self.ot_param_names = None
-        self.ot_sectors = None
+        self.ot_sectors = []
+
+        if self.params.overtake_mode != "graph_based":
+            return
+
+        self.parameter_client = self.create_client(GetParameters, '/ot_interpolator/get_parameters')
+        if not self.parameter_client.wait_for_service(timeout_sec=2.0):
+            self.get_logger().warn('ot_interpolator service not available, skipping OT parameters.')
+            return
         
         request = GetParameters.Request()
         request.names = ['n_sectors']
@@ -575,6 +660,12 @@ class StateMachine(Node):
     ###############
     def _pub_local_waypoints(self, wpts: WpntArray):
         loc_markers = MarkerArray()
+        # Add a DELETEALL marker to clear previous markers and prevent stale/ghost markers
+        del_mrk = Marker()
+        del_mrk.action = Marker.DELETEALL
+        del_mrk.header.frame_id = "map"
+        loc_markers.markers.append(del_mrk)
+
         loc_wpnts = wpts
         # set stamp to now         
         loc_wpnts.header.stamp = self.get_clock().now().to_msg()
@@ -619,10 +710,9 @@ class StateMachine(Node):
             mrk.id = i
             mrk.pose.position.x = wpnt.x_m
             mrk.pose.position.y = wpnt.y_m
-            if self.max_speed and self.max_speed > 0:
-                mrk.pose.position.z = wpnt.vx_mps / self.max_speed  # Visualise speed in z dimension
-            else:
-                mrk.pose.position.z = 0.0
+            # Keep markers at a constant z slightly above the map plane (0.05m)
+            # to prevent 3D perspective distortion or diving below the surface on deceleration
+            mrk.pose.position.z = 0.05
             mrk.pose.orientation.w = 1.0
             loc_markers.markers.append(mrk)
 
@@ -736,11 +826,22 @@ class StateMachine(Node):
         if self.cur_s is not None:
             if self.params.mode == "qualifying":
                 self._handle_qualifying_logic()
-            
+
+        now = self.get_clock().now()
+        if not hasattr(self, 'state_start_time') or self.state_start_time is None:
+            self.state_start_time = now
+
+        self.state_dwell_time = (now - self.state_start_time).nanoseconds / 1e9
+
         if self.params.force_state:
-            self.state = self.params.force_state_choice
+            new_state = self.params.force_state_choice
         else:
-            self.state = self.state_transition(self)
+            new_state = self.state_transition(self)
+
+        if new_state != self.state:
+            self.state_start_time = now
+            self.state_dwell_time = 0.0
+            self.state = new_state
 
         state_str = self.state.value if hasattr(self.state, 'value') else str(self.state)
         msg = String()

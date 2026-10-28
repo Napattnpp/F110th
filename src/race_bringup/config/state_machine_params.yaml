@@ -14,12 +14,12 @@ state_machine:
 
     splini_ttl: 0.8 # [s] ttl counter for validity of spliner waypoints
     gb_ego_width_m: 0.4 # [m], distance from gb path for rejoining 
-    lateral_width_gb_m: 1.1 # [m] lateral width within which we consider obstacles to be on the raceline
+    lateral_width_gb_m: 0.55 # [m] lateral width within which we consider obstacles to be on the raceline
     gb_horizon_m: 10.0 # [m] horizon considered for global waypoints obstacle checking
     overtaking_horizon_m: 10.0 # [m] horizon considered for overtaking
-    lateral_width_ot_m: 0.3 # [m] lateral width within which we consider opponents to be on overtaking line
+    lateral_width_ot_m: 0.18 # [m] lateral width within which we consider opponents to be on overtaking line
     splini_hyst_timer_sec: 0.02 # [s] time we have to wait between switching sides
-    overtake_speed_scale: 0.68 # speed scaling fraction (0.1 - 1.0) applied during OVERTAKE mode
+    overtake_speed_scale: 0.95 # speed scaling fraction (0.1 - 1.0) applied during OVERTAKE mode
 
     ftg_threshold_speed: 0.1 # [m/s] speed threshold below which we start a timer for activating FTG
     ftg_timer_sec: 3. # [s] time we have to stay slower than the `ftg_threshold_speed` threshold before we activate FTG
@@ -29,10 +29,11 @@ state_machine:
     crash_dist_threshold: 0.25 # [m] front LiDAR distance threshold to trigger crash/stuck detection
     stuck_speed_threshold: 0.1 # [m/s] speed threshold below which car is considered stuck
     stuck_time_threshold: 0.6 # [s] duration car must be stuck before triggering recovery
+    recovery_stop_time: 0.5 # [s] dwell time at complete standstill after crash before reversing
     recovery_reverse_speed: -0.7 # [m/s] reverse speed during recovery maneuver
     recovery_max_reverse_time: 1.5 # [s] maximum time allowed for reversing
     recovery_align_time: 0.8 # [s] stabilization time in FTG mode after reversing
-    recovery_rear_min_dist: 0.35 # [m] minimum rear clearance to prevent reversing into opposite wall
+    recovery_rear_min_dist: 0.15 # [m] minimum rear clearance to prevent reversing into opposite wall
     recovery_front_safe_dist: 0.70 # [m] required front clearance to finish reversing
 
     # Qualifying mode — lap-based auto-switch

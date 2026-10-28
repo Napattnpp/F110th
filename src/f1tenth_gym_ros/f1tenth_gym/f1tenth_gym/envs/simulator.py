@@ -524,16 +524,29 @@ class F110Simulator:
             cache = self.scan_cache[agent_idx]
 
             # Wall collision: TTC on the wall-only scan (always)
-            if check_ttc_jit(
-                scan_clean,
-                self.state.standard_state[agent_idx, 3],
-                cache.angles,
-                cache.cosines,
-                cache.side_distances,
-                self.ttc_threshold,
-            ):
-                self.state.state[agent_idx, 3:] = 0.0
+            ttc = scan_clean - cache.side_distances
+            coll_mask = ttc <= self.ttc_threshold
+            if np.any(coll_mask):
                 self.state.collisions[agent_idx] = 1.0
+                vel = float(self.state.state[agent_idx, 3])
+                lidar_dx = self.config.lidar_config.base_link_to_lidar_tf[0]
+                lidar_x_in_body = lidar_dx - self._collision_body_dx
+                x_rel = lidar_x_in_body + scan_clean * cache.cosines
+                front_coll = bool(np.any(coll_mask & (x_rel >= 0.0)))
+                rear_coll = bool(np.any(coll_mask & (x_rel < 0.0)))
+
+                # If moving away from the collision, preserve velocity so the car can reverse/pull away
+                if front_coll and not rear_coll and vel < 0.0:
+                    pass
+                elif rear_coll and not front_coll and vel > 0.0:
+                    pass
+                else:
+                    self.state.state[agent_idx, 3] = 0.0
+                    if self.state.state.shape[1] > 5:
+                        self.state.state[agent_idx, 5:] = 0.0
+                    self.state.standard_state[agent_idx] = self.standard_state_fn(
+                        self.state.state[agent_idx]
+                    ).astype(np.float32)
             else:
                 self.state.collisions[agent_idx] = 0.0
 
@@ -562,16 +575,29 @@ class F110Simulator:
                 if self.state.collisions[agent_idx]:
                     continue  # already in wall collision
                 cache = self.scan_cache[agent_idx]
-                if check_ttc_jit(
-                    self._adjusted_scans[agent_idx],
-                    self.state.standard_state[agent_idx, 3],
-                    cache.angles,
-                    cache.cosines,
-                    cache.side_distances,
-                    self.ttc_threshold,
-                ):
-                    self.state.state[agent_idx, 3:] = 0.0
+                ttc = self._adjusted_scans[agent_idx] - cache.side_distances
+                coll_mask = ttc <= self.ttc_threshold
+                if np.any(coll_mask):
                     self.state.collisions[agent_idx] = 1.0
+                    vel = float(self.state.state[agent_idx, 3])
+                    lidar_dx = self.config.lidar_config.base_link_to_lidar_tf[0]
+                    lidar_x_in_body = lidar_dx - self._collision_body_dx
+                    x_rel = lidar_x_in_body + self._adjusted_scans[agent_idx] * cache.cosines
+                    front_coll = bool(np.any(coll_mask & (x_rel >= 0.0)))
+                    rear_coll = bool(np.any(coll_mask & (x_rel < 0.0)))
+                    if front_coll and not rear_coll and vel < 0.0:
+                        pass
+                    elif rear_coll and not front_coll and vel > 0.0:
+                        pass
+                    else:
+                        self.state.state[agent_idx, 3] = 0.0
+                        if self.state.state.shape[1] > 5:
+                            self.state.state[agent_idx, 5:] = 0.0
+                        self.state.standard_state[agent_idx] = self.standard_state_fn(
+                            self.state.state[agent_idx]
+                        ).astype(np.float32)
+                else:
+                    self.state.collisions[agent_idx] = 0.0
         else:
             # Agent-vs-agent via GJK bounding boxes (reuse vertices already computed in _update_scans)
             for agent_idx in range(self.num_agents):

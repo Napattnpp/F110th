@@ -5,13 +5,13 @@ controller:
     # Too short (0.8m) on tight track → car overshoots corners → oscillates
     # Too long → car cuts corners / slow to respond
     # MAX ALLOWED: 1.5 (hard limit in controller_manager.py FloatingPointRange)
-    t_clip_min: 0.5       # default to 1.0 for simulator tracking
-    t_clip_max: 1.0
-    m_l1: 0.3           # how much speed increases lookahead
-    q_l1: -0.167
+    t_clip_min: 0.65       # Smoothed lookahead to prevent excessive/twitchy steering
+    t_clip_max: 1.05
+    m_l1: 0.20           # how much speed increases lookahead
+    q_l1: 0.05
 
     speed_lookahead: 0.25
-    lat_err_coeff: 1.0
+    lat_err_coeff: 0.35
 
     # ── Steer scaling based on acceleration ──
     acc_scaler_for_steer: 1.0
@@ -26,8 +26,8 @@ controller:
 
     ## Acceleration Based Velocity Controller Parameters
     vel_accel_mode: False
-    vel_ctr_p_gain: 1.0
-    vel_ctr_i_gain: 0.0
+    vel_ctr_p_gain: 1.5
+    vel_ctr_i_gain: 0.02
     vel_ctr_d_gain: 0.5
 
     ## Trailing Controller Parameters

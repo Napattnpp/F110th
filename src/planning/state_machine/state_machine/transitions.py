@@ -55,22 +55,26 @@ def recovery_transition(state_machine: StateMachine) -> StateType:
     front_clear, rear_clear = state_machine._evaluate_scan_clearance()
 
     if state_machine.state == StateType.RECOVERY_STUCK:
-        # Evaluate wall angles & switch immediately to RECOVERY_REVERSE
-        state_machine._evaluate_recovery_steer_dir()
-        state_machine.recovery_substate_start = now_sec
-        return StateType.RECOVERY_REVERSE
+        # 1. Bring car to a complete stop and settle before initiating reverse
+        stop_time = getattr(p, "recovery_stop_time", 0.5)
+        if substate_elapsed >= stop_time:
+            state_machine._evaluate_recovery_steer_dir()
+            state_machine.recovery_substate_start = now_sec
+            state_machine.get_logger().info(f"[RECOVERY] Car stopped and settled ({substate_elapsed:.2f}s). Beginning reverse maneuver.")
+            return StateType.RECOVERY_REVERSE
+        return StateType.RECOVERY_STUCK
 
     elif state_machine.state == StateType.RECOVERY_REVERSE:
         # Exit conditions to RECOVERY_ALIGN:
-        # 1. Front distance is clear
+        # 1. Front distance is clear (after at least 0.4s of reversing)
         # 2. Rear distance is blocked (avoid crashing into opposite wall)
         # 3. Reverse timeout reached
-        if front_clear > p.recovery_front_safe_dist:
+        if front_clear > p.recovery_front_safe_dist and substate_elapsed >= 0.4:
             state_machine.get_logger().info(f"[RECOVERY] Front clearance restored ({front_clear:.2f}m). Moving to ALIGN.")
             state_machine.recovery_substate_start = now_sec
             return StateType.RECOVERY_ALIGN
 
-        if rear_clear < p.recovery_rear_min_dist:
+        if substate_elapsed >= 0.3 and rear_clear < p.recovery_rear_min_dist:
             state_machine.get_logger().warn(f"[RECOVERY] Rear obstruction detected ({rear_clear:.2f}m). Stopping reverse, moving to ALIGN.")
             state_machine.recovery_substate_start = now_sec
             return StateType.RECOVERY_ALIGN
@@ -207,13 +211,10 @@ def SpliniTrailingTransition(state_machine: StateMachine) -> StateType:
         # If we have been sitting around in TRAILING for a while then FTG
         if state_machine._check_ftg:
             return StateType.FTGONLY
-        if not gb_free and not ot_sector:
-            return StateType.TRAILING
-        elif gb_free and state_machine._check_close_to_raceline:
+        if gb_free:
             return StateType.GB_TRACK
         elif (
-            not gb_free
-            and ot_sector
+            ot_sector
             and state_machine._check_availability_splini_wpts
             and state_machine._check_ofree
         ):
@@ -230,13 +231,22 @@ def SpliniOvertakingTransition(state_machine: StateMachine) -> StateType:
         in_ot_sector = state_machine._check_ot_sector
         spline_valid = state_machine._check_availability_splini_wpts
         o_free = state_machine._check_ofree
+        dwell_time = getattr(state_machine, 'state_dwell_time', 1.0)
+
+        # If raceline is free and the ego car has passed the obstacle or rejoined the raceline: return to GB_TRACK
+        if state_machine._check_gbfree and (not state_machine._check_enemy_in_front or state_machine._check_close_to_raceline):
+            return StateType.GB_TRACK
+
+        # Minimum dwell time hysteresis: prevent 30Hz flutter back to TRAILING during active overtake
+        if dwell_time < 0.4 and (spline_valid or state_machine.last_valid_avoidance_wpnts is not None):
+            return StateType.OVERTAKE
 
         # If spline is on an obstacle we trail
         if not o_free:
             return StateType.TRAILING
-        if in_ot_sector and o_free and spline_valid:
+        if in_ot_sector and o_free and (spline_valid or state_machine.last_valid_avoidance_wpnts is not None):
             return StateType.OVERTAKE
-        # If spline becomes unvalid while overtaking, we trail
+        # If spline becomes invalid while overtaking, we trail
         elif in_ot_sector and not spline_valid and not o_free:
             return StateType.TRAILING
         # go to GB_TRACK if not in ot_sector and the GB is free

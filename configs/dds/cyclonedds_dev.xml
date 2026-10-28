@@ -15,11 +15,12 @@
 
         <Discovery>
             <ParticipantIndex>auto</ParticipantIndex>
+            <MaxAutoParticipantIndex>100</MaxAutoParticipantIndex>
         </Discovery>
 
         <Internal>
-            <!-- 20MB socket buffer: Prevents packet drops under 40-100Hz LiDAR, TF arrays, & OccupancyGrids -->
-            <SocketReceiveBufferSize min="20MB"/>
+            <!-- Request up to 20MB socket buffer; accepts OS default/available on dev hosts with lower rmem_max -->
+            <SocketReceiveBufferSize min="default" max="20MB"/>
         </Internal>
 
         <SharedMemory>

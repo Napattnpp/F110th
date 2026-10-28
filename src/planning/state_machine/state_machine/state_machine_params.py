@@ -116,7 +116,7 @@ class StateMachineParams:
             floating_point_range=[FloatingPointRange(
                 from_value=0.0,
                 to_value=5.0,
-                step=0.1)])
+                step=0.01)])
         node.set_descriptor("gb_ego_width_m", descriptor=descriptor)
         self.gb_ego_width_m: float = node.get_parameter("gb_ego_width_m").value
 
@@ -127,7 +127,7 @@ class StateMachineParams:
             floating_point_range=[FloatingPointRange(
                 from_value=0.0,
                 to_value=5.0,
-                step=0.1)]
+                step=0.01)]
         )
         node.set_descriptor("lateral_width_gb_m", descriptor=descriptor)
         self.lateral_width_gb_m: float = node.get_parameter("lateral_width_gb_m").value
@@ -163,7 +163,7 @@ class StateMachineParams:
             floating_point_range=[FloatingPointRange(
                 from_value=0.0,
                 to_value=5.0,
-                step=0.1)]
+                step=0.01)]
         )
         node.set_descriptor("lateral_width_ot_m", descriptor=descriptor)
         self.lateral_width_ot_m: float = node.get_parameter("lateral_width_ot_m").value
@@ -310,6 +310,7 @@ class StateMachineParams:
         self.crash_dist_threshold: float = float(_get_or_decl("crash_dist_threshold", 0.25))
         self.stuck_speed_threshold: float = float(_get_or_decl("stuck_speed_threshold", 0.1))
         self.stuck_time_threshold: float = float(_get_or_decl("stuck_time_threshold", 0.6))
+        self.recovery_stop_time: float = float(_get_or_decl("recovery_stop_time", 0.5))
         self.recovery_reverse_speed: float = float(_get_or_decl("recovery_reverse_speed", -0.7))
         self.recovery_max_reverse_time: float = float(_get_or_decl("recovery_max_reverse_time", 1.5))
         self.recovery_align_time: float = float(_get_or_decl("recovery_align_time", 0.8))

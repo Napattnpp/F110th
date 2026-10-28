@@ -227,7 +227,7 @@ class ObstacleSpliner(Node):
         if self.gb_vmax is None:
             self.gb_vmax = np.max(
                 np.array([wpnt.vx_mps for wpnt in msg.wpnts]))
-            self.gb_max_idx = msg.wpnts[-1].id
+            self.gb_max_idx = msg.wpnts[-1].id if msg.wpnts[-1].id > 0 else len(msg.wpnts)
             self.gb_max_s = msg.wpnts[-1].s_m
 
     def gb_scaled_cb(self, msg: WpntArray):
@@ -283,8 +283,8 @@ class ObstacleSpliner(Node):
                 # distance in s coordinate
                 cur_s = self.cur_s
                 ot_distance = (obs.s_center - cur_s) % self.gb_max_s
-                rel_speed = np.clip(self.gb_scaled_wpnts.wpnts[int(
-                    cur_s * 10)].vx_mps - obs.vs, 0.1, 10)
+                cur_idx = int(cur_s * 10) % len(self.gb_scaled_wpnts.wpnts)
+                rel_speed = np.clip(self.gb_scaled_wpnts.wpnts[cur_idx].vx_mps - obs.vs, 0.1, 10)
                 ot_time_distance = np.clip(ot_distance / rel_speed, 0, 5) * 0.5
 
                 delta_s = ot_time_distance * obs.vs
@@ -295,7 +295,8 @@ class ObstacleSpliner(Node):
             elif mode == "adaptive_velheuristic":
                 opponent_scaler = 0.7
                 cur_s = self.cur_s
-                ego_speed = self.gb_scaled_wpnts.wpnts[int(cur_s * 10)].vx_mps
+                cur_idx = int(cur_s * 10) % len(self.gb_scaled_wpnts.wpnts)
+                ego_speed = self.gb_scaled_wpnts.wpnts[cur_idx].vx_mps
 
                 # distance in s coordinate
                 ot_distance = (obs.s_center - cur_s) % self.gb_max_s
@@ -405,6 +406,7 @@ class ObstacleSpliner(Node):
                 obstacles=obs, gb_wpnts=gb_scaled_wpnts)
         # Else delete spline markers
         else:
+            self.last_ot_side = ""
             del_mrk = Marker()
             del_mrk.header.stamp = self.get_clock().now().to_msg()
             del_mrk.action = Marker.DELETEALL
@@ -441,7 +443,9 @@ class ObstacleSpliner(Node):
         wpnts = OTWpntArray()
 
         # Get spacing between wpnts for rough approximations
-        wpnt_dist = gb_wpnts[1].s_m - gb_wpnts[0].s_m
+        wpnt_dist = gb_wpnts[1].s_m - gb_wpnts[0].s_m if len(gb_wpnts) > 1 else 0.1
+        if wpnt_dist <= 0:
+            wpnt_dist = (self.gb_max_s / self.gb_max_idx) if (self.gb_max_idx and self.gb_max_idx > 0) else 0.1
 
         # Only use obstacles that are within a threshold of the raceline, else we don't care about them
         close_obs = self._obs_filtering(obstacles=obstacles)
@@ -469,6 +473,22 @@ class ObstacleSpliner(Node):
             # Choose the correct side and compute the distance to the apex based on left of right of the obstacle
             more_space, d_apex = self._more_space(
                 closest_obs, gb_wpnts, gb_idxs)
+
+            # Check if a side switch is possible; if blocked, stick to currently committed side!
+            danger_flag = False
+            if not self._check_ot_side_possible(more_space):
+                if self.last_ot_side != "":
+                    more_space = self.last_ot_side
+                    if more_space == "right":
+                        d_apex = closest_obs.d_right - self.evasion_dist
+                        if d_apex > 0:
+                            d_apex = 0
+                    else:
+                        d_apex = closest_obs.d_left + self.evasion_dist
+                        if d_apex < 0:
+                            d_apex = 0
+                else:
+                    danger_flag = True
 
             # Publish the point around which we are splining
             mrk = self.xy_to_point(
@@ -515,14 +535,6 @@ class ObstacleSpliner(Node):
             # Handle Wrapping of s
             evasion_s = evasion_s % self.gb_max_s
 
-            # Do frenet conversion via conversion service for spline and create markers and wpnts
-            danger_flag = False
-            resp = self.converter.get_cartesian(evasion_s, evasion_d)
-
-            # Check if a side switch is possible
-            if not self._check_ot_side_possible(more_space):
-                danger_flag = True
-
             # Soft-clamp evasion_d to stay within safe track bounds
             for i in range(evasion_s.shape[0]):
                 gb_wpnt_i = int((evasion_s[i] / wpnt_dist) % self.gb_max_idx)
@@ -532,7 +544,7 @@ class ObstacleSpliner(Node):
                     if abs(evasion_d[i]) > max_allowed_d:
                         evasion_d[i] = np.sign(evasion_d[i]) * max_allowed_d
 
-            # Re-convert to Cartesian after soft-clamping
+            # Convert to Cartesian after soft-clamping
             resp = self.converter.get_cartesian(evasion_s, evasion_d)
 
             for i in range(evasion_s.shape[0]):
@@ -565,6 +577,8 @@ class ObstacleSpliner(Node):
                 # This fools the statemachine to cool down
                 wpnts.side_switch = True
                 self.last_switch_time = self.get_clock().now().to_msg()
+        else:
+            self.last_ot_side = ""
         return wpnts, mrks
 
     def _obs_filtering(self, obstacles: ObstacleArray) -> List[Obstacle]:

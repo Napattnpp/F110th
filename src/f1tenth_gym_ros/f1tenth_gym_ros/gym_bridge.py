@@ -108,14 +108,28 @@ def _load_track_from_yaml(map_yaml_path: pathlib.Path, scale: float) -> tuple[Tr
     occupancy_map[occupancy_map <= 128] = 0.0
     occupancy_map[occupancy_map > 128] = 255.0
 
-    centerline_path = map_yaml_path.parent / f"{map_yaml_path.stem}_centerline.csv"
-    raceline_path = map_yaml_path.parent / f"{map_yaml_path.stem}_raceline.csv"
+    centerline_candidates = [
+        map_yaml_path.parent / f"{map_yaml_path.stem}_centerline.csv",
+        map_yaml_path.parent.parent / "waypoints" / f"{map_yaml_path.stem}_centerline.csv",
+        map_yaml_path.parent.parent / "centerline" / f"{map_yaml_path.stem}_centerline.csv",
+        map_yaml_path.parent.parent / "centerline" / "centerline.csv",
+    ]
+    raceline_candidates = [
+        map_yaml_path.parent / f"{map_yaml_path.stem}_raceline.csv",
+        map_yaml_path.parent.parent / "waypoints" / f"{map_yaml_path.stem}_raceline.csv",
+        map_yaml_path.parent.parent / "raceline" / f"{map_yaml_path.stem}_raceline.csv",
+        map_yaml_path.parent.parent / "raceline" / "raceline.csv",
+    ]
     centerline = None
     raceline = None
-    if centerline_path.exists():
-        centerline = Raceline.from_centerline_file(centerline_path, track_scale=scale)
-    if raceline_path.exists():
-        raceline = Raceline.from_raceline_file(raceline_path, track_scale=scale)
+    for cand in centerline_candidates:
+        if cand.exists():
+            centerline = Raceline.from_centerline_file(cand, track_scale=scale)
+            break
+    for cand in raceline_candidates:
+        if cand.exists():
+            raceline = Raceline.from_raceline_file(cand, track_scale=scale)
+            break
 
     if raceline is None:
         raceline = centerline
@@ -369,6 +383,11 @@ class GymBridge(Node):
             ego_drive_topic,
             self.drive_callback,
             10)
+        self.ego_teleop_sub = self.create_subscription(
+            AckermannDriveStamped,
+            'teleop',
+            self.drive_callback,
+            10)
         self.ego_reset_sub = self.create_subscription(
             PoseWithCovarianceStamped,
             '/initialpose',
@@ -467,12 +486,14 @@ class GymBridge(Node):
 
         self.ego_requested_speed = twist_msg.linear.x
 
-        if twist_msg.angular.z > 0.0:
-            self.ego_steer = 0.3
-        elif twist_msg.angular.z < 0.0:
-            self.ego_steer = -0.3
+        if abs(twist_msg.angular.z) > 0.0:
+            self.ego_steer = np.clip(twist_msg.angular.z, self.vehicle_params.s_min, self.vehicle_params.s_max)
         else:
             self.ego_steer = 0.0
+
+        if not self.get_parameter('async_mode').value:
+            self.drive_timer_callback()
+            self.timer_callback()
 
     def drive_timer_callback(self): 
         if self.sim_paused:

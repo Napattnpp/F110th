@@ -7,6 +7,7 @@ from pathlib import Path
 from rosidl_runtime_py.convert import message_to_ordereddict
 from rosidl_runtime_py.set_message import set_message_fields
 
+import numpy as np
 from visualization_msgs.msg import MarkerArray
 from f110_msgs.msg import WpntArray
 from std_msgs.msg import String, Float32
@@ -135,6 +136,17 @@ def read_global_waypoints(map_dir: str) -> Tuple[
 
     trackbounds_markers = MarkerArray()
     set_message_fields(trackbounds_markers, d['trackbounds_markers'])
+
+    # If raceline waypoints lack track boundaries (d_left == 0.0), transfer them from centerline
+    if len(centerline_waypoints.wpnts) > 0:
+        cl_s = np.array([w.s_m for w in centerline_waypoints.wpnts])
+        cl_dl = np.array([w.d_left for w in centerline_waypoints.wpnts])
+        cl_dr = np.array([w.d_right for w in centerline_waypoints.wpnts])
+        for traj_wpnts in [global_traj_wpnts_sp, global_traj_wpnts_iqp]:
+            if len(traj_wpnts.wpnts) > 0 and traj_wpnts.wpnts[0].d_left == 0.0:
+                for w in traj_wpnts.wpnts:
+                    w.d_left = float(np.interp(w.s_m, cl_s, cl_dl))
+                    w.d_right = float(np.interp(w.s_m, cl_s, cl_dr))
 
     for ma in [centerline_markers, global_traj_markers_iqp, global_traj_markers_sp, trackbounds_markers]:
         for m in ma.markers:

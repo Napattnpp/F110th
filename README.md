@@ -70,7 +70,7 @@ When running on an NVIDIA Jetson, the host script automatically configures:
 ### Build the workspace
 
 ```bash
-colcon build --build-base out/build --install-base out/install
+colcon build --base-paths src --build-base out/build --install-base out/install --symlink-install
 source out/install/setup.bash
 ```
 

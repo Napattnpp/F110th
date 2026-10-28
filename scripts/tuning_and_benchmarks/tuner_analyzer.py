@@ -145,8 +145,8 @@ class TunerAnalyzer(Node):
 
     def otwpnts_callback(self, msg):
         t = time.time()
-        num_wpnts = len(msg.otwpnts) if hasattr(msg, 'otwpnts') else 0
-        side = getattr(msg, 'side', 'unknown')
+        num_wpnts = len(msg.wpnts) if hasattr(msg, 'wpnts') else (len(msg.otwpnts) if hasattr(msg, 'otwpnts') else 0)
+        side = getattr(msg, 'ot_side', getattr(msg, 'side', 'unknown'))
         self.avoidance_history.append((t, num_wpnts, side))
 
     def obstacles_callback(self, msg):

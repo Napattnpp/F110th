@@ -148,7 +148,7 @@ class MAP_Controller:
         
         """
         # lookahead for steer (steering delay incorporation by propagating position)
-        if self.state == "StateType.TRAILING" and (self.opponent is not None):
+        if self.state in ("TRAILING", "StateType.TRAILING") and (self.opponent is not None):
             speed_la_for_lu = self.speed_now
         else:
             adv_ts_st = self.speed_lookahead_for_steer
@@ -179,8 +179,8 @@ class MAP_Controller:
         # modifying steer based on speed
         steering_angle = self.speed_steer_scaling(steering_angle, speed_for_lu)
 
-        # modifying steer based on velocity
-        steering_angle *= np.clip(1 + (self.speed_now/10), 1, 1.25)
+        # modifying steer based on velocity (disabled to prevent oversteering)
+        # steering_angle *= np.clip(1 + (self.speed_now/10), 1, 1.25)
         
         # limit change of steering angle
         threshold = 16.0 / self.loop_rate
@@ -239,7 +239,7 @@ class MAP_Controller:
         la_position = [self.position_in_map[0, 0] + v[0]*adv_ts_sp, self.position_in_map[0, 1] + v[1]*adv_ts_sp]
         idx_la_position = self.nearest_waypoint(la_position, self.waypoint_array_in_map[:, :2])
         global_speed = self.waypoint_array_in_map[idx_la_position, 2]
-        if(self.state == "StateType.TRAILING" and (self.opponent is not None)): #Trailing controller
+        if (self.state in ("TRAILING", "StateType.TRAILING") and (self.opponent is not None)): #Trailing controller
             speed_command = self.trailing_controller(global_speed)
         else:
             self.trailing_speed = global_speed

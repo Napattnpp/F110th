@@ -75,7 +75,11 @@ def generate_launch_description():
     joy_teleop_config = PathJoinSubstitution([pkg_bringup, 'config', LaunchConfiguration('racecar_version'), 'joy_teleop.yaml'])
     vesc_config = PathJoinSubstitution([pkg_bringup, 'config', LaunchConfiguration('racecar_version'), 'vesc.yaml'])
     icm20948_config = PathJoinSubstitution([pkg_bringup, 'config', LaunchConfiguration('racecar_version'), 'icm20948.yaml'])
-    l1_params = PathJoinSubstitution([pkg_bringup, 'config', LaunchConfiguration('racecar_version'), 'l1_params.yaml'])
+    l1_params = PathJoinSubstitution([
+        pkg_bringup, 'config',
+        PythonExpression(["'SIM' if '", LaunchConfiguration('sim'), "'.lower() in ('true', '1') else '", LaunchConfiguration('racecar_version'), "'"]),
+        'l1_params.yaml'
+    ])
     ekf_config = os.path.join(pkg_bringup, 'config', 'ekf.yaml')
 
     # Path to map directory
@@ -206,6 +210,17 @@ def generate_launch_description():
         }.items()
     )
 
+    sector_tuner_node = Node(
+        package='sector_tuner',
+        executable='sector_tuner',
+        name='sector_tuner',
+        output='screen',
+        parameters=[
+            PathJoinSubstitution([map_path, 'waypoints', 'speed_scaling.yaml']),
+            {'map_name': LaunchConfiguration('map_name')}
+        ]
+    )
+
     optional_nodes = []
     if package_exists('lap_analyser'):
         optional_nodes.append(
@@ -243,6 +258,7 @@ def generate_launch_description():
         physical_group,
         global_parameters_node,
         global_trajectory_pub,
+        sector_tuner_node,
         *optional_nodes
     ])
 

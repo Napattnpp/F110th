@@ -29,8 +29,8 @@ perception:
 fake_obstacle_publisher:
   ros__parameters:
     obs_mode: "dynamic_opponent" # "dynamic_opponent", "static_ahead", or "none"
-    speed_scaler: 0.35 # for dynamic opponent (lowered to 0.35 so opponent drives slower)
-    constant_speed: true
+    speed_scaler: 0.60 # for dynamic opponent (60% of raceline speed for realistic racing pace)
+    constant_speed: false # dynamically scale with raceline speed profile rather than static crawl
     trajectory: "min_curv"
     start_s: 0.0
     type: "virtual" # "virtual" (Markers+ObstacleArray) or "lidar" (OccupancyGrid)

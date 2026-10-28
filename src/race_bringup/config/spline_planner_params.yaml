@@ -1,11 +1,11 @@
 spline_planner:
   ros__parameters:
-    evasion_dist: 0.55                # [m] lateral offset distance to pass around obstacle
+    evasion_dist: 0.38                # [m] reduced lateral offset for smooth, controlled evasion
     spline_bound_mindist: 0.15        # [m] minimum clearance distance from track boundary
     ot_side_switch_cur_d_thresh: 0.55 # [m] lateral threshold preventing side switches when off-center
-    pre_apex_0: 7.8                   # [m] approach distance start point before apex
-    pre_apex_1: 5.5                   # [m] approach distance mid point before apex
-    pre_apex_2: 3.0                   # [m] approach distance end point before apex
+    pre_apex_0: 4.5                   # [m] approach distance start point before apex
+    pre_apex_1: 3.2                   # [m] approach distance mid point before apex
+    pre_apex_2: 1.8                   # [m] approach distance end point before apex
     post_apex_0: 1.2                  # [m] return distance start point after apex
     post_apex_1: 2.5                  # [m] return distance mid point after apex
     post_apex_2: 4.0                  # [m] return distance end point (rejoin raceline)

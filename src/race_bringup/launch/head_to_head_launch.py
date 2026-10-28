@@ -59,6 +59,11 @@ def generate_launch_description():
         default_value='false',
         description='True/False if you want to run simulation'
     )
+    enable_recovery_arg = DeclareLaunchArgument(
+        'enable_recovery',
+        default_value='true',
+        description='Enable autonomous crash recovery'
+    )
 
     # Include controller manager
     controller_launch = IncludeLaunchDescription(
@@ -76,7 +81,8 @@ def generate_launch_description():
         launch_arguments={
             'mode': 'head_to_head',
             'overtake_mode': LaunchConfiguration('overtake_mode'),
-            'racecar_version': LaunchConfiguration('racecar_version')
+            'racecar_version': LaunchConfiguration('racecar_version'),
+            'enable_recovery': LaunchConfiguration('enable_recovery')
         }.items()
     )
 
@@ -123,6 +129,7 @@ def generate_launch_description():
         measure_arg,
         map_name_arg,
         sim_arg,
+        enable_recovery_arg,
     ]
     actions.extend([
         controller_launch,

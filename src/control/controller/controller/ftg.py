@@ -23,7 +23,7 @@ class FTG_Controller(Node):
                  max_speed,
                  range_offset,
                  track_width) -> None:
-        super().__init__('controller_manager')
+        super().__init__('ftg_controller')
         """
         Initialize the FTG controller.
 
