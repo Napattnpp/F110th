@@ -1,0 +1,600 @@
+{
+  "configById": {
+    "3D!race_view": {
+      "cameraState": {
+        "distance": 24.0,
+        "perspective": false,
+        "phi": 58.0,
+        "target": [
+          0,
+          0,
+          0
+        ],
+        "targetOffset": [
+          -1.2,
+          3.2,
+          0
+        ],
+        "targetOrientation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "thetaOffset": 179.0,
+        "fovy": 45,
+        "near": 0.5,
+        "far": 5000
+      },
+      "followMode": "follow-pose",
+      "followTf": "map",
+      "scene": {
+        "transforms": {
+          "showLabel": false,
+          "labelSize": 0.016,
+          "editable": false,
+          "enablePreloading": false
+        },
+        "enableStats": false
+      },
+      "transforms": {
+        "frame:imu_link": {
+          "visible": false
+        },
+        "frame:laser": {
+          "visible": false
+        },
+        "frame:base_link": {
+          "visible": true
+        },
+        "frame:ego_racecar/base_link": {
+          "visible": true
+        },
+        "frame:map": {
+          "visible": true
+        },
+        "frame:ego_racecar/laser": {
+          "visible": false
+        },
+        "frame:car_state/base_link": {
+          "visible": false
+        }
+      },
+      "topics": {
+        "/map": {
+          "visible": true,
+          "colorMode": "custom",
+          "drawBehind": true,
+          "alpha": 1.0
+        },
+        "/scan": {
+          "visible": true,
+          "colorField": "range",
+          "colorMode": "gradient",
+          "colorMap": "turbo",
+          "pointShape": "circle",
+          "pointSize": 2.8
+        },
+        "/global_waypoints/markers": {
+          "visible": true
+        },
+        "/local_waypoints/markers": {
+          "visible": true
+        },
+        "/planner/avoidance/markers": {
+          "visible": true
+        },
+        "/lookahead_point": {
+          "visible": true
+        },
+        "/perception/dummy_obstacle_markers": {
+          "visible": true
+        },
+        "/perception/fake_obstacles": {
+          "visible": true
+        },
+        "/perception/obstacles_markers_new": {
+          "visible": true
+        },
+        "/steering": {
+          "visible": true
+        },
+        "/state_marker": {
+          "visible": true
+        },
+        "/telemetry_marker": {
+          "visible": true
+        },
+        "/lap_data_vis": {
+          "visible": true,
+          "showOutlines": true,
+          "color": "#ffffffff"
+        }
+      },
+      "layers": {
+        "grid": {
+          "visible": true,
+          "drawBehind": false,
+          "label": "Grid",
+          "instanceId": "grid_layer",
+          "layerId": "foxglove.Grid",
+          "size": 10,
+          "divisions": 10,
+          "lineWidth": 1,
+          "color": "#248eff",
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ]
+        },
+        "urdf_model": {
+          "controlMode": "transforms",
+          "jointStatesTopic": "",
+          "displayMode": "visual",
+          "fallbackColor": "#ffffff",
+          "showAxis": false,
+          "axisScale": 1,
+          "showOutlines": true,
+          "opacity": 1,
+          "visible": true,
+          "instanceId": "urdf_ego",
+          "layerId": "foxglove.Urdf",
+          "label": "Racecar URDF",
+          "sourceType": "topic",
+          "topic": "/ego_robot_description",
+          "order": 1
+        }
+      },
+      "publish": {
+        "type": "pose_estimate",
+        "poseTopic": "/move_base_simple/goal",
+        "pointTopic": "/clicked_point",
+        "poseEstimateTopic": "/initialpose",
+        "poseEstimateXDeviation": 0.5,
+        "poseEstimateYDeviation": 0.5,
+        "poseEstimateThetaDeviation": 0.2618
+      },
+      "imageMode": {},
+      "synchronize": false,
+      "foxglovePanelTitle": "3D / Live Track View"
+    },
+    "Indicator!state": {
+      "path": "/state.data",
+      "style": "bulb",
+      "fontSize": 18,
+      "fallbackColor": "#888888",
+      "fallbackLabel": "WAITING...",
+      "rules": [
+        {
+          "operator": "=",
+          "rawValue": "GB_TRACK",
+          "color": "#27ae60",
+          "label": "RACING (GB)"
+        },
+        {
+          "operator": "=",
+          "rawValue": "TRAILING",
+          "color": "#f39c12",
+          "label": "TRAILING"
+        },
+        {
+          "operator": "=",
+          "rawValue": "OVERTAKE",
+          "color": "#8e44ad",
+          "label": "OVERTAKING"
+        },
+        {
+          "operator": "=",
+          "rawValue": "FTGONLY",
+          "color": "#e74c3c",
+          "label": "FTG EVASION"
+        },
+        {
+          "operator": "=",
+          "rawValue": "RECOVERY_STUCK",
+          "color": "#d35400",
+          "label": "CRASH / STUCK"
+        },
+        {
+          "operator": "=",
+          "rawValue": "RECOVERY_REVERSING",
+          "color": "#c0392b",
+          "label": "REVERSING"
+        },
+        {
+          "operator": "=",
+          "rawValue": "RECOVERY_STABILIZING",
+          "color": "#f1c40f",
+          "label": "STABILIZING"
+        },
+        {
+          "operator": "=",
+          "rawValue": "LOW_BAT",
+          "color": "#7f1d1d",
+          "label": "LOW BATTERY"
+        },
+        {
+          "operator": "=",
+          "rawValue": "gb_track",
+          "color": "#27ae60",
+          "label": "RACING (GB)"
+        },
+        {
+          "operator": "=",
+          "rawValue": "trailing",
+          "color": "#f39c12",
+          "label": "TRAILING"
+        },
+        {
+          "operator": "=",
+          "rawValue": "overtake",
+          "color": "#8e44ad",
+          "label": "OVERTAKING"
+        },
+        {
+          "operator": "=",
+          "rawValue": "ftgonly",
+          "color": "#e74c3c",
+          "label": "FTG EVASION"
+        }
+      ],
+      "foxglovePanelTitle": "Planner State"
+    },
+    "Indicator!nav": {
+      "path": "/pause_navigation.data",
+      "style": "bulb",
+      "fontSize": 18,
+      "fallbackColor": "#888888",
+      "fallbackLabel": "WAITING...",
+      "rules": [
+        {
+          "operator": "=",
+          "rawValue": false,
+          "color": "#27ae60",
+          "label": "DRIVE ACTIVE"
+        },
+        {
+          "operator": "=",
+          "rawValue": true,
+          "color": "#e74c3c",
+          "label": "PAUSED / E-STOP"
+        },
+        {
+          "operator": "=",
+          "rawValue": "false",
+          "color": "#27ae60",
+          "label": "DRIVE ACTIVE"
+        },
+        {
+          "operator": "=",
+          "rawValue": "true",
+          "color": "#e74c3c",
+          "label": "PAUSED / E-STOP"
+        }
+      ],
+      "foxglovePanelTitle": "Navigation Status"
+    },
+    "Indicator!ftg_override": {
+      "path": "/state_machine/force_ftg.data",
+      "style": "bulb",
+      "fontSize": 18,
+      "fallbackColor": "#888888",
+      "fallbackLabel": "WAITING...",
+      "rules": [
+        {
+          "operator": "=",
+          "rawValue": false,
+          "color": "#2ecc71",
+          "label": "AUTO RACELINE"
+        },
+        {
+          "operator": "=",
+          "rawValue": true,
+          "color": "#e67e22",
+          "label": "FORCED FTG"
+        },
+        {
+          "operator": "=",
+          "rawValue": "false",
+          "color": "#2ecc71",
+          "label": "AUTO RACELINE"
+        },
+        {
+          "operator": "=",
+          "rawValue": "true",
+          "color": "#e67e22",
+          "label": "FORCED FTG"
+        }
+      ],
+      "foxglovePanelTitle": "FTG Override"
+    },
+    "gauge_utils.gauge_utils!speed_gauge": {
+      "data": {
+        "messagePath": "/car_state/odom.twist.twist.linear.x",
+        "min": 0,
+        "max": 8
+      },
+      "view": {
+        "component": "speedometer"
+      },
+      "foxglovePanelTitle": "Speed (m/s)"
+    },
+    "gauge_utils.gauge_utils!steer_gauge": {
+      "data": {
+        "messagePath": "/telemetry/steering_deg.data",
+        "min": -30,
+        "max": 30,
+        "showAngle": true
+      },
+      "view": {
+        "component": "steeringWheel"
+      },
+      "foxglovePanelTitle": "Steering Angle (deg)"
+    },
+    "StateTransitions!timeline": {
+      "foxglovePanelTitle": "State Transitions Timeline",
+      "paths": [
+        {
+          "value": "/state.data",
+          "timestampMethod": "receiveTime",
+          "customStates": {
+            "type": "discrete",
+            "states": [
+              {
+                "value": "GB_TRACK",
+                "color": "#27ae60",
+                "label": "GB_TRACK"
+              },
+              {
+                "value": "TRAILING",
+                "color": "#f39c12",
+                "label": "TRAILING"
+              },
+              {
+                "value": "OVERTAKE",
+                "color": "#8e44ad",
+                "label": "OVERTAKE"
+              },
+              {
+                "value": "FTGONLY",
+                "color": "#e74c3c",
+                "label": "FTG ONLY"
+              },
+              {
+                "value": "RECOVERY_STUCK",
+                "color": "#d35400",
+                "label": "STUCK"
+              },
+              {
+                "value": "RECOVERY_REVERSING",
+                "color": "#c0392b",
+                "label": "REVERSING"
+              },
+              {
+                "value": "RECOVERY_STABILIZING",
+                "color": "#f1c40f",
+                "label": "STABILIZING"
+              },
+              {
+                "value": "LOW_BAT",
+                "color": "#7f1d1d",
+                "label": "LOW BAT"
+              }
+            ]
+          },
+          "id": "cd35c9d2-03f3-451c-ba9c-154ae0e79d34"
+        }
+      ],
+      "isSynced": true,
+      "showLegend": true,
+      "xAxisDisplayMethod": "relative",
+      "showPoints": false,
+      "timeWindowMode": "sliding",
+      "xAxisRange": 15,
+      "playbackBarPosition": "center"
+    },
+    "Plot!speed_tracking": {
+      "paths": [
+        {
+          "value": "/car_state/odom.twist.twist.linear.x",
+          "enabled": true,
+          "color": "#2ecc71",
+          "label": "Actual Speed (m/s)"
+        },
+        {
+          "value": "/drive.drive.speed",
+          "enabled": true,
+          "color": "#3498db",
+          "label": "Commanded Target Speed (m/s)"
+        }
+      ],
+      "showLegend": true,
+      "minYValue": 0,
+      "maxYValue": 8,
+      "foxglovePanelTitle": "Speed Tracking (Actual vs Commanded m/s)"
+    },
+    "Plot!steering_dynamics": {
+      "paths": [
+        {
+          "value": "/telemetry/steering_deg.data",
+          "enabled": true,
+          "color": "#e67e22",
+          "label": "Steering Angle (deg)"
+        }
+      ],
+      "showLegend": true,
+      "minYValue": -25,
+      "maxYValue": 25,
+      "foxglovePanelTitle": "Steering Dynamics (deg)"
+    },
+    "Plot!trailing_gap": {
+      "paths": [
+        {
+          "value": "/trailing/gap_data.error",
+          "enabled": true,
+          "color": "#00bcd4",
+          "label": "Trailing Gap Error (m)"
+        },
+        {
+          "value": "/min_car_distance_to_boundary.data",
+          "enabled": true,
+          "color": "#e74c3c",
+          "label": "Min Wall Distance (m)"
+        }
+      ],
+      "showLegend": true,
+      "foxglovePanelTitle": "Trailing Gap & Wall Proximity (m)"
+    },
+    "Plot!chassis_yaw_rate": {
+      "paths": [
+        {
+          "value": "/car_state/odom.twist.twist.angular.z",
+          "enabled": true,
+          "color": "#9b59b6",
+          "label": "Yaw Rate omega_z (rad/s)"
+        }
+      ],
+      "showLegend": true,
+      "minYValue": -3.0,
+      "maxYValue": 3.0,
+      "foxglovePanelTitle": "Chassis Yaw Rate (rad/s)"
+    },
+    "RawMessages!lap_data": {
+      "topicPath": "/lap_data",
+      "fontSize": 14,
+      "foxglovePanelTitle": "Lap Timing & Errors (/lap_data)"
+    },
+    "RawMessages!qual_info": {
+      "topicPath": "/qualifying/info",
+      "fontSize": 14,
+      "foxglovePanelTitle": "Race Strategy & Phase (/qualifying/info)"
+    },
+    "Plot!lap_times_history": {
+      "paths": [
+        {
+          "value": "/lap_data.lap_time",
+          "enabled": true,
+          "color": "#1abc9c",
+          "label": "Lap Time (s)"
+        }
+      ],
+      "showLegend": true,
+      "foxglovePanelTitle": "Lap Time History (s)"
+    },
+    "Plot!lateral_errors": {
+      "paths": [
+        {
+          "value": "/lap_data.avg_lat_err",
+          "enabled": true,
+          "color": "#3498db",
+          "label": "Avg Lateral Error (m)"
+        },
+        {
+          "value": "/lap_data.max_lat_err",
+          "enabled": true,
+          "color": "#e74c3c",
+          "label": "Max Lateral Error (m)"
+        }
+      ],
+      "showLegend": true,
+      "foxglovePanelTitle": "Raceline Tracking Errors (m)"
+    },
+    "Tab!root": {
+      "activeTabIdx": 0,
+      "tabs": [
+        {
+          "title": "\ud83c\udfce\ufe0f Race Cockpit",
+          "layout": {
+            "first": {
+              "first": "3D!race_view",
+              "second": {
+                "first": {
+                  "first": "Indicator!state",
+                  "second": {
+                    "first": "Indicator!nav",
+                    "second": "Indicator!ftg_override",
+                    "direction": "column",
+                    "splitPercentage": 50
+                  },
+                  "direction": "column",
+                  "splitPercentage": 45
+                },
+                "second": {
+                  "first": "gauge_utils.gauge_utils!speed_gauge",
+                  "second": "gauge_utils.gauge_utils!steer_gauge",
+                  "direction": "column",
+                  "splitPercentage": 50
+                },
+                "direction": "row",
+                "splitPercentage": 45
+              },
+              "direction": "row",
+              "splitPercentage": 63.0
+            },
+            "second": "StateTransitions!timeline",
+            "direction": "column",
+            "splitPercentage": 83.0
+          }
+        },
+        {
+          "title": "\ud83d\udcc8 Telemetry & Dynamics",
+          "layout": {
+            "first": {
+              "first": "Plot!speed_tracking",
+              "second": "Plot!steering_dynamics",
+              "direction": "column",
+              "splitPercentage": 50
+            },
+            "second": {
+              "first": "Plot!trailing_gap",
+              "second": "Plot!chassis_yaw_rate",
+              "direction": "column",
+              "splitPercentage": 50
+            },
+            "direction": "row",
+            "splitPercentage": 50
+          }
+        },
+        {
+          "title": "\ud83c\udfc1 Race Timing & Strategy",
+          "layout": {
+            "first": {
+              "first": "Plot!lap_times_history",
+              "second": "Plot!lateral_errors",
+              "direction": "column",
+              "splitPercentage": 50
+            },
+            "second": {
+              "first": "RawMessages!lap_data",
+              "second": "RawMessages!qual_info",
+              "direction": "column",
+              "splitPercentage": 60
+            },
+            "direction": "row",
+            "splitPercentage": 55
+          }
+        }
+      ]
+    }
+  },
+  "globalVariables": {
+    "max_speed": 8.0,
+    "min_speed": 0.0
+  },
+  "userNodes": {
+    "f1tenth_telemetry_converter": {
+      "sourceCode": "import { Input, MessageEvent } from 'ros';\n\ntype InputDrive = MessageEvent<Input<'/drive'>>;\ntype InputOdom = MessageEvent<Input<'/car_state/odom'>>;\n\nexport const inputs = ['/drive', '/car_state/odom'];\nexport const output = '/telemetry/gauges';\n\nlet lastSpeedMs = 0.0;\nlet lastSteerDeg = 0.0;\n\nexport default function publisher(event: InputDrive | InputOdom) {\n  if (event.topic === '/drive') {\n    const msg = event.message as any;\n    if (msg?.drive?.steering_angle != null) {\n      lastSteerDeg = msg.drive.steering_angle * (180 / Math.PI);\n    }\n  }\n  if (event.topic === '/car_state/odom') {\n    const msg = event.message as any;\n    const vx = msg?.twist?.twist?.linear?.x ?? 0.0;\n    const vy = msg?.twist?.twist?.linear?.y ?? 0.0;\n    lastSpeedMs = Math.hypot(vx, vy);\n  }\n  return {\n    speed_ms: Number(lastSpeedMs.toFixed(2)),\n    steering_deg: Number(lastSteerDeg.toFixed(1))\n  };\n}\n",
+      "name": "F1tenthTelemetryConverter"
+    }
+  },
+  "playbackConfig": {
+    "speed": 1
+  },
+  "layout": "Tab!root"
+}

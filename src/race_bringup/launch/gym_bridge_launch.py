@@ -279,7 +279,7 @@ def launch_setup(context, *args, **kwargs):
     ld.add_action(
         DeclareLaunchArgument(
             'foxglove_layout',
-            default_value=os.path.join(package_share, 'config', sim_profile, 'foxglove', 'gym_bridge_foxglove.json'),
+            default_value=os.path.join(package_share, 'config', sim_profile, 'foxglove', 'f1tenth_monitor.json'),
             description='Path to Foxglove layout JSON.',
         )
     )
