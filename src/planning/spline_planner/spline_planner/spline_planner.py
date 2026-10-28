@@ -47,7 +47,11 @@ class ObstacleSpliner(Node):
         self.cur_s = None
         self.cur_d = None
         self.cur_vs = None
-        self.lookahead = 10  # in meters [m]
+        self.lookahead_min = 4.0
+        self.lookahead_max = 12.0
+        self.lookahead_kv = 1.0
+        self.lookahead_kkappa = 0.5
+        self.lookahead = self.lookahead_min
         self.last_switch_time = self.get_clock().now().to_msg()
         self.last_ot_side = ""
 
@@ -101,6 +105,10 @@ class ObstacleSpliner(Node):
             type=ParameterType.PARAMETER_DOUBLE,
             floating_point_range=[FloatingPointRange(from_value=0.1, to_value=8.0, step=0.001)]
         )
+        pd_la = ParameterDescriptor(
+            type=ParameterType.PARAMETER_DOUBLE,
+            floating_point_range=[FloatingPointRange(from_value=0.0, to_value=25.0, step=0.01)]
+        )
         param_dicts = [
             {'name': 'pre_apex_0', 'default': abs(self.pre_apex_0), 'descriptor': pd},
             {'name': 'pre_apex_1', 'default': abs(self.pre_apex_1), 'descriptor': pd},
@@ -113,7 +121,11 @@ class ObstacleSpliner(Node):
             {'name': 'spline_bound_mindist', 'default': self.spline_bound_mindist, 'descriptor': pd},
             {'name': 'fixed_pred_time', 'default': self.fixed_pred_time, 'descriptor': pd},
             {'name': 'kd_obs_pred', 'default': self.kd_obs_pred, 'descriptor': pd},
-            {'name': 'ot_side_switch_cur_d_thresh', 'default': self.ot_side_switch_cur_d_thresh, 'descriptor': pd}
+            {'name': 'ot_side_switch_cur_d_thresh', 'default': self.ot_side_switch_cur_d_thresh, 'descriptor': pd},
+            {'name': 'lookahead_min', 'default': self.lookahead_min, 'descriptor': pd_la},
+            {'name': 'lookahead_max', 'default': self.lookahead_max, 'descriptor': pd_la},
+            {'name': 'lookahead_kv', 'default': self.lookahead_kv, 'descriptor': pd_la},
+            {'name': 'lookahead_kkappa', 'default': self.lookahead_kkappa, 'descriptor': pd_la}
         ]
 
         self.declare_all_parameters(param_dicts=param_dicts)
@@ -170,6 +182,14 @@ class ObstacleSpliner(Node):
                 self.kd_obs_pred = param.value
             elif param_name == 'ot_side_switch_cur_d_thresh':
                 self.ot_side_switch_cur_d_thresh = param.value
+            elif param_name == 'lookahead_min':
+                self.lookahead_min = param.value
+            elif param_name == 'lookahead_max':
+                self.lookahead_max = param.value
+            elif param_name == 'lookahead_kv':
+                self.lookahead_kv = param.value
+            elif param_name == 'lookahead_kkappa':
+                self.lookahead_kkappa = param.value
         
         # Ensure ascending order for spline parameters
         if self.pre_apex_1 < self.pre_apex_0:
@@ -581,7 +601,33 @@ class ObstacleSpliner(Node):
             self.last_ot_side = ""
         return wpnts, mrks
 
+    def compute_dynamic_lookahead(self) -> float:
+        """
+        Dynamically scale spline lookahead distance based on vehicle linear velocity
+        and local raceline curvature:
+            L_base = k_v * v_s + L_min
+            L = L_base / (1.0 + k_kappa * |kappa|)
+            L = clamp(L, L_min, L_max)
+        """
+        vs = max(0.0, float(self.cur_vs)) if self.cur_vs is not None else 0.0
+        l_base = self.lookahead_kv * vs + self.lookahead_min
+
+        # Local raceline curvature attenuation
+        kappa = 0.0
+        if self.gb_wpnts is not None and self.cur_s is not None and len(self.gb_wpnts) > 0 and self.gb_max_s is not None:
+            s_diffs = [abs((w.s_m - self.cur_s) % self.gb_max_s) for w in self.gb_wpnts]
+            closest_idx = int(np.argmin(s_diffs))
+            w = self.gb_wpnts[closest_idx]
+            if hasattr(w, 'kappa_radpm'):
+                kappa = abs(float(w.kappa_radpm))
+
+        l_scaled = l_base / (1.0 + self.lookahead_kkappa * kappa)
+        return float(np.clip(l_scaled, self.lookahead_min, self.lookahead_max))
+
     def _obs_filtering(self, obstacles: ObstacleArray) -> List[Obstacle]:
+        # Dynamically adapt lookahead distance to current speed and curvature
+        self.lookahead = self.compute_dynamic_lookahead()
+
         # Only use obstacles that are within a threshold of the raceline, else we don't care about them
         obs_on_traj = [obs for obs in obstacles.obstacles if abs(
             obs.d_center) < self.obs_traj_tresh]
