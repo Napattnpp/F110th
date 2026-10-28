@@ -97,7 +97,7 @@ def launch_setup(context, *args, **kwargs):
         name='global_parameters',
         output='screen',
         parameters=[{
-            'racecar_version': 'NUC1',
+            'racecar_version': 'ORIN1',
             'sim': PythonExpression(["True if '", mode, "' == 'sim' else False"]),
             'map_path': str(map_dir),
             'use_sim_time': PythonExpression(["True if '", mode, "' == 'sim' else False"])

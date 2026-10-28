@@ -18,8 +18,8 @@ def generate_launch_description():
     
     racecar_version_arg = DeclareLaunchArgument(
         'racecar_version',
-        default_value='NUC1',
-        description='NUC/Car version'
+        default_value='ORIN1',
+        description='Hardware profile directory under race_bringup/config/ (e.g. ORIN1, SIM)'
     )
     
     controller_node = Node(

@@ -27,8 +27,8 @@ def generate_launch_description():
     # Arguments read directly from environment or explicit defaults
     racecar_version_arg = DeclareLaunchArgument(
         'racecar_version',
-        default_value=os.environ.get('RACECAR_VERSION', 'NUC1'),
-        description='NUC / Jetson version (e.g. NUC1, JET1)'
+        default_value=os.environ.get('RACECAR_VERSION', 'ORIN1'),
+        description='Hardware profile directory under race_bringup/config/ (e.g. ORIN1, SIM)'
     )
     map_name_arg = DeclareLaunchArgument(
         'map_name',

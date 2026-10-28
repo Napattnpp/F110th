@@ -1,6 +1,6 @@
 controller:
   ros__parameters:
-    LUT_name: "NUC1_hangar_pacejka"
+    LUT_name: "ORIN1_hangar_pacejka"
     # ── Lookahead distance: L1 = q_l1 + speed * m_l1, clipped to [t_clip_min, t_clip_max] ──
     # OSCILLATION FIX: increase t_clip_min → longer lookahead → smoother path, less oscillation
     # Too short (0.8m) on tight track → car overshoots corners → oscillates

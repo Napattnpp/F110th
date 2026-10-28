@@ -93,7 +93,6 @@ ros2 launch stack_master mapping_launch.xml map_name:=<map_name>
 ### Algorithms
 
 ```bash
-ros2 run safety_node safety_node_cpp           # AEB
 ros2 run wall_follow wall_follow_node_cpp      # Wall following
 ros2 run gap_follow reactive_node_cpp          # Follow the gap
 ros2 launch pure_pursuit sim_pure_pursuit_launch.py  # Pure pursuit
@@ -125,7 +124,6 @@ F110th/
 │   ├── setup/             ← Setup automation & host installers (bootstrap.sh, configure.sh, setup-jetson.sh)
 │   ├── map/               ← Map lifecycle tools (init_map.py, finish_map.sh)
 │   ├── race/              ← Trackside race operations & web sector tuner (connect_car.sh, sector_tuner_web.py)
-│   ├── benchmarks/        ← Offline algorithm & hardware benchmarks (benchmark_optimizers.py, run_eval.py)
-│   └── profile/           ← Unified vehicle profile CLI (manage_profile.py)
+│   └── benchmarks/        ← Offline algorithm & hardware benchmarks (benchmark_optimizers.py, run_eval.py)
 └── src/                   ← ROS 2 nodes & packages
 ```

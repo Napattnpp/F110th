@@ -132,9 +132,17 @@ monitor: ## Open Foxglove Studio / Web connected to live vehicle bridge (ws://lo
 	@echo "Connecting to Foxglove WebSocket on ws://localhost:8765..."
 	@python3 -c "import webbrowser, subprocess; (subprocess.run(['open', 'foxglove://open?ds=foxglove-websocket&ds.url=ws://localhost:8765'], capture_output=True).returncode == 0) or webbrowser.open('https://app.foxglove.dev/?ds=foxglove-websocket&ds.url=ws://localhost:8765')"
 
-profile: ## Switch or view vehicle profile: make profile [CAR=sim|nuc1|jet1]
+profile: ## View or switch active racecar profile: make profile [CAR=ORIN1|SIM]
 	@if [ -n "$(CAR)" ]; then \
-		$(PYTHON) scripts/profile/manage_profile.py --set $(CAR); \
+		sed -i '' 's/^RACECAR_VERSION=.*/RACECAR_VERSION=$(CAR)/' .env 2>/dev/null || sed -i 's/^RACECAR_VERSION=.*/RACECAR_VERSION=$(CAR)/' .env; \
+		echo "Switched active racecar profile to: $(CAR)"; \
 	else \
-		$(PYTHON) scripts/profile/manage_profile.py --list; \
+		echo "Current active profile in .env: $$(grep '^RACECAR_VERSION=' .env | cut -d= -f2)"; \
+		echo "Available hardware profiles in src/race_bringup/config/:"; \
+		for dir in src/race_bringup/config/*/; do \
+			base=$$(basename "$$dir"); \
+			if [ "$$base" != "global_planner" ]; then \
+				echo "  - $$base"; \
+			fi; \
+		done; \
 	fi

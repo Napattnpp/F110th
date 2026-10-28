@@ -1,4 +1,4 @@
 global_parameters:
   ros__parameters:
-    racecar_version: NUC1
+    racecar_version: ORIN1
     sim: false

@@ -32,15 +32,10 @@ def generate_launch_description():
     pkg_bringup = get_package_share_directory('race_bringup')
 
     # Arguments read directly from environment or explicit defaults
-    car_profile_arg = DeclareLaunchArgument(
-        'car_profile',
-        default_value=os.environ.get('ACTIVE_CAR', 'sim'),
-        description='Active vehicle profile (e.g. sim, nuc1, jet1) from profiles/<car_profile>.yaml'
-    )
     racecar_version_arg = DeclareLaunchArgument(
         'racecar_version',
-        default_value=os.environ.get('RACECAR_VERSION', 'NUC1'),
-        description='NUC / Jetson version (e.g. NUC1, JET1)'
+        default_value=os.environ.get('RACECAR_VERSION', 'ORIN1'),
+        description='Hardware profile directory under race_bringup/config/ (e.g. ORIN1, SIM)'
     )
     map_name_arg = DeclareLaunchArgument(
         'map_name',
@@ -67,12 +62,6 @@ def generate_launch_description():
         'trajectory_type',
         default_value='minimum_curvature',
         description='Type of trajectory to publish on /global_waypoints: minimum_curvature, shortest_path, centerline'
-    )
-
-    disable_aeb_arg = DeclareLaunchArgument(
-        'disable_aeb',
-        default_value='True',
-        description='Whether to disable the safety AEB node'
     )
 
     # Configuration files path
@@ -200,7 +189,6 @@ def generate_launch_description():
         parameters=[
             l1_params,
             {
-                'car_profile': LaunchConfiguration('car_profile'),
                 'racecar_version': LaunchConfiguration('racecar_version'),
                 'sim': LaunchConfiguration('sim'),
                 'map_path': map_path,
@@ -253,29 +241,13 @@ def generate_launch_description():
             )
         )
 
-    if package_exists('safety_node'):
-        optional_nodes.append(
-            Node(
-                package='safety_node',
-                executable='safety_node_cpp',
-                name='safety_node',
-                output='screen',
-                remappings=[
-                    ('ego_racecar/odom', PythonExpression(["'/ego_racecar/odom' if ", LaunchConfiguration('sim'), " else '/car_state/odom'"]))
-                ],
-                condition=UnlessCondition(LaunchConfiguration('disable_aeb'))
-            )
-        )
-
     return LaunchDescription([
-        car_profile_arg,
         racecar_version_arg,
         map_name_arg,
         sim_arg,
         localize_arg,
         localize_method_arg,
         trajectory_type_arg,
-        disable_aeb_arg,
         sim_group,
         physical_group,
         global_parameters_node,

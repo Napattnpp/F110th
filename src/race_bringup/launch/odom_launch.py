@@ -27,8 +27,8 @@ def generate_launch_description():
     # ── Arguments ────────────────────────────────────────────────────────────
     racecar_version_arg = DeclareLaunchArgument(
         'racecar_version',
-        default_value='NUC1',
-        description='Racecar version profile (e.g. NUC1, NUC2)'
+        default_value='ORIN1',
+        description='Hardware profile directory under race_bringup/config/ (e.g. ORIN1, SIM)'
     )
     frenet_bool_arg = DeclareLaunchArgument(
         'frenet_bool',
