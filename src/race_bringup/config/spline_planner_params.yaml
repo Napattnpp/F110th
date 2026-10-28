@@ -9,9 +9,11 @@ spline_planner:
     post_apex_0: 1.5                  # [m] return distance start point after apex
     post_apex_1: 3.2                  # [m] return distance mid point after apex
     post_apex_2: 5.0                  # [m] return distance end point (smoother rejoin)
-    spline_max_alat: 8.5              # [m/s^2] max lateral acceleration budget for avoidance trajectory
+    spline_max_alat: 6.5              # [m/s^2] max lateral acceleration budget for avoidance trajectory (safe under mu=0.75)
     spline_abrake_max: 5.0            # [m/s^2] max braking deceleration along avoidance spline
     spline_aaccel_max: 4.0            # [m/s^2] max acceleration along avoidance spline
-    overtake_speed_boost: 1.08        # [scale] target speed multiplier during active overtaking
+    overtake_speed_boost: 1.05        # [scale] target speed multiplier on straightaways (gated by curvature)
+    min_pass_delta_v: 0.8             # [m/s] minimum relative speed advantage over opponent on straights
+    corner_curvature_thresh: 0.08     # [rad/m] curvature threshold: no speed boost allowed above this value
     prediction_mode: "curvature_aware" # Opponent propagation mode: curvature_aware / constant / adaptive
     multi_obs_safety_margin: 0.25     # [m] minimum spatial clearance to secondary tracked obstacles

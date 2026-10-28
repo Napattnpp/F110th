@@ -19,7 +19,7 @@ state_machine:
     overtaking_horizon_m: 10.0 # [m] horizon considered for overtaking
     lateral_width_ot_m: 0.18 # [m] lateral width within which we consider opponents to be on overtaking line
     splini_hyst_timer_sec: 0.02 # [s] time we have to wait between switching sides
-    overtake_speed_scale: 1.08 # speed boost fraction (0.1 - 1.5) applied during OVERTAKE mode to accelerate past opponent
+    overtake_speed_scale: 1.0 # speed boost fraction applied during OVERTAKE mode (1.0 = single source of truth in spline_planner)
 
     ftg_threshold_speed: 0.1 # [m/s] speed threshold below which we start a timer for activating FTG
     ftg_timer_sec: 3. # [s] time we have to stay slower than the `ftg_threshold_speed` threshold before we activate FTG

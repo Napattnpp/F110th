@@ -39,10 +39,12 @@ class MockRobustSpliner:
         self.evasion_dist = 0.40
         self.spline_bound_mindist = 0.18
         self.ot_side_switch_cur_d_thresh = 0.55
-        self.spline_max_alat = 8.5
+        self.spline_max_alat = 6.5
         self.spline_abrake_max = 5.0
         self.spline_aaccel_max = 4.0
-        self.overtake_speed_boost = 1.08
+        self.overtake_speed_boost = 1.05
+        self.min_pass_delta_v = 0.8
+        self.corner_curvature_thresh = 0.08
         self.prediction_mode = "curvature_aware"
         self.multi_obs_safety_margin = 0.25
         self.fixed_pred_time = 0.20

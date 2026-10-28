@@ -101,10 +101,12 @@ class ObstacleSpliner(Node):
         self.fixed_pred_time = 0.15
         self.kd_obs_pred = 1.0
         self.ot_side_switch_cur_d_thresh = 0.60
-        self.spline_max_alat = 8.5
+        self.spline_max_alat = 6.5
         self.spline_abrake_max = 5.0
         self.spline_aaccel_max = 4.0
-        self.overtake_speed_boost = 1.08
+        self.overtake_speed_boost = 1.05
+        self.min_pass_delta_v = 0.8
+        self.corner_curvature_thresh = 0.08
         self.prediction_mode = "curvature_aware"
         self.multi_obs_safety_margin = 0.25
         
@@ -118,7 +120,11 @@ class ObstacleSpliner(Node):
         )
         pd_acc = ParameterDescriptor(
             type=ParameterType.PARAMETER_DOUBLE,
-            floating_point_range=[FloatingPointRange(from_value=0.5, to_value=25.0, step=0.01)]
+            floating_point_range=[FloatingPointRange(from_value=0.1, to_value=25.0, step=0.01)]
+        )
+        pd_curv = ParameterDescriptor(
+            type=ParameterType.PARAMETER_DOUBLE,
+            floating_point_range=[FloatingPointRange(from_value=0.001, to_value=5.0, step=0.001)]
         )
         pd_str = ParameterDescriptor(type=ParameterType.PARAMETER_STRING)
         param_dicts = [
@@ -142,6 +148,8 @@ class ObstacleSpliner(Node):
             {'name': 'spline_abrake_max', 'default': self.spline_abrake_max, 'descriptor': pd_acc},
             {'name': 'spline_aaccel_max', 'default': self.spline_aaccel_max, 'descriptor': pd_acc},
             {'name': 'overtake_speed_boost', 'default': self.overtake_speed_boost, 'descriptor': pd_acc},
+            {'name': 'min_pass_delta_v', 'default': self.min_pass_delta_v, 'descriptor': pd_acc},
+            {'name': 'corner_curvature_thresh', 'default': self.corner_curvature_thresh, 'descriptor': pd_curv},
             {'name': 'prediction_mode', 'default': self.prediction_mode, 'descriptor': pd_str},
             {'name': 'multi_obs_safety_margin', 'default': self.multi_obs_safety_margin, 'descriptor': pd}
         ]
@@ -676,17 +684,31 @@ class ObstacleSpliner(Node):
             # Physical lateral velocity limit under available tire friction (v_lat = sqrt(a_lat / kappa))
             v_lat_limits = np.sqrt(self.spline_max_alat / np.maximum(curvatures, 0.05))
 
-            # Initial target with overtaking acceleration boost, bounded by physical curvature limit
+            # Curvature-gated velocity profiling adhering to tire friction ellipse
+            corner_thresh = getattr(self, 'corner_curvature_thresh', 0.08)
+            speed_boost = getattr(self, 'overtake_speed_boost', 1.05)
+            min_pass_delta_v = getattr(self, 'min_pass_delta_v', 0.8)
             v_targets = np.zeros(n_pts)
             for i in range(n_pts):
                 gb_wpnt_i = int((evasion_s[i] / wpnt_dist) % self.gb_max_idx)
                 v_raceline = gb_wpnts[gb_wpnt_i].vx_mps
-                v_boosted = v_raceline * getattr(self, 'overtake_speed_boost', 1.08)
-                # Ensure ego car commands higher velocity than the opponent to complete the pass
-                if hasattr(closest_obs, 'vs') and float(closest_obs.vs) > 0.0:
-                    v_min_pass = min(float(closest_obs.vs) + 1.2, self.gb_vmax)
-                    v_boosted = max(v_boosted, v_min_pass)
-                v_targets[i] = min(v_boosted, v_lat_limits[i])
+                
+                # Check if local avoidance arc or raceline exceeds curvature threshold
+                is_corner = (curvatures[i] >= corner_thresh) or (abs(gb_wpnts[gb_wpnt_i].kappa_radpm) >= corner_thresh)
+                
+                if is_corner:
+                    # In corners / braking zones / apexes: Zero acceleration boost!
+                    # Strictly adhere to physical tire grip limit to prevent understeer wall collisions
+                    v_target = min(v_raceline, v_lat_limits[i])
+                else:
+                    # On straightaways / gentle sweeps: Apply safe passing boost and positive delta-v floor
+                    v_boosted = v_raceline * speed_boost
+                    if hasattr(closest_obs, 'vs') and float(closest_obs.vs) > 0.0:
+                        v_min_pass = min(float(closest_obs.vs) + min_pass_delta_v, self.gb_vmax)
+                        v_boosted = max(v_boosted, v_min_pass)
+                    v_target = min(v_boosted, v_lat_limits[i], self.gb_vmax)
+
+                v_targets[i] = min(v_target, v_lat_limits[i])
 
             # Backward pass (Euler deceleration limit for braking)
             ds = spline_res
