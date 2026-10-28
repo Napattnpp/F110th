@@ -316,6 +316,8 @@ class StateMachineParams:
         self.recovery_align_time: float = float(_get_or_decl("recovery_align_time", 0.8))
         self.recovery_rear_min_dist: float = float(_get_or_decl("recovery_rear_min_dist", 0.35))
         self.recovery_front_safe_dist: float = float(_get_or_decl("recovery_front_safe_dist", 0.70))
+        self.max_loc_cov_trace: float = float(_get_or_decl("max_loc_cov_trace", 0.15))
+        self.relocalization_timeout: float = float(_get_or_decl("relocalization_timeout", 3.0))
 
 
 

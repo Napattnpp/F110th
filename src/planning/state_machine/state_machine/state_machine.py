@@ -11,7 +11,8 @@ from rclpy.parameter import Parameter
 from ament_index_python import get_package_share_directory
 from std_msgs.msg import String, Bool
 from nav_msgs.msg import Odometry
-from geometry_msgs.msg import PoseStamped, Point
+from geometry_msgs.msg import PoseStamped, Point, PoseWithCovarianceStamped
+from tf_transformations import quaternion_from_euler
 from typing import List
 from f110_msgs.msg import Wpnt, WpntArray, OTWpntArray, ObstacleArray, Obstacle
 import random
@@ -128,6 +129,11 @@ class StateMachine(Node):
         self.latest_scan = None
         self.scan_sub = self.create_subscription(LaserScan, '/scan', self.scan_cb, 10)
 
+        # Localization health & auto-relocalization
+        self.loc_cov_trace = 0.0
+        self.last_reloc_time = 0.0
+        self.initialpose_pub = self.create_publisher(PoseWithCovarianceStamped, '/initialpose', 1)
+
         # INITIALIZATIONS        
         self.waypoints_dist = 0.1
         self.glb_s_array = np.array([])
@@ -232,6 +238,14 @@ class StateMachine(Node):
         self.cur_s = msg.pose.pose.position.x
         self.cur_d = msg.pose.pose.position.y
         self.cur_vs = msg.twist.twist.linear.x  # longitudinal speed in frenet frame
+
+        # Extract localization covariance trace from pose (x and y variances)
+        if hasattr(msg.pose, 'covariance') and len(msg.pose.covariance) >= 8:
+            cov_x = float(msg.pose.covariance[0])
+            cov_y = float(msg.pose.covariance[7])
+            self.loc_cov_trace = cov_x + cov_y
+        else:
+            self.loc_cov_trace = 0.0
 
         # Lap counting: detect wrap-around when cur_s jumps backwards past the
         # start/finish line.  A drop of more than half the track length is
@@ -364,6 +378,53 @@ class StateMachine(Node):
     @property
     def _check_close_to_raceline(self) -> bool:
         return np.abs(self.cur_d) < self.params.gb_ego_width_m  # [m]
+
+    @property
+    def _check_localization_healthy(self) -> bool:
+        """Evaluates whether position covariance trace is within safe racing limits."""
+        if self.loc_cov_trace <= 0.0:
+            return True
+        max_trace = getattr(self.params, "max_loc_cov_trace", 0.15)
+        return self.loc_cov_trace < max_trace
+
+    def trigger_relocalization(self):
+        """Re-seeds particle filter via /initialpose near the last known raceline s."""
+        now_sec = self.get_clock().now().nanoseconds * 1e-9
+        if now_sec - self.last_reloc_time < 3.0:
+            return
+
+        self.last_reloc_time = now_sec
+        if self.glb_wpnts is None or len(self.glb_wpnts) == 0:
+            return
+
+        cur_s = self.cur_s if self.cur_s is not None else 0.0
+        closest_idx = self.get_closest_glb_wpnt_idx(cur_s)
+        wpnt = self.glb_wpnts[closest_idx]
+
+        pose_msg = PoseWithCovarianceStamped()
+        pose_msg.header.stamp = self.get_clock().now().to_msg()
+        pose_msg.header.frame_id = "map"
+        pose_msg.pose.pose.position.x = float(wpnt.x_m)
+        pose_msg.pose.pose.position.y = float(wpnt.y_m)
+        pose_msg.pose.pose.position.z = 0.0
+
+        q = quaternion_from_euler(0, 0, float(wpnt.psi_rad))
+        pose_msg.pose.pose.orientation.x = q[0]
+        pose_msg.pose.pose.orientation.y = q[1]
+        pose_msg.pose.pose.orientation.z = q[2]
+        pose_msg.pose.pose.orientation.w = q[3]
+
+        cov = [0.0] * 36
+        cov[0] = 0.16   # var(x)
+        cov[7] = 0.16   # var(y)
+        cov[35] = 0.08  # var(yaw)
+        pose_msg.pose.covariance = cov
+
+        self.get_logger().warn(
+            f"[Relocalization] Kidnapped / lost pose detected (cov_trace={self.loc_cov_trace:.3f} m^2). "
+            f"Auto-reseeding particle filter at raceline s={cur_s:.2f}m (x={wpnt.x_m:.2f}, y={wpnt.y_m:.2f})."
+        )
+        self.initialpose_pub.publish(pose_msg)
 
     @property
     def _check_valid_opponent_ahead(self) -> bool:

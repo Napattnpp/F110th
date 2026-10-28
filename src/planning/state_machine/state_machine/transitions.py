@@ -93,10 +93,20 @@ def recovery_transition(state_machine: StateMachine) -> StateType:
     elif state_machine.state == StateType.RECOVERY_ALIGN:
         # Stay in ALIGN (FTG mode stabilization) for recovery_align_time
         if substate_elapsed >= p.recovery_align_time:
-            state_machine.get_logger().info("[RECOVERY] Recovery sequence complete! Resuming NORMAL_RACING.")
-            state_machine.top_level_mode = TopLevelMode.NORMAL_RACING
-            state_machine.stuck_counter = 0
-            return StateType.GB_TRACK
+            # Localization Health Gate: verify particle filter covariance has converged
+            if state_machine._check_localization_healthy:
+                state_machine.get_logger().info("[RECOVERY] Recovery sequence complete and localization converged! Resuming NORMAL_RACING.")
+                state_machine.top_level_mode = TopLevelMode.NORMAL_RACING
+                state_machine.stuck_counter = 0
+                return StateType.GB_TRACK
+            else:
+                state_machine.get_logger().warn(
+                    f"[RECOVERY] Localization trace ({state_machine.loc_cov_trace:.3f} m^2) exceeds safe limit ({p.max_loc_cov_trace} m^2). Maintaining reactive FTG alignment...",
+                    throttle_duration_sec=1.0
+                )
+                if substate_elapsed >= getattr(p, "relocalization_timeout", 3.0):
+                    state_machine.trigger_relocalization()
+                return StateType.RECOVERY_ALIGN
 
         return StateType.RECOVERY_ALIGN
 
