@@ -168,48 +168,80 @@
       "path": "/state.data",
       "style": "bulb",
       "fontSize": 18,
-      "fallbackColor": "#52be80",
-      "fallbackLabel": "GB_TRACK",
+      "fallbackColor": "#888888",
+      "fallbackLabel": "WAITING...",
       "rules": [
         {
-          "value": "GB_TRACK",
+          "operator": "=",
+          "rawValue": "GB_TRACK",
           "color": "#27ae60",
           "label": "RACING (GB)"
         },
         {
-          "value": "TRAILING",
+          "operator": "=",
+          "rawValue": "TRAILING",
           "color": "#f39c12",
           "label": "TRAILING"
         },
         {
-          "value": "OVERTAKE",
+          "operator": "=",
+          "rawValue": "OVERTAKE",
           "color": "#8e44ad",
           "label": "OVERTAKING"
         },
         {
-          "value": "FTGONLY",
+          "operator": "=",
+          "rawValue": "FTGONLY",
           "color": "#e74c3c",
-          "label": "FTG ONLY"
+          "label": "FTG EVASION"
         },
         {
-          "value": "RECOVERY_STUCK",
+          "operator": "=",
+          "rawValue": "RECOVERY_STUCK",
           "color": "#d35400",
-          "label": "STUCK"
+          "label": "CRASH / STUCK"
         },
         {
-          "value": "RECOVERY_REVERSING",
+          "operator": "=",
+          "rawValue": "RECOVERY_REVERSING",
           "color": "#c0392b",
           "label": "REVERSING"
         },
         {
-          "value": "RECOVERY_STABILIZING",
+          "operator": "=",
+          "rawValue": "RECOVERY_STABILIZING",
           "color": "#f1c40f",
           "label": "STABILIZING"
         },
         {
-          "value": "LOW_BAT",
+          "operator": "=",
+          "rawValue": "LOW_BAT",
           "color": "#7f1d1d",
-          "label": "LOW BAT"
+          "label": "LOW BATTERY"
+        },
+        {
+          "operator": "=",
+          "rawValue": "gb_track",
+          "color": "#27ae60",
+          "label": "RACING (GB)"
+        },
+        {
+          "operator": "=",
+          "rawValue": "trailing",
+          "color": "#f39c12",
+          "label": "TRAILING"
+        },
+        {
+          "operator": "=",
+          "rawValue": "overtake",
+          "color": "#8e44ad",
+          "label": "OVERTAKING"
+        },
+        {
+          "operator": "=",
+          "rawValue": "ftgonly",
+          "color": "#e74c3c",
+          "label": "FTG EVASION"
         }
       ],
       "foxglovePanelTitle": "Planner State"
@@ -218,16 +250,30 @@
       "path": "/pause_navigation.data",
       "style": "bulb",
       "fontSize": 18,
-      "fallbackColor": "#27ae60",
-      "fallbackLabel": "ACTIVE",
+      "fallbackColor": "#888888",
+      "fallbackLabel": "WAITING...",
       "rules": [
         {
-          "value": "false",
+          "operator": "=",
+          "rawValue": false,
           "color": "#27ae60",
-          "label": "ACTIVE"
+          "label": "DRIVE ACTIVE"
         },
         {
-          "value": "true",
+          "operator": "=",
+          "rawValue": true,
+          "color": "#e74c3c",
+          "label": "PAUSED / E-STOP"
+        },
+        {
+          "operator": "=",
+          "rawValue": "false",
+          "color": "#27ae60",
+          "label": "DRIVE ACTIVE"
+        },
+        {
+          "operator": "=",
+          "rawValue": "true",
           "color": "#e74c3c",
           "label": "PAUSED / E-STOP"
         }
@@ -238,16 +284,30 @@
       "path": "/state_machine/force_ftg.data",
       "style": "bulb",
       "fontSize": 18,
-      "fallbackColor": "#2ecc71",
-      "fallbackLabel": "NORMAL",
+      "fallbackColor": "#888888",
+      "fallbackLabel": "WAITING...",
       "rules": [
         {
-          "value": "false",
+          "operator": "=",
+          "rawValue": false,
           "color": "#2ecc71",
           "label": "AUTO RACELINE"
         },
         {
-          "value": "true",
+          "operator": "=",
+          "rawValue": true,
+          "color": "#e67e22",
+          "label": "FORCED FTG"
+        },
+        {
+          "operator": "=",
+          "rawValue": "false",
+          "color": "#2ecc71",
+          "label": "AUTO RACELINE"
+        },
+        {
+          "operator": "=",
+          "rawValue": "true",
           "color": "#e67e22",
           "label": "FORCED FTG"
         }
