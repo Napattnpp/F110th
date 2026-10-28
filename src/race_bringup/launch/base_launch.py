@@ -5,6 +5,7 @@ from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, Grou
 from launch.conditions import IfCondition, UnlessCondition
 from launch.launch_description_sources import AnyLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, EnvironmentVariable, PythonExpression
+from launch_ros.substitutions import FindPackageShare
 from launch_ros.actions import Node
 
 def get_launch_source(package_name, base_name):
@@ -97,7 +98,7 @@ def generate_launch_description():
             IncludeLaunchDescription(
                 f1tenth_gym_source,
                 launch_arguments={
-                    'map_yaml_path': PathJoinSubstitution([map_path, [LaunchConfiguration('map_name'), '.yaml']])
+                    'map_yaml_path': PathJoinSubstitution([map_path, 'clean', [LaunchConfiguration('map_name'), '.yaml']])
                 }.items()
             )
         )
@@ -171,7 +172,7 @@ def generate_launch_description():
                     pf_source,
                     launch_arguments={
                         'localize_config': os.path.join(pkg_bringup, 'config', 'localize.yaml'),
-                        'map_yaml_path': PathJoinSubstitution([map_path, [LaunchConfiguration('map_name'), '.yaml']]),
+                        'map_yaml_path': PathJoinSubstitution([map_path, 'clean', [LaunchConfiguration('map_name'), '.yaml']]),
                         'use_sim_time': LaunchConfiguration('sim')
                     }.items()
                 )
@@ -229,6 +230,20 @@ def generate_launch_description():
                 executable='lap_analyser',
                 name='lap_analyser',
                 output='screen'
+            )
+        )
+
+    if package_exists('joy_combo_node'):
+        joy_combo_config = PathJoinSubstitution([
+            FindPackageShare('joy_combo_node'), 'config', 'joy_combo_params.yaml'
+        ])
+        optional_nodes.append(
+            Node(
+                package='joy_combo_node',
+                executable='joy_combo_node',
+                name='joy_combo_node',
+                output='screen',
+                parameters=[joy_combo_config]
             )
         )
 

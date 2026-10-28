@@ -9,7 +9,7 @@ from rcl_interfaces.msg import SetParametersResult, ParameterDescriptor
 from rcl_interfaces.srv import GetParameters
 from rclpy.parameter import Parameter
 from ament_index_python import get_package_share_directory
-from std_msgs.msg import String
+from std_msgs.msg import String, Bool
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import PoseStamped, Point
 from typing import List
@@ -59,6 +59,10 @@ class StateMachine(Node):
         # update on parameter changes for rate
         self.add_on_set_parameters_callback(self.params.parameters_callback)
         
+        # Manual FTG force override (from joy_combo_node or operator)
+        self.force_ftg = False
+        self.create_subscription(Bool, '/state_machine/force_ftg', self._force_ftg_cb, 10)
+
         # SUBSCRIPTIONS
         if self.params.test_on_car:
             self.battery_sub = self.create_subscription(VescStateStamped, "/vesc/sensors/core", self.battery_cb, 10)
@@ -169,6 +173,10 @@ class StateMachine(Node):
     #############
     # CALLBACKS #
     #############
+    def _force_ftg_cb(self, msg: Bool):
+        self.force_ftg = msg.data
+        self.get_logger().info(f"[HSM] Force FTG mode updated: {self.force_ftg}")
+
     def battery_cb(self, msg: VescStateStamped):
         self.battery_level = msg.state.voltage_input
 

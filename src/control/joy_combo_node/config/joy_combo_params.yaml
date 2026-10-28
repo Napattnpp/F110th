@@ -1,0 +1,57 @@
+joy_combo_node:
+  ros__parameters:
+    # Trigger axes (Logitech F710 / Xbox: +1.0 released, -1.0 fully pressed)
+    lt_axis: 2
+    rt_axis: 5
+    trigger_threshold: -0.5
+
+    # D-pad axes (+1.0 Up / -1.0 Down; +1.0 Left / -1.0 Right)
+    dpad_x_axis: 6
+    dpad_y_axis: 7
+    dpad_threshold: 0.5
+
+    # Face & shoulder button indices
+    btn_a: 0
+    btn_b: 1
+    btn_x: 2
+    btn_y: 3
+    btn_lb: 4
+    btn_rb: 5
+
+    # Actions for LT Modifier Layer (Vehicle & Autonomy Operations)
+    lt_actions:
+      btn_a: "reset_localizer"
+      btn_b: "emergency_stop"
+      btn_x: "toggle_ftg_mode"
+      btn_y: "foxglove_bookmark"
+      dpad_up: "none"
+      dpad_down: "none"
+      dpad_left: "none"
+      dpad_right: "none"
+
+    # Actions for RT Modifier Layer (2D Remote Tuning & Navigation)
+    rt_actions:
+      btn_a: "none"
+      btn_b: "none"
+      btn_x: "none"
+      btn_y: "none"
+      dpad_up: "step_value_up"
+      dpad_down: "step_value_down"
+      dpad_left: "step_param_prev"
+      dpad_right: "step_param_next"
+
+    # Actions for Base Layer (No Modifier Trigger Held)
+    # Standalone face buttons & D-pad default to "none" for trackside safety.
+    # RB (Right Bumper, button 5) toggles autonomy (/pause_navigation).
+    base_actions:
+      btn_a: "none"
+      btn_b: "none"
+      btn_x: "none"
+      btn_y: "none"
+      btn_lb: "none"
+      btn_rb: "toggle_autonomy"
+      dpad_up: "none"
+      dpad_down: "none"
+      dpad_left: "none"
+      dpad_right: "none"
+

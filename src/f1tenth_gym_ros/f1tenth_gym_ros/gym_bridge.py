@@ -88,8 +88,19 @@ def _resolve_map_yaml_path(map_path: str) -> pathlib.Path | None:
         else:
             share_dir = pathlib.Path(get_package_share_directory("f1tenth_gym_ros"))
             path = share_dir / map_path
-    yaml_path = _resolve_yaml_path(path)
-    return yaml_path if yaml_path.exists() else None
+
+    # Check candidates: direct yaml, clean/ subfolder (ADR-004), or raw yaml
+    candidates = (
+        path,
+        path / "clean" / f"{path.name}.yaml",
+        path / f"{path.name}.yaml",
+    )
+    for cand in candidates:
+        yaml_cand = _resolve_yaml_path(cand)
+        if yaml_cand.exists():
+            return yaml_cand.resolve()
+
+    return None
 
 
 def _load_track_from_yaml(map_yaml_path: pathlib.Path, scale: float) -> tuple[Track, bool]:

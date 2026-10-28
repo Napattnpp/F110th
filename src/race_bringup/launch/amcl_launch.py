@@ -43,12 +43,18 @@ def _resolve_map_yaml_path(map_name_str: str, pkg_share: str) -> str:
     except Exception:
         pass
 
-    # Fallback to share directory
+    # Check share directory
     stem = pathlib.Path(map_name_str).name
     share_clean = pathlib.Path(pkg_share) / 'maps' / map_name_str / 'clean' / f"{stem}.yaml"
     if share_clean.exists():
         return str(share_clean)
-    return str(pathlib.Path(pkg_share) / 'maps' / map_name_str / f"{stem}.yaml")
+    share_raw = pathlib.Path(pkg_share) / 'maps' / map_name_str / f"{stem}.yaml"
+    if share_raw.exists():
+        return str(share_raw)
+
+    raise FileNotFoundError(
+        f"[ADR-005 Fail-Fast] AMCL could not resolve clean map yaml for '{map_name_str}' in assets/maps or package share."
+    )
 
 def launch_setup(context, *args, **kwargs):
     pkg_share = get_package_share_directory('race_bringup')

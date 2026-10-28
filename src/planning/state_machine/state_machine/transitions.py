@@ -17,6 +17,10 @@ def hierarchical_transition(state_machine: StateMachine) -> StateType:
         state_machine.top_level_mode = TopLevelMode.SAFETY
         return StateType.LOW_BAT
 
+    # 1b. Force FTG manual override (from joy_combo_node or operator)
+    if getattr(state_machine, "force_ftg", False):
+        return StateType.FTGONLY
+
     # 2. Check for Recovery Trigger
     if p.enable_recovery and state_machine.top_level_mode != TopLevelMode.RECOVERY:
         if state_machine._check_stuck:

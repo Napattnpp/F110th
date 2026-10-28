@@ -178,7 +178,7 @@ def generate_launch_description():
             IncludeLaunchDescription(
                 gym_bridge_source,
                 launch_arguments={
-                    'map_yaml_path': [map_src_path, '/', LaunchConfiguration('map_name'), '.yaml']
+                    'map_yaml_path': PathJoinSubstitution([map_src_path, 'clean', [LaunchConfiguration('map_name'), '.yaml']])
                 }.items()
             )
         )

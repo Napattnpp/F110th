@@ -72,19 +72,25 @@ def _resolve_map_yaml_path(map_path: str, package_share: str) -> pathlib.Path:
         return _resolve_yaml_path(p).resolve()
 
     repo_root = _find_repo_root()
-    map_name = p.name
+    map_name = p.stem if p.suffix in ('.yaml', '.yml') else p.name
     candidates = [
-        repo_root / 'assets' / 'maps' / map_path / 'clean' / f'{map_name}.yaml',
+        p,
         repo_root / 'assets' / 'maps' / map_name / 'clean' / f'{map_name}.yaml',
+        repo_root / 'assets' / 'maps' / map_path / 'clean' / f'{map_name}.yaml',
         repo_root / 'assets' / 'maps' / map_name / f'{map_name}.yaml',
+        pathlib.Path(package_share) / 'maps' / map_name / 'clean' / f'{map_name}.yaml',
+        pathlib.Path(package_share) / 'maps' / map_name / f'{map_name}.yaml',
         pathlib.Path(package_share) / map_path,
-        pathlib.Path(package_share) / 'maps' / map_path,
     ]
     for cand in candidates:
-        if cand.exists():
-            return _resolve_yaml_path(cand).resolve()
+        cand_yaml = _resolve_yaml_path(cand)
+        if cand_yaml.exists():
+            return cand_yaml.resolve()
 
-    return _resolve_yaml_path(repo_root / 'assets' / 'maps' / 'ifac_roboracer' / 'clean' / 'ifac_roboracer.yaml')
+    raise FileNotFoundError(
+        f"[ADR-005 Fail-Fast] Could not resolve clean map yaml for '{map_path}'.\n"
+        f"Searched candidates:\n" + "\n".join(f"  - {c}" for c in candidates)
+    )
 
 def launch_setup(context, *args, **kwargs):
     ld = LaunchDescription()
