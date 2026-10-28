@@ -241,7 +241,7 @@ class StateMachine(Node):
             if drop > self.track_length * 0.5:
                 self.lap_count += 1
                 self.get_logger().info(
-                    f"[qualifying] Lap {self.lap_count} completed (s: {self._prev_s:.2f} "
+                    f"[{self.params.mode}] Lap {self.lap_count} completed (s: {self._prev_s:.2f} "
                     f"-> {self.cur_s:.2f}, track_length: {self.track_length:.2f})"
                 )
         self._prev_s = self.cur_s

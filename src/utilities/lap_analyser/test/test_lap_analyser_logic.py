@@ -71,3 +71,4 @@ def test_lap_counting_hysteresis(ros_init):
     assert node.lap_armed is False
 
     node.destroy_node()
+

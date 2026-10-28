@@ -614,10 +614,11 @@ class ObstacleSpliner(Node):
 
         # Local raceline curvature attenuation
         kappa = 0.0
-        if self.gb_wpnts is not None and self.cur_s is not None and len(self.gb_wpnts) > 0 and self.gb_max_s is not None:
-            s_diffs = [abs((w.s_m - self.cur_s) % self.gb_max_s) for w in self.gb_wpnts]
+        wpnts_list = getattr(self.gb_wpnts, 'wpnts', self.gb_wpnts)
+        if wpnts_list is not None and len(wpnts_list) > 0 and self.cur_s is not None and self.gb_max_s is not None:
+            s_diffs = [abs((w.s_m - self.cur_s) % self.gb_max_s) for w in wpnts_list]
             closest_idx = int(np.argmin(s_diffs))
-            w = self.gb_wpnts[closest_idx]
+            w = wpnts_list[closest_idx]
             if hasattr(w, 'kappa_radpm'):
                 kappa = abs(float(w.kappa_radpm))
 
