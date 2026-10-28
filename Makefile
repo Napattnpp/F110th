@@ -8,7 +8,7 @@ ORIGINAL_XAUTHORITY := $(XAUTHORITY)
 -include .env
 export
 
-.PHONY: help setup bootstrap configure build up attach stop clean push prune tuner optimize start_line benchmark monitor
+.PHONY: help setup bootstrap configure build up attach stop clean push prune tuner optimize start_line benchmark monitor profile
 
 PYTHON := $(if $(wildcard .venv/bin/python),.venv/bin/python,python3)
 
@@ -121,3 +121,10 @@ benchmark: ## Run raceline benchmark comparison across tracks
 monitor: ## Open Foxglove Studio / Web connected to live vehicle bridge (ws://localhost:8765)
 	@echo "Connecting to Foxglove WebSocket on ws://localhost:8765..."
 	@python3 -c "import webbrowser, subprocess; (subprocess.run(['open', 'foxglove://open?ds=foxglove-websocket&ds.url=ws://localhost:8765'], capture_output=True).returncode == 0) or webbrowser.open('https://app.foxglove.dev/?ds=foxglove-websocket&ds.url=ws://localhost:8765')"
+
+profile: ## Switch or view vehicle profile: make profile [CAR=sim|nuc1|jet1]
+	@if [ -n "$(CAR)" ]; then \
+		$(PYTHON) scripts/profile/manage_profile.py --set $(CAR); \
+	else \
+		$(PYTHON) scripts/profile/manage_profile.py --list; \
+	fi

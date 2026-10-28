@@ -315,26 +315,36 @@ class Controller(Node):
             self.l1_params = yaml.safe_load(f)
             self.l1_params = self.l1_params['controller']['ros__parameters']
             
-        # get wheelbase
+        # get wheelbase from unified vehicle profile or fallback legacy configs
         self.wheelbase = 0.33  # default fallback
+        profile_loaded = False
         try:
-            if self.sim:
-                # Try the specific profile directory first
-                config_path = os.path.join(bringup_path, 'config', self.racecar_version, 'sim_params.yaml')
-                if not os.path.exists(config_path):
-                    # Fall back to the generic 'SIM' directory
-                    config_path = os.path.join(bringup_path, 'config', 'SIM', 'sim_params.yaml')
-                
-                with open(config_path, 'r') as f:
-                    car_params = yaml.safe_load(f)
-                    self.wheelbase = car_params['lr'] + car_params['lf']
-            else:
-                config_path = os.path.join(bringup_path, 'config', self.racecar_version, 'vesc.yaml')
-                with open(config_path, 'r') as f:
-                    car_params = yaml.safe_load(f)
-                    self.wheelbase = car_params['vesc_to_odom_node']['ros__parameters']['wheelbase']
-        except Exception as e:
-            self.get_logger().warn(f"Failed to load wheelbase parameter from file: {e}. Using default wheelbase: 0.33m")
+            from race_bringup.profile_loader import load_profile
+            profile = load_profile()
+            self.wheelbase = float(profile['geometry_mass']['wheelbase'])
+            profile_name = profile.get('metadata', {}).get('name', 'active')
+            self.get_logger().info(f"[Vehicle Profile] Loaded wheelbase {self.wheelbase:.4f}m from active profile '{profile_name}'")
+            profile_loaded = True
+        except Exception:
+            pass
+
+        if not profile_loaded:
+            try:
+                if self.sim:
+                    config_path = os.path.join(bringup_path, 'config', self.racecar_version, 'sim_params.yaml')
+                    if not os.path.exists(config_path):
+                        config_path = os.path.join(bringup_path, 'config', 'SIM', 'sim_params.yaml')
+                    
+                    with open(config_path, 'r') as f:
+                        car_params = yaml.safe_load(f)
+                        self.wheelbase = car_params['lr'] + car_params['lf']
+                else:
+                    config_path = os.path.join(bringup_path, 'config', self.racecar_version, 'vesc.yaml')
+                    with open(config_path, 'r') as f:
+                        car_params = yaml.safe_load(f)
+                        self.wheelbase = car_params['vesc_to_odom_node']['ros__parameters']['wheelbase']
+            except Exception as e:
+                self.get_logger().warn(f"Failed to load wheelbase parameter from file: {e}. Using default wheelbase: 0.33m")
         
 
         self.create_subscription(Imu,'/vesc/sensors/imu/raw', self.imu_cb, 10) # acceleration subscriber for steer change

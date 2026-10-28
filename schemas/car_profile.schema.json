@@ -1,0 +1,209 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "F1TENTH Vehicle Profile Schema",
+  "description": "Unified vehicle calibration schema for F1TENTH autonomous racing platforms",
+  "type": "object",
+  "required": [
+    "metadata",
+    "geometry_mass",
+    "steering_powertrain",
+    "sensor_extrinsics",
+    "tuning_defaults"
+  ],
+  "properties": {
+    "metadata": {
+      "type": "object",
+      "required": ["name", "compute_platform"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z0-9_-]+$",
+          "description": "Unique identifier for this vehicle profile"
+        },
+        "description": {
+          "type": "string",
+          "description": "Human-readable description of vehicle chassis and build"
+        },
+        "compute_platform": {
+          "type": "string",
+          "enum": ["simulation", "intel_nuc", "jetson_orin", "jetson_nano", "generic"],
+          "description": "Target computing hardware environment"
+        },
+        "version": {
+          "type": "string",
+          "description": "Semantic configuration version"
+        }
+      }
+    },
+    "geometry_mass": {
+      "type": "object",
+      "required": ["wheelbase", "track_width", "mass", "cog_front", "cog_rear"],
+      "properties": {
+        "wheelbase": {
+          "type": "number",
+          "minimum": 0.1,
+          "maximum": 1.0,
+          "description": "Wheelbase L (distance between front and rear axles) [m]"
+        },
+        "track_width": {
+          "type": "number",
+          "minimum": 0.1,
+          "maximum": 0.8,
+          "description": "Track width W (distance between left and right wheels) [m]"
+        },
+        "mass": {
+          "type": "number",
+          "minimum": 0.5,
+          "maximum": 20.0,
+          "description": "Total vehicle curb mass including battery [kg]"
+        },
+        "cog_front": {
+          "type": "number",
+          "minimum": 0.05,
+          "maximum": 0.5,
+          "description": "Distance from Center of Gravity to front axle l_f [m]"
+        },
+        "cog_rear": {
+          "type": "number",
+          "minimum": 0.05,
+          "maximum": 0.5,
+          "description": "Distance from Center of Gravity to rear axle l_r [m]"
+        },
+        "moment_inertia_z": {
+          "type": "number",
+          "minimum": 0.001,
+          "maximum": 2.0,
+          "description": "Polar mass moment of inertia around vertical z-axis I_z [kg*m^2]"
+        }
+      }
+    },
+    "steering_powertrain": {
+      "type": "object",
+      "required": [
+        "steering_to_servo_gain",
+        "steering_to_servo_offset",
+        "max_steering_angle_rad",
+        "speed_to_erpm_gain",
+        "speed_to_erpm_offset",
+        "max_current_a",
+        "max_acceleration",
+        "wheel_radius_m"
+      ],
+      "properties": {
+        "steering_to_servo_gain": {
+          "type": "number",
+          "description": "Linear calibration gain converting steering angle [rad] to servo PWM fraction"
+        },
+        "steering_to_servo_offset": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0,
+          "description": "Neutral servo center position trim PWM fraction [0.0 - 1.0]"
+        },
+        "max_steering_angle_rad": {
+          "type": "number",
+          "minimum": 0.2,
+          "maximum": 0.8,
+          "description": "Maximum achievable road wheel steering angle [rad] (e.g. 0.418 rad = 24 deg)"
+        },
+        "servo_min": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 0.5,
+          "description": "Lower mechanical travel limit PWM fraction"
+        },
+        "servo_max": {
+          "type": "number",
+          "minimum": 0.5,
+          "maximum": 1.0,
+          "description": "Upper mechanical travel limit PWM fraction"
+        },
+        "speed_to_erpm_gain": {
+          "type": "number",
+          "description": "Conversion gain from linear velocity [m/s] to motor electrical RPM (ERPM)"
+        },
+        "speed_to_erpm_offset": {
+          "type": "number",
+          "description": "ERPM zero-velocity deadband offset"
+        },
+        "max_current_a": {
+          "type": "number",
+          "minimum": 5.0,
+          "maximum": 120.0,
+          "description": "Maximum motor phase current limit [A]"
+        },
+        "max_acceleration": {
+          "type": "number",
+          "minimum": 0.5,
+          "maximum": 15.0,
+          "description": "Maximum allowable longitudinal acceleration rate [m/s^2]"
+        },
+        "wheel_radius_m": {
+          "type": "number",
+          "minimum": 0.02,
+          "maximum": 0.10,
+          "description": "Effective rolling tire radius [m]"
+        }
+      }
+    },
+    "sensor_extrinsics": {
+      "type": "object",
+      "required": ["lidar_tf", "lidar_port", "vesc_port", "imu_topic"],
+      "properties": {
+        "lidar_tf": {
+          "type": "array",
+          "items": { "type": "number" },
+          "minItems": 6,
+          "maxItems": 6,
+          "description": "LiDAR extrinsic transform [x, y, z, roll, pitch, yaw] relative to base_link"
+        },
+        "lidar_port": {
+          "type": "string",
+          "description": "Serial port device path or IP address for LiDAR"
+        },
+        "vesc_port": {
+          "type": "string",
+          "description": "Serial port device path for VESC motor controller"
+        },
+        "imu_topic": {
+          "type": "string",
+          "description": "ROS topic publishing sensor_msgs/Imu messages"
+        },
+        "imu_type": {
+          "type": "string",
+          "description": "Hardware sensor model (e.g. icm20948, microstrain, bno055, sim)"
+        }
+      }
+    },
+    "tuning_defaults": {
+      "type": "object",
+      "required": ["lookahead_min", "lookahead_max", "max_speed_mps", "aeb_ttc_threshold"],
+      "properties": {
+        "lookahead_min": {
+          "type": "number",
+          "minimum": 0.4,
+          "maximum": 3.0,
+          "description": "Minimum Pure Pursuit / Spline lookahead distance [m]"
+        },
+        "lookahead_max": {
+          "type": "number",
+          "minimum": 1.0,
+          "maximum": 6.0,
+          "description": "Maximum lookahead distance at high speed [m]"
+        },
+        "max_speed_mps": {
+          "type": "number",
+          "minimum": 1.0,
+          "maximum": 12.0,
+          "description": "Top speed governor cap for this vehicle [m/s]"
+        },
+        "aeb_ttc_threshold": {
+          "type": "number",
+          "minimum": 0.1,
+          "maximum": 1.5,
+          "description": "Time-To-Collision (TTC) safety trigger threshold [s]"
+        }
+      }
+    }
+  }
+}

@@ -32,6 +32,11 @@ def generate_launch_description():
     pkg_bringup = get_package_share_directory('race_bringup')
 
     # Arguments read directly from environment or explicit defaults
+    car_profile_arg = DeclareLaunchArgument(
+        'car_profile',
+        default_value=os.environ.get('ACTIVE_CAR', 'sim'),
+        description='Active vehicle profile (e.g. sim, nuc1, jet1) from profiles/<car_profile>.yaml'
+    )
     racecar_version_arg = DeclareLaunchArgument(
         'racecar_version',
         default_value=os.environ.get('RACECAR_VERSION', 'NUC1'),
@@ -195,6 +200,7 @@ def generate_launch_description():
         parameters=[
             l1_params,
             {
+                'car_profile': LaunchConfiguration('car_profile'),
                 'racecar_version': LaunchConfiguration('racecar_version'),
                 'sim': LaunchConfiguration('sim'),
                 'map_path': map_path,
@@ -262,6 +268,7 @@ def generate_launch_description():
         )
 
     return LaunchDescription([
+        car_profile_arg,
         racecar_version_arg,
         map_name_arg,
         sim_arg,
