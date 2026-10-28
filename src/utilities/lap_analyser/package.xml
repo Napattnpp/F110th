@@ -14,6 +14,8 @@
 
   <exec_depend>ros2launch</exec_depend>
   <depend>rclpy</depend>
+  <depend>ackermann_msgs</depend>
+  <depend>std_msgs</depend>
 
   <export>
     <build_type>ament_python</build_type>

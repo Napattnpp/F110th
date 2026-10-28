@@ -7,6 +7,7 @@ from std_msgs.msg import Float32, Empty
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import Pose, PoseStamped
 from visualization_msgs.msg import Marker
+from ackermann_msgs.msg import AckermannDriveStamped
 
 import time
 from ament_index_python.packages import get_package_share_directory
@@ -59,6 +60,15 @@ class LapAnalyser(Node):
 
         self.lap_analy_sub = self.create_subscription(Empty, '/lap_analyser/start', self.start_log_cb, 10)
 
+        # Real-time Telemetry Publishers (for Foxglove dashboards & gauges)
+        self.speed_kmh_pub = self.create_publisher(Float32, '/telemetry/speed_kmh', 10)
+        self.steering_deg_pub = self.create_publisher(Float32, '/telemetry/steering_deg', 10)
+        self.target_speed_kmh_pub = self.create_publisher(Float32, '/telemetry/target_speed_kmh', 10)
+        self.target_steering_deg_pub = self.create_publisher(Float32, '/telemetry/target_steering_deg', 10)
+
+        self.odom_sub = self.create_subscription(Odometry, '/car_state/odom', self.odom_cb, 10)
+        self.drive_sub = self.create_subscription(AckermannDriveStamped, '/drive', self.drive_cb, 10)
+
         # publishes once when a lap is completed
         self.lap_data_pub = self.create_publisher(LapData, 'lap_data', 10)
         self.min_car_distance_to_boundary_pub = self.create_publisher(Float32, 'min_car_distance_to_boundary', 10) # publishes every time a new car position is received
@@ -102,6 +112,22 @@ class LapAnalyser(Node):
         self.logfile_dir = os.path.join(data_path, self.logfile_name)
         with open(self.logfile_dir, 'w') as f:
             f.write(f"Laps done on " + datetime.now().strftime('%d %b %H:%M:%S') + '\n')
+
+    def odom_cb(self, msg: Odometry):
+        """Publish actual vehicle speed in km/h."""
+        vx = msg.twist.twist.linear.x
+        vy = msg.twist.twist.linear.y
+        speed_ms = float(np.hypot(vx, vy))
+        self.speed_kmh_pub.publish(Float32(data=float(speed_ms * 3.6)))
+
+    def drive_cb(self, msg: AckermannDriveStamped):
+        """Publish steering angle in degrees and commanded speed in km/h."""
+        steer_rad = float(msg.drive.steering_angle)
+        steer_deg = float(np.degrees(steer_rad))
+        target_speed_kmh = float(msg.drive.speed * 3.6)
+        self.steering_deg_pub.publish(Float32(data=steer_deg))
+        self.target_speed_kmh_pub.publish(Float32(data=target_speed_kmh))
+        self.target_steering_deg_pub.publish(Float32(data=steer_deg))
 
     def pose_cb(self, msg: PoseStamped):
         self.current_cartesian_pos = (msg.pose.position.x, msg.pose.position.y)
