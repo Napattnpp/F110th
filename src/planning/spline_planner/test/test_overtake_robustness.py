@@ -30,18 +30,19 @@ class MockRobustSpliner:
     """Test harness for robust overtaking algorithms."""
     def __init__(self):
         self._clock = MockClock()
-        self.pre_apex_0 = -4.0
-        self.pre_apex_1 = -3.0
-        self.pre_apex_2 = -1.5
-        self.post_apex_0 = 1.2
-        self.post_apex_1 = 2.5
-        self.post_apex_2 = 4.0
+        self.pre_apex_0 = -5.5
+        self.pre_apex_1 = -3.8
+        self.pre_apex_2 = -2.0
+        self.post_apex_0 = 1.5
+        self.post_apex_1 = 3.2
+        self.post_apex_2 = 5.0
         self.evasion_dist = 0.40
         self.spline_bound_mindist = 0.18
         self.ot_side_switch_cur_d_thresh = 0.55
-        self.spline_max_alat = 7.0
-        self.spline_abrake_max = 4.5
-        self.spline_aaccel_max = 3.5
+        self.spline_max_alat = 8.5
+        self.spline_abrake_max = 5.0
+        self.spline_aaccel_max = 4.0
+        self.overtake_speed_boost = 1.08
         self.prediction_mode = "curvature_aware"
         self.multi_obs_safety_margin = 0.25
         self.fixed_pred_time = 0.20

@@ -89,21 +89,22 @@ class ObstacleSpliner(Node):
             Marker, '/planner/avoidance/propagated_obs', QoSProfile(depth=10))
 
         # dyn params sub
-        self.pre_apex_0 = -4.0
-        self.pre_apex_1 = -3.0
-        self.pre_apex_2 = -1.5
-        self.post_apex_0 = 2.0
-        self.post_apex_1 = 3.0
-        self.post_apex_2 = 4.0
-        self.evasion_dist = 0.55
+        self.pre_apex_0 = -5.5
+        self.pre_apex_1 = -3.8
+        self.pre_apex_2 = -2.0
+        self.post_apex_0 = 1.5
+        self.post_apex_1 = 3.2
+        self.post_apex_2 = 5.0
+        self.evasion_dist = 0.40
         self.obs_traj_tresh = 0.55
         self.spline_bound_mindist = 0.18
         self.fixed_pred_time = 0.15
         self.kd_obs_pred = 1.0
         self.ot_side_switch_cur_d_thresh = 0.60
-        self.spline_max_alat = 7.0
-        self.spline_abrake_max = 4.5
-        self.spline_aaccel_max = 3.5
+        self.spline_max_alat = 8.5
+        self.spline_abrake_max = 5.0
+        self.spline_aaccel_max = 4.0
+        self.overtake_speed_boost = 1.08
         self.prediction_mode = "curvature_aware"
         self.multi_obs_safety_margin = 0.25
         
@@ -140,6 +141,7 @@ class ObstacleSpliner(Node):
             {'name': 'spline_max_alat', 'default': self.spline_max_alat, 'descriptor': pd_acc},
             {'name': 'spline_abrake_max', 'default': self.spline_abrake_max, 'descriptor': pd_acc},
             {'name': 'spline_aaccel_max', 'default': self.spline_aaccel_max, 'descriptor': pd_acc},
+            {'name': 'overtake_speed_boost', 'default': self.overtake_speed_boost, 'descriptor': pd_acc},
             {'name': 'prediction_mode', 'default': self.prediction_mode, 'descriptor': pd_str},
             {'name': 'multi_obs_safety_margin', 'default': self.multi_obs_safety_margin, 'descriptor': pd}
         ]
@@ -217,6 +219,8 @@ class ObstacleSpliner(Node):
                 self.spline_abrake_max = param.value
             elif param_name == 'spline_aaccel_max':
                 self.spline_aaccel_max = param.value
+            elif param_name == 'overtake_speed_boost':
+                self.overtake_speed_boost = param.value
             elif param_name == 'prediction_mode':
                 self.prediction_mode = param.value
             elif param_name == 'multi_obs_safety_margin':
@@ -564,24 +568,26 @@ class ObstacleSpliner(Node):
                 else:
                     cand_d_apex = closest_obs.d_left + self.evasion_dist
 
-                # Form 7 control points along the evasion trajectory
-                evasion_points = []
-                spline_params = [
-                    self.pre_apex_0,
-                    self.pre_apex_1,
-                    self.pre_apex_2,
-                    0.0,
-                    self.post_apex_0,
-                    self.post_apex_1,
-                    self.post_apex_2,
+                # Form 7 control points along the evasion trajectory:
+                # Defines a smooth overtaking corridor that transitions into the passing lane
+                # before reaching the opponent, holds lateral evasion alongside, and smoothly rejoins
+                evasion_offsets = [
+                    (self.pre_apex_0, 0.0),
+                    (self.pre_apex_1, 0.40 * cand_d_apex),
+                    (self.pre_apex_2, 0.95 * cand_d_apex),
+                    (0.0,             cand_d_apex),
+                    (self.post_apex_0, 0.95 * cand_d_apex),
+                    (self.post_apex_1, 0.40 * cand_d_apex),
+                    (self.post_apex_2, 0.0),
                 ]
-                for dst in spline_params:
-                    scaled_dst = dst * np.clip(1.0 + self.cur_vs / self.gb_vmax, 1.0, 1.5)
+                evasion_points = []
+                speed_scale = np.clip(1.0 + self.cur_vs / self.gb_vmax, 1.0, 1.5)
+                for dst, di in evasion_offsets:
+                    scaled_dst = dst * speed_scale
                     if outside == cand_side:
                         si = s_apex + scaled_dst * 1.75
                     else:
                         si = s_apex + scaled_dst
-                    di = cand_d_apex if dst == 0.0 else 0.0
                     evasion_points.append([si, di])
                 evasion_points = np.array(evasion_points)
 
@@ -670,12 +676,17 @@ class ObstacleSpliner(Node):
             # Physical lateral velocity limit under available tire friction (v_lat = sqrt(a_lat / kappa))
             v_lat_limits = np.sqrt(self.spline_max_alat / np.maximum(curvatures, 0.05))
 
-            # Initial target bounded by raceline profile and curvature limit
+            # Initial target with overtaking acceleration boost, bounded by physical curvature limit
             v_targets = np.zeros(n_pts)
             for i in range(n_pts):
                 gb_wpnt_i = int((evasion_s[i] / wpnt_dist) % self.gb_max_idx)
                 v_raceline = gb_wpnts[gb_wpnt_i].vx_mps
-                v_targets[i] = min(v_raceline, v_lat_limits[i])
+                v_boosted = v_raceline * getattr(self, 'overtake_speed_boost', 1.08)
+                # Ensure ego car commands higher velocity than the opponent to complete the pass
+                if hasattr(closest_obs, 'vs') and float(closest_obs.vs) > 0.0:
+                    v_min_pass = min(float(closest_obs.vs) + 1.2, self.gb_vmax)
+                    v_boosted = max(v_boosted, v_min_pass)
+                v_targets[i] = min(v_boosted, v_lat_limits[i])
 
             # Backward pass (Euler deceleration limit for braking)
             ds = spline_res

@@ -311,8 +311,12 @@ class PP_Controller:
             lat_e_norm: normalization of the lateral error
             lateral_error: distance from car's position to nearest waypoint
         """
-        # DONE rename function and adapt
-        lateral_error = abs(self.position_in_map_frenet[1]) # frenet coordinates d
+        if self.state in ("OVERTAKE", "StateType.OVERTAKE") and self.waypoint_array_in_map is not None and len(self.waypoint_array_in_map) > 0:
+            # Measure tracking error relative to the active avoidance path
+            closest_pt = self.waypoint_array_in_map[self.idx_nearest_waypoint, :2]
+            lateral_error = float(np.linalg.norm(self.position_in_map[0, :2] - closest_pt))
+        else:
+            lateral_error = abs(self.position_in_map_frenet[1]) # frenet coordinates d
 
         max_lat_e = 0.5
         min_lat_e = 0.

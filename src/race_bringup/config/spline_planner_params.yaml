@@ -1,16 +1,17 @@
 spline_planner:
   ros__parameters:
-    evasion_dist: 0.38                # [m] reduced lateral offset for smooth, controlled evasion
+    evasion_dist: 0.40                # [m] lateral offset for smooth, controlled evasion around opponent
     spline_bound_mindist: 0.18        # [m] minimum clearance distance from track boundary
     ot_side_switch_cur_d_thresh: 0.55 # [m] lateral threshold preventing side switches when off-center
-    pre_apex_0: 4.5                   # [m] approach distance start point before apex
-    pre_apex_1: 3.2                   # [m] approach distance mid point before apex
-    pre_apex_2: 1.8                   # [m] approach distance end point before apex
-    post_apex_0: 1.2                  # [m] return distance start point after apex
-    post_apex_1: 2.5                  # [m] return distance mid point after apex
-    post_apex_2: 4.0                  # [m] return distance end point (rejoin raceline)
-    spline_max_alat: 7.0              # [m/s^2] max lateral acceleration budget for avoidance trajectory
-    spline_abrake_max: 4.5            # [m/s^2] max braking deceleration along avoidance spline
-    spline_aaccel_max: 3.5            # [m/s^2] max acceleration along avoidance spline
+    pre_apex_0: 5.5                   # [m] approach distance start point before apex (smoother entry)
+    pre_apex_1: 3.8                   # [m] approach distance mid point before apex
+    pre_apex_2: 2.0                   # [m] approach distance end point before apex
+    post_apex_0: 1.5                  # [m] return distance start point after apex
+    post_apex_1: 3.2                  # [m] return distance mid point after apex
+    post_apex_2: 5.0                  # [m] return distance end point (smoother rejoin)
+    spline_max_alat: 8.5              # [m/s^2] max lateral acceleration budget for avoidance trajectory
+    spline_abrake_max: 5.0            # [m/s^2] max braking deceleration along avoidance spline
+    spline_aaccel_max: 4.0            # [m/s^2] max acceleration along avoidance spline
+    overtake_speed_boost: 1.08        # [scale] target speed multiplier during active overtaking
     prediction_mode: "curvature_aware" # Opponent propagation mode: curvature_aware / constant / adaptive
     multi_obs_safety_margin: 0.25     # [m] minimum spatial clearance to secondary tracked obstacles

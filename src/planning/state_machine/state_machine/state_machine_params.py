@@ -286,18 +286,18 @@ class StateMachineParams:
                 step=0.05)]
         )
         descriptor = ParameterDescriptor(
-            description="Fraction of max speed published during OVERTAKE mode (0.1–1.0)\n",
+            description="Speed boost fraction published during OVERTAKE mode (0.1–1.5)\n",
             read_only=False,
             type=ParameterType.PARAMETER_DOUBLE,
             floating_point_range=[FloatingPointRange(
                 from_value=0.1,
-                to_value=1.0,
+                to_value=1.5,
                 step=0.01)]
         )
         if node.has_parameter("overtake_speed_scale"):
             node.set_descriptor("overtake_speed_scale", descriptor=descriptor)
         else:
-            node.declare_parameter("overtake_speed_scale", 0.85, descriptor=descriptor)
+            node.declare_parameter("overtake_speed_scale", 1.08, descriptor=descriptor)
         self.overtake_speed_scale: float = node.get_parameter("overtake_speed_scale").value
 
         # RECOVERY PARAMETERS
