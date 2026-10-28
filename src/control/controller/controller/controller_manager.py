@@ -652,6 +652,9 @@ class Controller(Node):
             speed, steer = self.ftg_cycle()
             speed = min(speed, 1.2)  # Cap initial speed during re-alignment phase
             self.get_logger().info(f"[RECOVERY_ALIGN] Executing FTG alignment cycle (v={speed:.2f} m/s)", throttle_duration_sec=0.5)
+        elif self.state == "FTGONLY":
+            speed, steer = self.ftg_cycle()
+            self.get_logger().info(f"[FTGONLY] Executing Follow-The-Gap reactive cycle (v={speed:.2f} m/s, steer={steer:.2f} rad)", throttle_duration_sec=0.5)
         elif self.mode == "MAP":
             speed, steer = self.map_cycle()
         elif self.mode == "PP":

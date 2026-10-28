@@ -727,7 +727,8 @@ class StateMachine(Node):
         # ...
 
         if len(loc_wpnts.wpnts) == 0:
-            self.get_logger().warn("No local waypoints published...")
+            if self.state not in [StateType.FTGONLY, StateType.RECOVERY_STUCK, StateType.RECOVERY_REVERSE, StateType.RECOVERY_ALIGN, StateType.LOW_BAT]:
+                self.get_logger().warn("No local waypoints published...")
         else:
             self.loc_wpnt_pub.publish(loc_wpnts)
 

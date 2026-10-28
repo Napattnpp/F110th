@@ -1789,6 +1789,46 @@ HTML_PAGE = """<!DOCTYPE html>
 </html>
 """
 
+def pgm_to_png_bytes(pgm_path):
+    """Pure-Python zero-dependency PGM (P5/P2) to PNG converter using built-in zlib & struct."""
+    import zlib
+    import struct
+    try:
+        with open(pgm_path, 'rb') as f:
+            magic = f.readline().strip()
+            if magic not in (b'P5', b'P2'):
+                return None
+            line = f.readline().strip()
+            while line.startswith(b'#'):
+                line = f.readline().strip()
+            w, h = map(int, line.split())
+            maxval = int(f.readline().strip())
+            if magic == b'P5':
+                raw_pixels = f.read()
+            else:
+                tokens = f.read().split()
+                raw_pixels = bytes([int(t) for t in tokens])
+
+        # Prepend filter byte 0 to each scanline
+        scanlines = []
+        for y in range(h):
+            scanlines.append(b'\x00' + raw_pixels[y * w : (y + 1) * w])
+        idat_data = zlib.compress(b''.join(scanlines))
+
+        def make_chunk(chunk_type, data):
+            c = chunk_type + data
+            crc = struct.pack('>I', zlib.crc32(c) & 0xffffffff)
+            return struct.pack('>I', len(data)) + c + crc
+
+        png_header = b'\x89PNG\r\n\x1a\n'
+        ihdr = make_chunk(b'IHDR', struct.pack('>IIBBBBB', w, h, 8, 0, 0, 0, 0))
+        idat = make_chunk(b'IDAT', idat_data)
+        iend = make_chunk(b'IEND', b'')
+        return png_header + ihdr + idat + iend
+    except Exception as e:
+        print(f"[WARN] Pure-python PGM converter failed for {pgm_path}: {e}")
+        return None
+
 # -----------------------------------------------------------------------------
 # HTTP Server Handler
 # -----------------------------------------------------------------------------
@@ -1854,12 +1894,11 @@ class SectorTunerHandler(BaseHTTPRequestHandler):
                 self.wfile.write(content)
                 return
             elif img_path.endswith('.pgm'):
-                try:
-                    from PIL import Image
-                    im = Image.open(img_path)
-                    buf = io.BytesIO()
-                    im.save(buf, format='PNG')
-                    content = buf.getvalue()
+                # 1. Prefer existing pre-converted sibling PNG if available
+                png_sibling = Path(img_path).with_suffix('.png')
+                if png_sibling.exists():
+                    with open(png_sibling, 'rb') as f:
+                        content = f.read()
                     self.send_response(200)
                     self.send_header('Content-Type', 'image/png')
                     self.send_header('Cache-Control', 'public, max-age=86400')
@@ -1867,8 +1906,31 @@ class SectorTunerHandler(BaseHTTPRequestHandler):
                     self.end_headers()
                     self.wfile.write(content)
                     return
-                except Exception as e:
-                    print(f"[ERROR] Failed to convert PGM to PNG: {e}")
+
+                # 2. Try PIL if installed
+                content = None
+                try:
+                    from PIL import Image
+                    im = Image.open(img_path)
+                    buf = io.BytesIO()
+                    im.save(buf, format='PNG')
+                    content = buf.getvalue()
+                except Exception:
+                    pass
+
+                # 3. Fallback to built-in pure-Python PGM->PNG converter (zero-dependency)
+                if content is None:
+                    content = pgm_to_png_bytes(img_path)
+
+                if content is not None:
+                    self.send_response(200)
+                    self.send_header('Content-Type', 'image/png')
+                    self.send_header('Cache-Control', 'public, max-age=86400')
+                    self.send_header('Content-Length', str(len(content)))
+                    self.end_headers()
+                    self.wfile.write(content)
+                    return
+                else:
                     self.send_response(500)
                     self.end_headers()
                     return
