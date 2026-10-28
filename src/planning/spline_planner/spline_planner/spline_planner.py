@@ -460,22 +460,31 @@ class ObstacleSpliner(Node):
     def _more_space(self, obstacle: Obstacle, gb_wpnts: List[Any], gb_idxs: List[int]) -> Tuple[str, float]:
         left_gap = gb_wpnts[gb_idxs[0]].d_left - obstacle.d_left
         right_gap = abs(gb_wpnts[gb_idxs[0]].d_right) + obstacle.d_right
-        min_space = self.evasion_dist + self.spline_bound_mindist
+        min_safe_space = max(self.evasion_dist + self.spline_bound_mindist, 0.50)
 
-        if right_gap > min_space and left_gap < min_space:
-            # Compute apex distance to the right of the opponent
-            d_apex_right = obstacle.d_right - self.evasion_dist
-            return "right", d_apex_right
+        candidate_d_apex_left = obstacle.d_left + self.evasion_dist
+        candidate_d_apex_right = obstacle.d_right - self.evasion_dist
 
-        elif left_gap > min_space and right_gap < min_space:
-            # Compute apex distance to the left of the opponent
-            d_apex_left = obstacle.d_left + self.evasion_dist
-            return "left", d_apex_left
+        # 1. If only right has safe room
+        if right_gap >= min_safe_space and left_gap < min_safe_space:
+            return "right", candidate_d_apex_right
+
+        # 2. If only left has safe room
+        elif left_gap >= min_safe_space and right_gap < min_safe_space:
+            return "left", candidate_d_apex_left
+
+        # 3. If neither side has safe room (corridor too narrow or opponent blocking)
+        elif left_gap < min_safe_space and right_gap < min_safe_space:
+            self.get_logger().info(
+                f"[Spliner] Insufficient corridor space on BOTH sides (Left: {left_gap:.2f}m, Right: {right_gap:.2f}m, Req: {min_safe_space:.2f}m). Aborting pass.",
+                throttle_duration_sec=1.0
+            )
+            return "", 0.0
+
+        # 4. Both sides have sufficient clearance: ALWAYS pick the side with the LARGER physical track clearance!
+        # Strictly prevents squeezing into the suicidal narrow gap between opponent and wall.
         else:
-            candidate_d_apex_left = obstacle.d_left + self.evasion_dist
-            candidate_d_apex_right = obstacle.d_right - self.evasion_dist
-
-            if abs(candidate_d_apex_left) <= abs(candidate_d_apex_right):
+            if left_gap >= right_gap:
                 return "left", candidate_d_apex_left
             else:
                 return "right", candidate_d_apex_right
@@ -549,6 +558,11 @@ class ObstacleSpliner(Node):
 
             # Preferred evasion side based on immediate obstacle gap
             more_space, preferred_d_apex = self._more_space(closest_obs, gb_wpnts, gb_idxs)
+
+            # If corridor is unsafe on both sides, do not generate an avoidance path (stay trailing on raceline)
+            if more_space == "":
+                self.last_ot_side = ""
+                return wpnts, mrks
 
             # Determine candidate side order respecting side commitment hysteresis
             candidate_sides = []

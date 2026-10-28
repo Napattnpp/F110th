@@ -219,7 +219,6 @@ def SpliniGlobalTrackingTransition(state_machine: StateMachine) -> StateType:
 def SpliniTrailingTransition(state_machine: StateMachine) -> StateType:
     """Transitions for being in `StateType.TRAILING`"""
     gb_free = state_machine._check_gbfree
-    ot_sector = state_machine._check_ot_sector
 
     if not state_machine._check_only_ftg_zone:
         # If we have been sitting around in TRAILING for a while then FTG
@@ -227,11 +226,7 @@ def SpliniTrailingTransition(state_machine: StateMachine) -> StateType:
             return StateType.FTGONLY
         if gb_free:
             return StateType.GB_TRACK
-        elif (
-            ot_sector
-            and state_machine._check_availability_splini_wpts
-            and state_machine._check_ofree
-        ):
+        elif state_machine._check_can_initiate_overtake:
             return StateType.OVERTAKE
         else:
             return StateType.TRAILING
@@ -247,27 +242,42 @@ def SpliniOvertakingTransition(state_machine: StateMachine) -> StateType:
         o_free = state_machine._check_ofree
         dwell_time = getattr(state_machine, 'state_dwell_time', 1.0)
 
-        # Minimum dwell time hysteresis: prevent high-frequency chatter back to TRAILING/GB_TRACK during active overtake
-        if dwell_time < 0.5 and (spline_valid or state_machine.last_valid_avoidance_wpnts is not None):
+        # Minimum dwell time hysteresis: prevent high-frequency chatter during first 0.35s
+        if dwell_time < 0.35 and (spline_valid or state_machine.last_valid_avoidance_wpnts is not None):
             return StateType.OVERTAKE
 
-        # Return to GB_TRACK once the obstacle is passed, raceline is free, and car has rejoined near raceline
-        if state_machine._check_gbfree and not state_machine._check_enemy_in_front and state_machine._check_close_to_raceline:
+        # 1. Primary Success Exit: Opponent is passed and cleanly behind ego
+        if state_machine._check_opponent_behind:
+            state_machine.last_valid_avoidance_wpnts = None
             return StateType.GB_TRACK
 
-        # If spline is on an obstacle we trail
+        # 2. Secondary Success Exit: Raceline ahead is completely clear of obstacles
+        if state_machine._check_gbfree and not state_machine._check_enemy_in_front:
+            state_machine.last_valid_avoidance_wpnts = None
+            return StateType.GB_TRACK
+
+        # 3. Sector Boundary Abort: Approaching corner/chicane without completing pass
+        # Rejoin raceline immediately rather than carrying an offline spline into a narrow turn!
+        if not in_ot_sector:
+            state_machine.last_valid_avoidance_wpnts = None
+            return StateType.GB_TRACK if state_machine._check_gbfree else StateType.TRAILING
+
+        # 4. Timeout / Stalled Maneuver Abort: Pass taking longer than 2.2s
+        # Re-tuck onto optimal raceline behind opponent instead of lingering offline
+        if dwell_time > 2.2:
+            state_machine.last_valid_avoidance_wpnts = None
+            return StateType.TRAILING
+
+        # 5. Clearance Abort: Opponent encroaching onto corridor / safe clearance compromised
         if not o_free:
+            state_machine.last_valid_avoidance_wpnts = None
             return StateType.TRAILING
-        if in_ot_sector and o_free and (spline_valid or state_machine.last_valid_avoidance_wpnts is not None):
+
+        # Continue overtaking if corridor is valid and clear
+        if spline_valid or state_machine.last_valid_avoidance_wpnts is not None:
             return StateType.OVERTAKE
-        # If spline becomes invalid while overtaking, we trail
-        elif in_ot_sector and not spline_valid and not o_free:
-            return StateType.TRAILING
-        # go to GB_TRACK if not in ot_sector and the GB is free
-        elif not in_ot_sector and state_machine._check_gbfree:
-            return StateType.GB_TRACK
-        # go to Trailing if not in ot_sector and the GB is not free
         else:
+            state_machine.last_valid_avoidance_wpnts = None
             return StateType.TRAILING
     else:
         return StateType.FTGONLY

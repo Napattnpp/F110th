@@ -2,6 +2,9 @@ spline_planner:
   ros__parameters:
     evasion_dist: 0.40                # [m] lateral offset for smooth, controlled evasion around opponent
     spline_bound_mindist: 0.18        # [m] minimum clearance distance from track boundary
+    lookahead_min: 2.0                # [m] minimum spline lookahead
+    lookahead_max: 4.5                # [m] maximum spline lookahead
+    lookahead_kv: 0.35                # speed scaling for lookahead
     ot_side_switch_cur_d_thresh: 0.55 # [m] lateral threshold preventing side switches when off-center
     pre_apex_0: 5.5                   # [m] approach distance start point before apex (smoother entry)
     pre_apex_1: 3.8                   # [m] approach distance mid point before apex

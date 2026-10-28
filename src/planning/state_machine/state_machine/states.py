@@ -33,11 +33,9 @@ def GlobalTracking(state_machine: StateMachine) -> List[Wpnt]:
     return [state_machine.glb_wpnts[(s + i) % state_machine.num_glb_wpnts] for i in range(state_machine.params.n_loc_wpnts)]
 
 def Trailing(state_machine: StateMachine) -> List[Wpnt]:
-    # This allows us to trail on the last valid spline if necessary
-    if state_machine.last_valid_avoidance_wpnts is not None and len(state_machine.last_valid_avoidance_wpnts) > 0:
-        return state_machine.get_avoidance_local_wpnts()
-    else:
-        return GlobalTracking(state_machine)
+    # In TRAILING mode, the vehicle stays strictly on the optimal global raceline
+    # behind the opponent, using the controller's closed-loop gap regulation.
+    return GlobalTracking(state_machine)
 
 def Overtaking(state_machine: StateMachine) -> List[Wpnt]:
     if state_machine.last_valid_avoidance_wpnts is not None and len(state_machine.last_valid_avoidance_wpnts) > 0:

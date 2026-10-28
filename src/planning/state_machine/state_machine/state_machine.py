@@ -427,18 +427,31 @@ class StateMachine(Node):
         self.initialpose_pub.publish(pose_msg)
 
     @property
+    def _check_opponent_behind(self) -> bool:
+        """Returns True if the primary tracked obstacle is cleanly behind ego (pass completed)."""
+        if not self.obstacles or self.cur_s is None or self.track_length is None:
+            return False
+        half_track = self.track_length / 2.0
+        for obs in self.obstacles:
+            # relative distance: positive = ahead of ego, negative = behind ego
+            rel_s = (obs.s_center - self.cur_s + half_track) % self.track_length - half_track
+            if -4.5 <= rel_s <= -0.4:
+                return True
+        return False
+
+    @property
     def _check_valid_opponent_ahead(self) -> bool:
         """Dynamic Overtake Guardrail:
         Verifies that at least one tracked obstacle ahead qualifies as a real opponent
-        rather than wall-grazing noise, tiny clusters, or distant artifacts.
+        within the active passing window rather than distant artifacts.
         """
         if not self.obstacles or self.cur_s is None or self.track_length is None:
             return False
 
-        horizon = getattr(self.params, 'overtaking_horizon_m', 6.0)
+        horizon = getattr(self.params, 'overtaking_horizon_m', 3.5)
         for obs in self.obstacles:
             gap = (obs.s_center - self.cur_s) % self.track_length
-            if 0.35 <= gap <= horizon:
+            if 0.50 <= gap <= horizon:
                 obs_size = getattr(obs, 'size', 0.0)
                 if obs_size <= 0.0 and hasattr(obs, 's_start') and hasattr(obs, 's_end'):
                     obs_size = abs(obs.s_end - obs.s_start)
@@ -467,6 +480,63 @@ class StateMachine(Node):
                 if (sector['start'] <= cur_idx <= (sector['end']+1)):
                     return True
         return False
+
+    @property
+    def _check_can_initiate_overtake(self) -> bool:
+        """Evaluates whether all dynamic and sector racecraft conditions are met
+        to safely launch an overtake from TRAILING mode.
+        """
+        # 1. Must be in an approved overtaking sector
+        if not self._check_ot_sector:
+            return False
+
+        # 2. Must have sufficient remaining runway in the overtaking sector (>= 2.5m before corner/chicane)
+        if hasattr(self, 'ot_sectors') and len(self.ot_sectors) > 0:
+            cur_idx = self.get_closest_glb_wpnt_idx(self.cur_s if self.cur_s is not None else 0.0)
+            in_safe_runway = False
+            for sector in self.ot_sectors:
+                if sector['ot_flag']:
+                    min_runway_wpnts = 25
+                    if sector['start'] <= cur_idx <= max(sector['start'], sector['end'] - min_runway_wpnts):
+                        in_safe_runway = True
+                        break
+            if not in_safe_runway:
+                return False
+
+        # 3. Must be within the active passing window (0.6m <= gap <= 2.6m)
+        # If gap > 2.6m, ego should trail on the optimal raceline to close the distance.
+        if not self.obstacles or self.cur_s is None or self.track_length is None:
+            return False
+
+        in_passing_window = False
+        opp_speed = 0.0
+        for obs in self.obstacles:
+            gap = (obs.s_center - self.cur_s) % self.track_length
+            if 0.60 <= gap <= 2.60:
+                obs_size = getattr(obs, 'size', 0.0)
+                if obs_size <= 0.0 and hasattr(obs, 's_start') and hasattr(obs, 's_end'):
+                    obs_size = abs(obs.s_end - obs.s_start)
+                if obs_size >= 0.15:
+                    in_passing_window = True
+                    opp_speed = getattr(obs, 'vs', 0.0)
+                    break
+        if not in_passing_window:
+            return False
+
+        # 4. Trailing Dwell Stability: ego should have settled in TRAILING for at least 0.2s
+        if getattr(self, 'state_dwell_time', 0.0) < 0.20:
+            return False
+
+        # 5. Speed / momentum requirement: ego must have comparable speed or speed > 1.8 m/s
+        ego_speed = self.cur_vs if self.cur_vs is not None else 0.0
+        if ego_speed < max(1.8, opp_speed - 0.25):
+            return False
+
+        # 6. Avoidance corridor availability and clearance
+        if not self._check_availability_splini_wpts or not self._check_ofree:
+            return False
+
+        return True
 
     @property
     def _check_ofree(self) -> bool:

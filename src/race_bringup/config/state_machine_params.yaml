@@ -16,8 +16,8 @@ state_machine:
     splini_ttl: 0.8 # [s] ttl counter for validity of spliner waypoints
     gb_ego_width_m: 0.4 # [m], distance from gb path for rejoining 
     lateral_width_gb_m: 0.55 # [m] lateral width within which we consider obstacles to be on the raceline
-    gb_horizon_m: 10.0 # [m] horizon considered for global waypoints obstacle checking
-    overtaking_horizon_m: 10.0 # [m] horizon considered for overtaking
+    gb_horizon_m: 4.5 # [m] horizon considered for global waypoints obstacle checking
+    overtaking_horizon_m: 3.5 # [m] horizon considered for overtaking (passing window)
     lateral_width_ot_m: 0.18 # [m] lateral width within which we consider opponents to be on overtaking line
     splini_hyst_timer_sec: 0.02 # [s] time we have to wait between switching sides
     overtake_speed_scale: 1.0 # speed boost fraction applied during OVERTAKE mode (1.0 = single source of truth in spline_planner)
