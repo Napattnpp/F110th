@@ -96,10 +96,15 @@ class ObstacleSpliner(Node):
         self.post_apex_2 = 4.0
         self.evasion_dist = 0.55
         self.obs_traj_tresh = 0.55
-        self.spline_bound_mindist = 0.15
+        self.spline_bound_mindist = 0.18
         self.fixed_pred_time = 0.15
         self.kd_obs_pred = 1.0
         self.ot_side_switch_cur_d_thresh = 0.60
+        self.spline_max_alat = 7.0
+        self.spline_abrake_max = 4.5
+        self.spline_aaccel_max = 3.5
+        self.prediction_mode = "curvature_aware"
+        self.multi_obs_safety_margin = 0.25
         
         pd = ParameterDescriptor(
             type=ParameterType.PARAMETER_DOUBLE,
@@ -109,6 +114,11 @@ class ObstacleSpliner(Node):
             type=ParameterType.PARAMETER_DOUBLE,
             floating_point_range=[FloatingPointRange(from_value=0.0, to_value=25.0, step=0.01)]
         )
+        pd_acc = ParameterDescriptor(
+            type=ParameterType.PARAMETER_DOUBLE,
+            floating_point_range=[FloatingPointRange(from_value=0.5, to_value=25.0, step=0.01)]
+        )
+        pd_str = ParameterDescriptor(type=ParameterType.PARAMETER_STRING)
         param_dicts = [
             {'name': 'pre_apex_0', 'default': abs(self.pre_apex_0), 'descriptor': pd},
             {'name': 'pre_apex_1', 'default': abs(self.pre_apex_1), 'descriptor': pd},
@@ -125,7 +135,12 @@ class ObstacleSpliner(Node):
             {'name': 'lookahead_min', 'default': self.lookahead_min, 'descriptor': pd_la},
             {'name': 'lookahead_max', 'default': self.lookahead_max, 'descriptor': pd_la},
             {'name': 'lookahead_kv', 'default': self.lookahead_kv, 'descriptor': pd_la},
-            {'name': 'lookahead_kkappa', 'default': self.lookahead_kkappa, 'descriptor': pd_la}
+            {'name': 'lookahead_kkappa', 'default': self.lookahead_kkappa, 'descriptor': pd_la},
+            {'name': 'spline_max_alat', 'default': self.spline_max_alat, 'descriptor': pd_acc},
+            {'name': 'spline_abrake_max', 'default': self.spline_abrake_max, 'descriptor': pd_acc},
+            {'name': 'spline_aaccel_max', 'default': self.spline_aaccel_max, 'descriptor': pd_acc},
+            {'name': 'prediction_mode', 'default': self.prediction_mode, 'descriptor': pd_str},
+            {'name': 'multi_obs_safety_margin', 'default': self.multi_obs_safety_margin, 'descriptor': pd}
         ]
 
         self.declare_all_parameters(param_dicts=param_dicts)
@@ -150,6 +165,11 @@ class ObstacleSpliner(Node):
             param = self.declare_parameter(
                 param_dict['name'], param_dict['default'], param_dict['descriptor'])
             params.append(param)
+            pname = param_dict['name']
+            if pname.startswith('pre_apex_'):
+                setattr(self, pname, -1 * abs(param.value))
+            else:
+                setattr(self, pname, param.value)
         return params
 
     def dyn_param_cb(self, params: List[Parameter]):
@@ -190,6 +210,16 @@ class ObstacleSpliner(Node):
                 self.lookahead_kv = param.value
             elif param_name == 'lookahead_kkappa':
                 self.lookahead_kkappa = param.value
+            elif param_name == 'spline_max_alat':
+                self.spline_max_alat = param.value
+            elif param_name == 'spline_abrake_max':
+                self.spline_abrake_max = param.value
+            elif param_name == 'spline_aaccel_max':
+                self.spline_aaccel_max = param.value
+            elif param_name == 'prediction_mode':
+                self.prediction_mode = param.value
+            elif param_name == 'multi_obs_safety_margin':
+                self.multi_obs_safety_margin = param.value
         
         # Ensure ascending order for spline parameters
         if self.pre_apex_1 < self.pre_apex_0:
@@ -284,22 +314,47 @@ class ObstacleSpliner(Node):
         return FrenetConverter(np.array(waypoints_x), np.array(waypoints_y), np.array(waypoints_psi))
 
     #################### UTILS FUNCTIONS####################
-    def _predict_obs_movement(self, obs: Obstacle, mode: str = "constant") -> Obstacle:
+    def _predict_obs_movement(self, obs: Obstacle, mode: str = None) -> Obstacle:
         """
         Predicts the movement of an obstacle based on the current state and mode.
-
-        TODO: opponent prediction should be completely isolated for added modularity       
-
-        Args:
-            obs (Obstacle): The obstacle to predict the movement for.
-            mode (str, optional): The mode for predicting the movement. Defaults to "constant".
-
-        Returns:
-            Obstacle: The updated obstacle with the predicted movement.
+        Modes:
+          - 'curvature_aware' (Default): Propagates opponent with curvature-bounded speed
+            and apex-reverting lateral dynamics, maintaining strict track boundary containment.
+          - 'constant': Propagate opponent by constant time (linear Frenet extrapolation).
+          - 'adaptive': Distance-to-opponent relative speed scaling.
         """
+        if mode is None:
+            mode = getattr(self, 'prediction_mode', 'curvature_aware')
+
+        if self.cur_s is None or self.gb_max_s is None:
+            return obs
+
         # propagate opponent by time dependent on distance
-        if (obs.s_center - self.cur_s) % self.gb_max_s < 10:  # TODO make param
-            if mode == "adaptive":
+        dist_to_car = (obs.s_center - self.cur_s) % self.gb_max_s
+        if dist_to_car < 12.0:
+            pred_time = float(self.fixed_pred_time)
+
+            if mode == "curvature_aware":
+                # 1. Query local raceline curvature at opponent's location
+                kappa = 0.0
+                wpnts_list = getattr(self.gb_wpnts, 'wpnts', self.gb_wpnts)
+                if wpnts_list is not None and len(wpnts_list) > 0 and self.gb_max_s is not None:
+                    s_diffs = [abs((w.s_m - obs.s_center) % self.gb_max_s) for w in wpnts_list]
+                    closest_idx = int(np.argmin(s_diffs))
+                    w_opp = wpnts_list[closest_idx]
+                    if hasattr(w_opp, 'kappa_radpm'):
+                        kappa = abs(float(w_opp.kappa_radpm))
+
+                # 2. Longitudinal velocity bounded by cornering adhesion limit
+                v_corner_limit = np.sqrt(self.spline_max_alat / max(kappa, 0.05))
+                v_s_eff = min(max(float(obs.vs), 0.0), v_corner_limit)
+                delta_s = pred_time * v_s_eff
+
+                # 3. Lateral dynamics: natural stabilization towards raceline in corners
+                decay_factor = float(np.exp(-2.0 * kappa))
+                delta_d = (obs.vd * pred_time) * decay_factor - 0.25 * obs.d_center * (1.0 - decay_factor)
+
+            elif mode == "adaptive":
                 # distance in s coordinate
                 cur_s = self.cur_s
                 ot_distance = (obs.s_center - cur_s) % self.gb_max_s
@@ -331,7 +386,6 @@ class ObstacleSpliner(Node):
             elif mode == "constant":
                 delta_s = self.fixed_pred_time * obs.vs
                 delta_d = self.fixed_pred_time * obs.vd
-                # delta_d = -(obs.d_center+delta_d)*np.exp(-np.abs(self.kd_obs_pred*obs.d_center))
 
             elif mode == "heuristic":
                 # distance in s coordinate
@@ -339,9 +393,14 @@ class ObstacleSpliner(Node):
                 rel_speed = 3
                 ot_time_distance = ot_distance / rel_speed
 
+                delta_s = ot_time_distance * obs.vs
                 delta_d = ot_time_distance * obs.vd
                 delta_d = -(obs.d_center + delta_d) * \
                     np.exp(-np.abs(self.kd_obs_pred * obs.d_center))
+
+            else:
+                delta_s = self.fixed_pred_time * obs.vs
+                delta_d = self.fixed_pred_time * obs.vd
 
             # update
             obs.s_start += delta_s
@@ -354,6 +413,18 @@ class ObstacleSpliner(Node):
             obs.d_left += delta_d
             obs.d_center += delta_d
             obs.d_right += delta_d
+
+            # Soft-bound predicted lateral extents inside physical track bounds
+            wpnts_list = getattr(self.gb_wpnts, 'wpnts', self.gb_wpnts)
+            if wpnts_list is not None and len(wpnts_list) > 0 and self.gb_max_s is not None:
+                s_diffs = [abs((w.s_m - obs.s_center) % self.gb_max_s) for w in wpnts_list]
+                w_pred = wpnts_list[int(np.argmin(s_diffs))]
+                obs_rad = max(0.15, abs(obs.d_left - obs.d_right) / 2.0)
+                d_max_allowed = w_pred.d_left - obs_rad
+                d_min_allowed = w_pred.d_right + obs_rad
+                obs.d_center = float(np.clip(obs.d_center, d_min_allowed, d_max_allowed))
+                obs.d_left = float(np.clip(obs.d_left, d_min_allowed, d_max_allowed))
+                obs.d_right = float(np.clip(obs.d_right, d_min_allowed, d_max_allowed))
 
             resp = self.converter.get_cartesian([obs.s_center], [obs.d_center])
 
@@ -442,23 +513,11 @@ class ObstacleSpliner(Node):
     def do_spline(self, obstacles: ObstacleArray, gb_wpnts: WpntArray) -> Tuple[WpntArray, MarkerArray]:
         """
         Creates an evasion trajectory for the closest obstacle by splining between pre- and post-apex points.
-
-        This function takes as input the obstacles to be evaded, and a list of global waypoints that describe a reference raceline.
-        It only considers obstacles that are within a threshold of the raceline and generates an evasion trajectory for each of these obstacles.
-        The evasion trajectory consists of a spline between pre- and post-apex points that are spaced apart from the obstacle.
-        The spatial and velocity components of the spline are calculated using the `Spline` class, and the resulting waypoints and markers are returned.
-
-        Args:
-        - obstacles (ObstacleArray): An array of obstacle objects to be evaded.
-        - gb_wpnts (WpntArray): A list of global waypoints that describe a reference raceline.
-        - state (Odometry): The current state of the car.
-
-        Returns:
-        - wpnts (WpntArray): An array of waypoints that describe the evasion trajectory to the closest obstacle.
-        - mrks (MarkerArray): An array of markers that represent the waypoints in a visualization format.
-
+        Features:
+          1. Full-Horizon Envelope Feasibility: Verifies boundary clearances across the entire spline corridor.
+          2. Multi-Obstacle Collision Verification: Validates clearance against all active tracked obstacles.
+          3. Curvature-Constrained Dynamic Velocity: Re-profiles velocities dynamically adhering to tire grip limits.
         """
-        # Return wpnts and markers
         mrks = MarkerArray()
         wpnts = OTWpntArray()
 
@@ -467,138 +526,206 @@ class ObstacleSpliner(Node):
         if wpnt_dist <= 0:
             wpnt_dist = (self.gb_max_s / self.gb_max_idx) if (self.gb_max_idx and self.gb_max_idx > 0) else 0.1
 
-        # Only use obstacles that are within a threshold of the raceline, else we don't care about them
+        # Only use obstacles that are within a threshold of the raceline
         close_obs = self._obs_filtering(obstacles=obstacles)
 
-        # If there are obstacles within the lookahead distance, then we need to generate an evasion trajectory considering the closest one
         if len(close_obs) > 0:
-            # Get the closest obstacle handling wraparound
+            # 1. Primary obstacle: closest in front
             closest_obs = min(
-                close_obs, key=lambda obs: (
-                    obs.s_center - self.cur_s) % self.gb_max_s
+                close_obs, key=lambda obs: (obs.s_center - self.cur_s) % self.gb_max_s
             )
 
-            # Get Apex for evasion that is further away from the trackbounds
+            # 2. Compute evasion apex along s
             if closest_obs.s_end < closest_obs.s_start:
-                s_apex = (closest_obs.s_end + self.gb_max_s +
-                          closest_obs.s_start) / 2
+                s_apex = (closest_obs.s_end + self.gb_max_s + closest_obs.s_start) / 2.0
             else:
-                s_apex = (closest_obs.s_end + closest_obs.s_start) / 2
-            # Approximate next 20 indexes of global wpnts with wrapping => 2m and compute which side is the outside of the raceline
-            gb_idxs = [int(s_apex / wpnt_dist + i) %
-                       self.gb_max_idx for i in range(20)]
-            kappas = np.array(
-                [gb_wpnts[gb_idx].kappa_radpm for gb_idx in gb_idxs])
-            outside = "left" if np.sum(kappas) < 0 else "right"
-            # Choose the correct side and compute the distance to the apex based on left of right of the obstacle
-            more_space, d_apex = self._more_space(
-                closest_obs, gb_wpnts, gb_idxs)
+                s_apex = (closest_obs.s_end + closest_obs.s_start) / 2.0
 
-            # Check if a side switch is possible; if blocked, stick to currently committed side!
-            danger_flag = False
+            # Approximate next 20 indexes of global wpnts to identify corner outside
+            gb_idxs = [int(s_apex / wpnt_dist + i) % self.gb_max_idx for i in range(20)]
+            kappas = np.array([gb_wpnts[gb_idx].kappa_radpm for gb_idx in gb_idxs])
+            outside = "left" if np.sum(kappas) < 0 else "right"
+
+            # Preferred evasion side based on immediate obstacle gap
+            more_space, preferred_d_apex = self._more_space(closest_obs, gb_wpnts, gb_idxs)
+
+            # Determine candidate side order respecting side commitment hysteresis
+            candidate_sides = []
             if not self._check_ot_side_possible(more_space):
                 if self.last_ot_side != "":
-                    more_space = self.last_ot_side
-                    if more_space == "right":
-                        d_apex = closest_obs.d_right - self.evasion_dist
-                        if d_apex > 0:
-                            d_apex = 0
-                    else:
-                        d_apex = closest_obs.d_left + self.evasion_dist
-                        if d_apex < 0:
-                            d_apex = 0
-                else:
-                    danger_flag = True
+                    candidate_sides = [self.last_ot_side]
+            else:
+                opposite_side = "right" if more_space == "left" else "left"
+                candidate_sides = [more_space, opposite_side]
 
-            # Publish the point around which we are splining
+            # Publish visualization marker for the apex reference point
             mrk = self.xy_to_point(
-                x=gb_wpnts[gb_idxs[0]].x_m, y=gb_wpnts[gb_idxs[0]].y_m, opponent=False)
+                x=gb_wpnts[gb_idxs[0]].x_m, y=gb_wpnts[gb_idxs[0]].y_m, opponent=False
+            )
             self.closest_obs_pub.publish(mrk)
 
-            # Choose wpnts from global trajectory for splining with velocity
-            evasion_points = []
-            spline_params = [
-                self.pre_apex_0,
-                self.pre_apex_1,
-                self.pre_apex_2,
-                0,
-                self.post_apex_0,
-                self.post_apex_1,
-                self.post_apex_2,
-            ]
-            for i, dst in enumerate(spline_params):
-                # scale dst linearly between 1 and 1.5 depending on the speed normalised to the max speed
-                dst = dst * np.clip(1.0 + self.cur_vs / self.gb_vmax, 1, 1.5)
-                # If we overtake on the outside, we smoothen the spline
-                if outside == more_space:
-                    si = s_apex + dst * 1.75  # TODO make parameter
+            # 3. Evaluate candidate sides for Full-Horizon and Multi-Obstacle Feasibility
+            selected_spline = None
+            spline_res = 0.1
+
+            for cand_side in candidate_sides:
+                # Compute apex distance for this candidate side
+                if cand_side == "right":
+                    cand_d_apex = closest_obs.d_right - self.evasion_dist
+                    if cand_d_apex > 0:
+                        cand_d_apex = 0.0
                 else:
-                    si = s_apex + dst
-                di = d_apex if dst == 0 else 0
-                evasion_points.append([si, di])
-            # Convert to nump
-            evasion_points = np.array(evasion_points)
+                    cand_d_apex = closest_obs.d_left + self.evasion_dist
+                    if cand_d_apex < 0:
+                        cand_d_apex = 0.0
 
-            # Spline spatialy for d with s as base
-            # TODO read from ros params to make consistent in case it changes
-            spline_resolution = 0.1
-            spatial_spline = Spline(
-                x=evasion_points[:, 0], y=evasion_points[:, 1])
-            evasion_s = np.arange(
-                evasion_points[0, 0], evasion_points[-1, 0], spline_resolution)
-            # Clipe the d to the apex distance
-            if d_apex < 0:
-                evasion_d = np.clip(spatial_spline(evasion_s), d_apex, 0)
-            else:
-                evasion_d = np.clip(spatial_spline(evasion_s), 0, d_apex)
+                # Form 7 control points along the evasion trajectory
+                evasion_points = []
+                spline_params = [
+                    self.pre_apex_0,
+                    self.pre_apex_1,
+                    self.pre_apex_2,
+                    0.0,
+                    self.post_apex_0,
+                    self.post_apex_1,
+                    self.post_apex_2,
+                ]
+                for dst in spline_params:
+                    scaled_dst = dst * np.clip(1.0 + self.cur_vs / self.gb_vmax, 1.0, 1.5)
+                    if outside == cand_side:
+                        si = s_apex + scaled_dst * 1.75
+                    else:
+                        si = s_apex + scaled_dst
+                    di = cand_d_apex if dst == 0.0 else 0.0
+                    evasion_points.append([si, di])
+                evasion_points = np.array(evasion_points)
 
-            # Handle Wrapping of s
-            evasion_s = evasion_s % self.gb_max_s
+                # Fit smooth cubic spline
+                spatial_spline = Spline(x=evasion_points[:, 0], y=evasion_points[:, 1])
+                s_cand = np.arange(evasion_points[0, 0], evasion_points[-1, 0], spline_res)
+                if cand_d_apex < 0:
+                    d_cand = np.clip(spatial_spline(s_cand), cand_d_apex, 0.0)
+                else:
+                    d_cand = np.clip(spatial_spline(s_cand), 0.0, cand_d_apex)
+                s_cand_wrapped = s_cand % self.gb_max_s
 
-            # Soft-clamp evasion_d to stay within safe track bounds
-            for i in range(evasion_s.shape[0]):
-                gb_wpnt_i = int((evasion_s[i] / wpnt_dist) % self.gb_max_idx)
-                if abs(evasion_d[i]) > spline_resolution:
-                    tb_dist = gb_wpnts[gb_wpnt_i].d_left if evasion_d[i] > 0 else gb_wpnts[gb_wpnt_i].d_right
-                    max_allowed_d = max(0.05, abs(tb_dist) - self.spline_bound_mindist)
-                    if abs(evasion_d[i]) > max_allowed_d:
-                        evasion_d[i] = np.sign(evasion_d[i]) * max_allowed_d
+                # Feasibility Check A (Priority 2): Full-Horizon Track Boundary Clearance
+                spatially_feasible = True
+                for i in range(len(s_cand_wrapped)):
+                    idx = int((s_cand_wrapped[i] / wpnt_dist) % self.gb_max_idx)
+                    w = gb_wpnts[idx]
+                    di = d_cand[i]
+                    if di > 0:
+                        clearance = w.d_left - di
+                    else:
+                        clearance = abs(w.d_right) - abs(di)
+                    if clearance < self.spline_bound_mindist:
+                        spatially_feasible = False
+                        break
 
-            # Convert to Cartesian after soft-clamping
-            resp = self.converter.get_cartesian(evasion_s, evasion_d)
+                if not spatially_feasible:
+                    continue  # Corridor too narrow along this side, try alternative
 
-            for i in range(evasion_s.shape[0]):
-                gb_wpnt_i = int((evasion_s[i] / wpnt_dist) % self.gb_max_idx)
-                # Maintain full target speed during evasion to ensure smooth momentum
-                vi = gb_wpnts[gb_wpnt_i].vx_mps
-                wpnts.wpnts.append(
-                    self.xyv_to_wpnts(
-                        x=resp[0, i], y=resp[1, i], s=evasion_s[i], d=evasion_d[i], v=vi, wpnts=wpnts)
-                )
-                mrks.markers.append(self.xyv_to_markers(
-                    x=resp[0, i], y=resp[1, i], v=vi, mrks=mrks))
+                # Feasibility Check B (Priority 3): Multi-Obstacle Collision Verification
+                collision_free = True
+                half_track = self.gb_max_s / 2.0
+                for obs_sec in close_obs:
+                    if obs_sec is closest_obs:
+                        continue
+                    obs_len = max(0.30, abs(getattr(obs_sec, 's_end', obs_sec.s_center) - getattr(obs_sec, 's_start', obs_sec.s_center)))
+                    for i in range(len(s_cand_wrapped)):
+                        dist_s = abs((s_cand_wrapped[i] - obs_sec.s_center + half_track) % self.gb_max_s - half_track)
+                        if dist_s < (obs_len / 2.0 + 0.35):
+                            if d_cand[i] > obs_sec.d_center:
+                                lat_gap = d_cand[i] - getattr(obs_sec, 'd_left', obs_sec.d_center)
+                            else:
+                                lat_gap = getattr(obs_sec, 'd_right', obs_sec.d_center) - d_cand[i]
+                            if lat_gap < self.multi_obs_safety_margin:
+                                collision_free = False
+                                break
+                    if not collision_free:
+                        break
 
-            # Fill the rest of OTWpnts
-            wpnts.header.stamp = self.get_clock().now().to_msg()
-            wpnts.header.frame_id = "map"
-            if not danger_flag:
-                wpnts.ot_side = more_space
-                wpnts.ot_line = outside
-                wpnts.side_switch = True if self.last_ot_side != more_space else False
-                wpnts.last_switch_time = self.last_switch_time
+                if not collision_free:
+                    continue  # Collides with secondary obstacle, try alternative
 
-                # Update the last switch time and the last side
-                if self.last_ot_side != more_space:
-                    self.last_switch_time = self.get_clock().now().to_msg()
-                self.last_ot_side = more_space
-            else:
+                # Both checks passed!
+                selected_spline = (cand_side, s_cand_wrapped, d_cand)
+                break
+
+            # 4. Handle Infeasible Splines (Clean Rejection -> Safe Trailing)
+            danger_flag = False
+            if selected_spline is None:
+                danger_flag = True
                 wpnts.wpnts = []
                 mrks.markers = []
-                # This fools the statemachine to cool down
                 wpnts.side_switch = True
                 self.last_switch_time = self.get_clock().now().to_msg()
+                return wpnts, mrks
+
+            chosen_side, evasion_s, evasion_d = selected_spline
+
+            # 5. Convert to Cartesian Coordinates
+            resp = self.converter.get_cartesian(evasion_s, evasion_d)
+            x_coords = resp[0]
+            y_coords = resp[1]
+            n_pts = len(x_coords)
+
+            # 6. Priority 1: Curvature-Constrained Dynamic Velocity Profiling
+            dx = np.gradient(x_coords)
+            dy = np.gradient(y_coords)
+            ddx = np.gradient(dx)
+            ddy = np.gradient(dy)
+            curvatures = np.abs(dx * ddy - dy * ddx) / ((dx**2 + dy**2)**1.5 + 1e-9)
+
+            # Physical lateral velocity limit under available tire friction (v_lat = sqrt(a_lat / kappa))
+            v_lat_limits = np.sqrt(self.spline_max_alat / np.maximum(curvatures, 0.05))
+
+            # Initial target bounded by raceline profile and curvature limit
+            v_targets = np.zeros(n_pts)
+            for i in range(n_pts):
+                gb_wpnt_i = int((evasion_s[i] / wpnt_dist) % self.gb_max_idx)
+                v_raceline = gb_wpnts[gb_wpnt_i].vx_mps
+                v_targets[i] = min(v_raceline, v_lat_limits[i])
+
+            # Backward pass (Euler deceleration limit for braking)
+            ds = spline_res
+            for i in range(n_pts - 2, -1, -1):
+                v_max_brake = np.sqrt(v_targets[i+1]**2 + 2.0 * self.spline_abrake_max * ds)
+                v_targets[i] = min(v_targets[i], v_max_brake)
+
+            # Forward pass (Euler acceleration limit for traction)
+            for i in range(1, n_pts):
+                v_max_accel = np.sqrt(v_targets[i-1]**2 + 2.0 * self.spline_aaccel_max * ds)
+                v_targets[i] = min(v_targets[i], v_max_accel)
+
+            # 7. Construct Output Waypoints and Telemetry Markers
+            for i in range(n_pts):
+                vi = float(v_targets[i])
+                wpnts.wpnts.append(
+                    self.xyv_to_wpnts(
+                        x=x_coords[i], y=y_coords[i], s=evasion_s[i], d=evasion_d[i], v=vi, wpnts=wpnts
+                    )
+                )
+                mrks.markers.append(
+                    self.xyv_to_markers(x=x_coords[i], y=y_coords[i], v=vi, mrks=mrks)
+                )
+
+            # 8. Metadata and State Machine Signals
+            wpnts.header.stamp = self.get_clock().now().to_msg()
+            wpnts.header.frame_id = "map"
+            wpnts.ot_side = chosen_side
+            wpnts.ot_line = outside
+            wpnts.side_switch = True if self.last_ot_side != chosen_side else False
+            wpnts.last_switch_time = self.last_switch_time
+
+            if self.last_ot_side != chosen_side:
+                self.last_switch_time = self.get_clock().now().to_msg()
+            self.last_ot_side = chosen_side
+
         else:
             self.last_ot_side = ""
+
         return wpnts, mrks
 
     def compute_dynamic_lookahead(self) -> float:

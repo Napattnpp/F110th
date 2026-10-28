@@ -475,27 +475,39 @@ class StateMachine(Node):
         if self.params.overtake_mode == "spliner":
             if self.last_valid_avoidance_wpnts is not None and len(self.last_valid_avoidance_wpnts) > 0:
                 horizon = self.params.overtaking_horizon_m  # Horizon in front of cur_s [m]
+                half_track = self.track_length / 2.0
 
                 for obs in self.obstacles:
                     obs_s = obs.s_center
                     # Wrapping distance to check if in front
                     dist_to_obj = (obs_s - self.cur_s) % self.track_length
                     if dist_to_obj < horizon:
-                        obs_d = obs.d_center
-                        # Circular difference to find corresponding waypoint on avoidance spline
-                        half_track = self.track_length / 2.0
-                        avoid_wpnt_idx = np.argmin(
-                            np.array([
-                                abs((avoid_s.s_m - obs_s + half_track) % self.track_length - half_track)
-                                for avoid_s in self.last_valid_avoidance_wpnts
-                            ])
-                        )
-                        ot_d = self.last_valid_avoidance_wpnts[avoid_wpnt_idx].d_m
-                        ot_obs_dist = ot_d - obs_d
-                        if abs(ot_obs_dist) < self.params.lateral_width_ot_m:
-                            o_free = False
-                            self.get_logger().info(f"O_FREE False, obs dist to ot lane: {ot_obs_dist:.3f} m", throttle_duration_sec=1.0)
-                            break
+                        # Find closest avoidance waypoint in Frenet s
+                        s_diffs = np.array([
+                            abs((avoid_s.s_m - obs_s + half_track) % self.track_length - half_track)
+                            for avoid_s in self.last_valid_avoidance_wpnts
+                        ])
+                        min_s_diff = np.min(s_diffs)
+                        avoid_wpnt_idx = int(np.argmin(s_diffs))
+
+                        # Evaluate clearance if obstacle is longitudinally co-located with spline envelope
+                        obs_len = max(0.30, abs(getattr(obs, 's_end', obs_s) - getattr(obs, 's_start', obs_s)))
+                        if min_s_diff < (obs_len / 2.0 + 0.45):
+                            ot_d = self.last_valid_avoidance_wpnts[avoid_wpnt_idx].d_m
+                            obs_d_center = obs.d_center
+                            # Check clearance to obstacle boundary bounds
+                            if ot_d > obs_d_center:
+                                clearance = ot_d - getattr(obs, 'd_left', obs_d_center)
+                            else:
+                                clearance = getattr(obs, 'd_right', obs_d_center) - ot_d
+
+                            if clearance < self.params.lateral_width_ot_m:
+                                o_free = False
+                                self.get_logger().info(
+                                    f"[HSM] O_FREE False: clearance to obstacle ({clearance:.3f} m) < safety margin ({self.params.lateral_width_ot_m:.3f} m)",
+                                    throttle_duration_sec=1.0
+                                )
+                                break
             else:
                 o_free = True
             return o_free
