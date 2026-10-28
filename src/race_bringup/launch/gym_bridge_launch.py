@@ -120,6 +120,39 @@ def launch_setup(context, *args, **kwargs):
     if foxglove_target_default not in ('browser', 'studio'):
         raise ValueError("config/foxglove/target must be either 'browser' or 'studio'.")
 
+    # Auto-resolve initial pose from track raceline/centerline if default (0, 0)
+    sx = float(bridge_params.get('sx', 0.0))
+    sy = float(bridge_params.get('sy', 0.0))
+    stheta = float(bridge_params.get('stheta', 0.0))
+    if sx == 0.0 and sy == 0.0:
+        map_parent = map_yaml_path.parent
+        # Try clean/../waypoints or clean/../raceline or map_dir
+        map_dirs = [map_parent.parent, map_parent]
+        candidates = []
+        for md in map_dirs:
+            candidates.extend(list((md / 'raceline').glob('*.csv')))
+            candidates.extend(list((md / 'waypoints').glob('*raceline*.csv')))
+            candidates.extend(list((md / 'centerline').glob('*.csv')))
+            candidates.extend(list(md.glob('*.csv')))
+        for c in candidates:
+            if c.exists():
+                try:
+                    with open(c, 'r') as cf:
+                        for line in cf:
+                            line = line.strip()
+                            if line.startswith('#') or not line or 'x_m' in line:
+                                continue
+                            parts = [p.strip() for p in (line.split(';') if ';' in line else line.split(','))]
+                            if len(parts) >= 4:
+                                sx = float(parts[1])
+                                sy = float(parts[2])
+                                stheta = float(parts[3])
+                                break
+                    if sx != 0.0 or sy != 0.0:
+                        break
+                except Exception:
+                    pass
+
     bridge_node = Node(
         package='f1tenth_gym_ros',
         executable='gym_bridge',
@@ -127,7 +160,10 @@ def launch_setup(context, *args, **kwargs):
         parameters=[config, {
             'use_sim_time': False,  # Always use real time for the bridge node
             'use_sim_time_bridge': use_sim_time, # Whether to internally use and publish sim time
-            'map_path': str(map_yaml_path.with_suffix(''))
+            'map_path': str(map_yaml_path.with_suffix('')),
+            'sx': sx,
+            'sy': sy,
+            'stheta': stheta,
             }], 
     )
     foxglove_host = LaunchConfiguration('foxglove_host')

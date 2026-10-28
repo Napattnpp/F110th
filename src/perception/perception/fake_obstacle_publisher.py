@@ -91,6 +91,7 @@ class FakeObstaclePublisher(Node):
         """ Initializes the dynamic obstacle configuration."""
         dynamic_obstacle = Obstacle()
         dynamic_obstacle.id = 999
+        dynamic_obstacle.size = 0.5
         dynamic_obstacle.d_right = -0.1
         dynamic_obstacle.d_left = 0.1
         dynamic_obstacle.is_actually_a_gap = False
@@ -325,6 +326,7 @@ class FakeObstaclePublisher(Node):
             self.dynamic_obstacle.d_center = self.opponent_wpnts.oppwpnts[approx_idx].d_m
             self.dynamic_obstacle.d_right = self.dynamic_obstacle.d_center - 0.1
             self.dynamic_obstacle.d_left = self.dynamic_obstacle.d_center + 0.1
+            self.dynamic_obstacle.size = self.obj_len
             self.dynamic_obstacle.vs = self.dynamic_obstacle_speed
             self.dynamic_obstacle.is_static = False
             

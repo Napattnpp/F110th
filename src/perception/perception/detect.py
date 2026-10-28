@@ -146,7 +146,15 @@ class Detect(Node):
         self.max_obs_size = 0.5
         self.min_obs_size = 10
         self.max_viewing_distance = 9.0
-        self.boundaries_inflation = 0.1
+        self.boundaries_inflation = 0.22
+
+        # Chassis Oriented Bounding Box (OBB) self-filter (laser frame in meters)
+        self.declare_parameter("chassis_x_min", -0.25)
+        self.declare_parameter("chassis_x_max", 0.42)
+        self.declare_parameter("chassis_y_width", 0.36)
+        self.chassis_x_min = self.get_parameter("chassis_x_min").get_parameter_value().double_value
+        self.chassis_x_max = self.get_parameter("chassis_x_max").get_parameter_value().double_value
+        self.chassis_y_width = self.get_parameter("chassis_y_width").get_parameter_value().double_value
         
         param_dicts = [{'name' : 'min_obs_size',
                         'default' : self.min_obs_size,
@@ -159,8 +167,12 @@ class Detect(Node):
                         'descriptor' : ParameterDescriptor(type=ParameterType.PARAMETER_DOUBLE, floating_point_range=[FloatingPointRange(from_value=3.0, to_value=10.0, step=0.1)])},
                        {'name' : 'boundaries_inflation',
                         'default' : self.boundaries_inflation,
-                        'descriptor' : ParameterDescriptor(type=ParameterType.PARAMETER_DOUBLE, floating_point_range=[FloatingPointRange(from_value=0.0, to_value=2.0, step=0.1)])}]
+                        'descriptor' : ParameterDescriptor(type=ParameterType.PARAMETER_DOUBLE, floating_point_range=[FloatingPointRange(from_value=0.0, to_value=2.0, step=0.01)])}]
         self.delcare_dyn_parameters(param_dicts)
+        self.min_obs_size = self.get_parameter('min_obs_size').value
+        self.max_obs_size = self.get_parameter('max_obs_size').value
+        self.max_viewing_distance = self.get_parameter('max_viewing_distance').value
+        self.boundaries_inflation = self.get_parameter('boundaries_inflation').value
         self.add_on_set_parameters_callback(self.dyn_param_cb)
         
         # --- variables ---
@@ -343,10 +355,28 @@ class Detect(Node):
         ranges = np.array(scans.ranges)
         angles = np.linspace(scans.angle_min, scans.angle_max, len(ranges))
         
-        # Filter out inf, nan, and self-detection (ranges <= 0.35m hitting car's own frame/box)
-        valid_idx = np.isfinite(ranges) & (ranges > 0.35)
-        valid_ranges = ranges[valid_idx]
-        valid_angles = angles[valid_idx]
+        # 1. Finite and sensor valid range check (ranges > 0.15m and < range_max)
+        finite_mask = np.isfinite(ranges) & (ranges > 0.15)
+        if scans.range_max > 0.0:
+            finite_mask &= (ranges <= scans.range_max)
+        
+        r_f = ranges[finite_mask]
+        a_f = angles[finite_mask]
+        
+        if len(r_f) == 0:
+            return []
+
+        # 2. Vehicle Chassis Oriented Bounding Box (OBB) self-filter (laser frame: +x front, +y left)
+        x_laser_raw = r_f * np.cos(a_f)
+        y_laser_raw = r_f * np.sin(a_f)
+        in_chassis = (
+            (x_laser_raw >= self.chassis_x_min) &
+            (x_laser_raw <= self.chassis_x_max) &
+            (np.abs(y_laser_raw) <= (self.chassis_y_width / 2.0))
+        )
+        valid_idx = ~in_chassis
+        valid_ranges = r_f[valid_idx]
+        valid_angles = a_f[valid_idx]
         
         if len(valid_ranges) == 0:
             return []

@@ -322,6 +322,7 @@ class StaticDynamic(Node):
         ObstacleSD.min_nb_meas = 5
         ObstacleSD.min_std = 0.16
         ObstacleSD.max_std = 0.2
+        self.min_persistence_frames = 3 # Temporal persistence filter (require >= 3 consecutive frames to publish)
         self.dist_deletion = 7
         self.dist_infront = 8
         self.vs_reset = 0.1
@@ -419,7 +420,10 @@ class StaticDynamic(Node):
                         'descriptor' : ParameterDescriptor(type=ParameterType.PARAMETER_INTEGER, integer_range=[IntegerRange(from_value=1, to_value=20, step=1)])},
                        {'name' : 'min_nb_meas',
                         'default' : ObstacleSD.min_nb_meas,
-                        'descriptor' : ParameterDescriptor(type=ParameterType.PARAMETER_INTEGER, integer_range=[IntegerRange(from_value=3, to_value=10, step=1)])},
+                        'descriptor' : ParameterDescriptor(type=ParameterType.PARAMETER_INTEGER, integer_range=[IntegerRange(from_value=1, to_value=20, step=1)])},
+                       {'name' : 'min_persistence_frames',
+                        'default' : self.min_persistence_frames,
+                        'descriptor' : ParameterDescriptor(type=ParameterType.PARAMETER_INTEGER, integer_range=[IntegerRange(from_value=1, to_value=20, step=1)])},
                        {'name' : 'min_std',
                         'default' : ObstacleSD.min_std,
                         'descriptor' : ParameterDescriptor(type=ParameterType.PARAMETER_DOUBLE, floating_point_range=[FloatingPointRange(from_value=0.05, to_value=0.3, step=0.01)])},
@@ -448,6 +452,8 @@ class StaticDynamic(Node):
                         'default' : self.noMemoryMode,
                         'descriptor' : ParameterDescriptor(type=ParameterType.PARAMETER_BOOL)}]
         self.delcare_dyn_parameters(param_dicts)
+        self.min_persistence_frames = self.get_parameter('min_persistence_frames').value
+        ObstacleSD.min_nb_meas = self.get_parameter('min_nb_meas').value
         self.add_on_set_parameters_callback(self.dyn_param_cb)
         
         self.opponent_obstacle = Opponent_state()
@@ -531,6 +537,8 @@ class StaticDynamic(Node):
                 ObstacleSD.ttl = param.value
             elif param_name == 'min_nb_meas':
                 ObstacleSD.min_nb_meas = param.value
+            elif param_name == 'min_persistence_frames':
+                self.min_persistence_frames = param.value
             elif param_name == 'min_std':
                 ObstacleSD.min_std = param.value
             elif param_name == 'max_std':
@@ -1059,6 +1067,10 @@ class StaticDynamic(Node):
         raw_opponent_array = []
 
         for obs in self.tracked_obstacles:
+            # Temporal persistence filter: require >= min_persistence_frames consecutive matches to reject ghost obstacles
+            if obs.nb_meas < self.min_persistence_frames:
+                continue
+
             obs_msg = Obstacle()
 
             obs_msg.id = obs.id

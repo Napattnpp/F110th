@@ -366,8 +366,39 @@ class StateMachine(Node):
         return np.abs(self.cur_d) < self.params.gb_ego_width_m  # [m]
 
     @property
+    def _check_valid_opponent_ahead(self) -> bool:
+        """Dynamic Overtake Guardrail:
+        Verifies that at least one tracked obstacle ahead qualifies as a real opponent
+        rather than wall-grazing noise, tiny clusters, or distant artifacts.
+        """
+        if not self.obstacles or self.cur_s is None or self.track_length is None:
+            return False
+
+        horizon = getattr(self.params, 'overtaking_horizon_m', 6.0)
+        for obs in self.obstacles:
+            gap = (obs.s_center - self.cur_s) % self.track_length
+            if 0.35 <= gap <= horizon:
+                obs_size = getattr(obs, 'size', 0.0)
+                if obs_size <= 0.0 and hasattr(obs, 's_start') and hasattr(obs, 's_end'):
+                    obs_size = abs(obs.s_end - obs.s_start)
+                if obs_size >= 0.15:
+                    return True
+        return False
+
+    @property
     def _check_ot_sector(self) -> bool:
         if self.params.overtake_mode == "spliner":
+            # Guardrail 1: Require an actual physical obstacle/opponent ahead
+            if not self._check_valid_opponent_ahead:
+                return False
+            # Guardrail 2: If overtaking sectors are loaded, enforce them
+            if hasattr(self, 'ot_sectors') and len(self.ot_sectors) > 0:
+                cur_idx = self.get_closest_glb_wpnt_idx(self.cur_s if self.cur_s is not None else 0.0)
+                for sector in self.ot_sectors:
+                    if sector['ot_flag']:
+                        if (sector['start'] <= cur_idx <= (sector['end']+1)):
+                            return True
+                return False
             return True
         cur_idx = self.get_closest_glb_wpnt_idx(self.cur_s if self.cur_s is not None else 0.0)
         for sector in self.ot_sectors:
