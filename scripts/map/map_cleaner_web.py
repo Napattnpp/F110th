@@ -36,10 +36,10 @@ def find_repo_root():
 
 REPO_ROOT = find_repo_root()
 MAPS_ROOT = REPO_ROOT / "assets" / "maps"
-MAP_UTILS_DIR = REPO_ROOT / "src" / "utilities" / "map_utils"
+SCRIPT_DIR = Path(__file__).resolve().parent
 
-if str(MAP_UTILS_DIR) not in sys.path:
-    sys.path.insert(0, str(MAP_UTILS_DIR))
+if str(SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIR))
 
 try:
     import cv2

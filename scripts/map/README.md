@@ -30,5 +30,9 @@ Under **ADR-010 (Single Canonical Tooling Mandate)**, all map cleaning operation
 
 ## Files
 
-- `map_cleaner_core.py`: Core algorithm implementation (`MapCleaner`). Contains automated morphological filtering, auto-tuning, and cubic B-spline contour smoothing.
-- `requirements.txt`: Python requirements (`opencv-python`, `numpy`, `scipy`).
+- `map_cleaner_core.py`: Core algorithmic engine (`MapCleaner`). Morphological filtering, auto-tuning, and cubic B-spline contour smoothing.
+- `map_cleaner_web.py`: Interactive Web Studio frontend (`make clean_web MAP=<map_name>`).
+- `manage_map.py`: Unified map lifecycle manager & headless batch cleaner (`make clean_map MAP=<map_name>`).
+- `init_map.py`: Standardizes raw SLAM outputs into ADR-004 4-subfolder contract (`make init_map MAP=<map_name>`).
+- `set_start_line.py`: Start line visual interactive setter (`make start_line MAP=<map_name>`).
+- `finish_map.sh`: Automated post-SLAM map packaging script.

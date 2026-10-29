@@ -24,13 +24,13 @@ import subprocess
 import numpy as np
 from pathlib import Path
 
-# Add project root and map_utils to path
+# Add project root and script dir to path
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
-MAP_UTILS_DIR = REPO_ROOT / "src" / "utilities" / "map_utils"
+SCRIPT_DIR = Path(__file__).resolve().parent
 MAPS_ROOT = REPO_ROOT / "assets" / "maps"
 
-if str(MAP_UTILS_DIR) not in sys.path:
-    sys.path.insert(0, str(MAP_UTILS_DIR))
+if str(SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIR))
 
 
 def find_map_dir(map_name: str) -> Path:

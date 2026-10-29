@@ -11,6 +11,10 @@ x-common-settings: &common-settings
   shm_size: "1gb"
   stdin_open: true
   tty: true
+  privileged: true
+  group_add:
+    - "23"
+    - "input"
   environment:
     - DISPLAY=${DISPLAY}
     - XAUTHORITY=${XAUTHORITY:-}
@@ -34,6 +38,9 @@ x-common-settings: &common-settings
     - ./configs/dds/${CYCLONEDDS_PROFILE:-cyclonedds_dev.xml}:/etc/cyclonedds.xml:ro
     # Global Tmux configuration
     - ./configs/tmux.conf:/home/${USER:-ros}/.tmux.conf:ro
+    # Hardware & input device access (joysticks, USB passthrough, etc.)
+    - /dev:/dev
+    - /run/udev:/run/udev:ro
   command: /bin/bash
 
 # ─────────────────────────────────────────────────────────────────────────────

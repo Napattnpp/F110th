@@ -47,7 +47,7 @@ with warnings.catch_warnings():
 def find_repo_root():
     curr = Path(__file__).resolve().parent
     for p in [curr] + list(curr.parents):
-        if (p / 'assets' / 'maps').is_dir() or (p / 'src' / 'utilities' / 'map_utils').is_dir():
+        if (p / 'assets' / 'maps').is_dir() or (p / 'docker-compose.yml').is_file():
             return p
     return curr.parent.parent.parent
 
@@ -57,10 +57,10 @@ os.makedirs(os.path.expanduser("~/.ros"), exist_ok=True)
 # Add project src directories to path
 sys.path.insert(0, str(repo_root))
 sys.path.insert(0, str(repo_root / "scripts"))
+sys.path.insert(0, str(repo_root / "scripts" / "map"))
 sys.path.insert(0, str(repo_root / "src" / "planning" / "global_planner"))
 sys.path.insert(0, str(repo_root / "src" / "planning" / "global_planner" / "global_planner"))
 sys.path.insert(0, str(repo_root / "src" / "planning" / "global_planner" / "global_planner" / "global_racetrajectory_optimization"))
-sys.path.insert(0, str(repo_root / "src" / "utilities" / "map_utils"))
 
 # -----------------------------------------------------------------------------
 # MOCK ROS ENVIRONMENT MODULES FOR OFFLINE PYTHON EXECUTION
