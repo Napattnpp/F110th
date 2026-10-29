@@ -5,8 +5,8 @@ ekf_filter_node:
     frequency: 30.0
     sensor_timeout: 0.1
     transform_time_offset: 0.0
-    transform_timeout: 0.0
-    print_diagnostics: true
+    transform_timeout: 0.02
+    print_diagnostics: false
     debug: false
     publish_tf: true
     publish_acceleration: false
@@ -18,8 +18,8 @@ ekf_filter_node:
 
     #> Codex: Wheel odometry from vesc_to_odom_node.
     odom0: /odom
-    odom0_queue_size: 10
-    odom0_nodelay: false
+    odom0_queue_size: 5
+    odom0_nodelay: true
     odom0_differential: false
     odom0_relative: false
     # odom0_pose_rejection_threshold: 5.0
@@ -52,14 +52,14 @@ ekf_filter_node:
 
     #> Codex: IMU topic from icm20948_ros2 node.
     imu0: /imu/data_raw
-    imu0_queue_size: 20
-    imu0_nodelay: false
+    imu0_queue_size: 5
+    imu0_nodelay: true
     imu0_differential: false
     imu0_relative: true
     # imu0_pose_rejection_threshold: 0.8
     # imu0_twist_rejection_threshold: 0.8
     # imu0_linear_acceleration_rejection_threshold: 1.5
-    imu0_remove_gravitational_acceleration: true
+    imu0_remove_gravitational_acceleration: false
 
     # --------------------------------------------------------------------------
     # IMU FUSION CONFIGURATION (imu0)
