@@ -242,10 +242,6 @@ def SpliniOvertakingTransition(state_machine: StateMachine) -> StateType:
         o_free = state_machine._check_ofree
         dwell_time = getattr(state_machine, 'state_dwell_time', 1.0)
 
-        # Minimum dwell time hysteresis: prevent high-frequency chatter during first 0.35s
-        if dwell_time < 0.35 and (spline_valid or state_machine.last_valid_avoidance_wpnts is not None):
-            return StateType.OVERTAKE
-
         # 1. Primary Success Exit: Opponent is passed and cleanly behind ego
         if state_machine._check_opponent_behind:
             state_machine.last_valid_avoidance_wpnts = None
@@ -258,17 +254,22 @@ def SpliniOvertakingTransition(state_machine: StateMachine) -> StateType:
 
         # 3. Sector Boundary Abort: Approaching corner/chicane without completing pass
         # Rejoin raceline immediately rather than carrying an offline spline into a narrow turn!
+        # Sector safety takes absolute precedence over dwell hysteresis!
         if not in_ot_sector:
             state_machine.last_valid_avoidance_wpnts = None
             return StateType.GB_TRACK if state_machine._check_gbfree else StateType.TRAILING
 
-        # 4. Timeout / Stalled Maneuver Abort: Pass taking longer than 2.2s
+        # 4. Minimum dwell time hysteresis: prevent high-frequency chatter during first 0.35s
+        if dwell_time < 0.35 and (spline_valid or state_machine.last_valid_avoidance_wpnts is not None):
+            return StateType.OVERTAKE
+
+        # 5. Timeout / Stalled Maneuver Abort: Pass taking longer than 2.0s
         # Re-tuck onto optimal raceline behind opponent instead of lingering offline
-        if dwell_time > 2.2:
+        if dwell_time > 2.0:
             state_machine.last_valid_avoidance_wpnts = None
             return StateType.TRAILING
 
-        # 5. Clearance Abort: Opponent encroaching onto corridor / safe clearance compromised
+        # 6. Clearance Abort: Opponent encroaching onto corridor / safe clearance compromised
         if not o_free:
             state_machine.last_valid_avoidance_wpnts = None
             return StateType.TRAILING

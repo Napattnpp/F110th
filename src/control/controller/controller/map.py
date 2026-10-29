@@ -239,8 +239,9 @@ class MAP_Controller:
         la_position = [self.position_in_map[0, 0] + v[0]*adv_ts_sp, self.position_in_map[0, 1] + v[1]*adv_ts_sp]
         idx_la_position = self.nearest_waypoint(la_position, self.waypoint_array_in_map[:, :2])
         global_speed = self.waypoint_array_in_map[idx_la_position, 2]
+        local_curv = abs(self.waypoint_array_in_map[idx_la_position, 5]) if self.waypoint_array_in_map.shape[1] > 5 else 0.0
         if (self.state in ("TRAILING", "StateType.TRAILING") and (self.opponent is not None)): #Trailing controller
-            speed_command = self.trailing_controller(global_speed)
+            speed_command = self.trailing_controller(global_speed, local_curv)
         else:
             self.trailing_speed = global_speed
             self.i_gap = 0
@@ -250,32 +251,49 @@ class MAP_Controller:
 
         return speed_command
     
-    def trailing_controller(self, global_speed):
+    def trailing_controller(self, global_speed, local_curv=0.0):
         """
-        Adjust the speed of the ego car to trail the opponent at a fixed distance
+        Adjust the speed of the ego car to trail the opponent at an adaptive distance,
+        implementing UNICORN-style slipstream drafting acceleration on straightaways.
         Inputs:
-            speed_command: velocity of global raceline
-            self.opponent: frenet s position and vs velocity of opponent
-            self.position_in_map_frenet: frenet s position and vs veloctz of ego car
+            global_speed: velocity of global raceline
+            local_curv: raceline curvature at speed lookahead point
         Returns:
             trailing_command: reference velocity for trailing
         """
-        
-        self.gap = (self.opponent[0] - self.position_in_map_frenet[0])%self.track_length # gap to opponent
+        self.gap = (self.opponent[0] - self.position_in_map_frenet[0]) % self.track_length # gap to opponent
         self.gap_actual = self.gap
-        self.gap_should = self.trailing_gap
+        
+        # Adaptive slipstream gap and tactical momentum surge (Pillar 3, UNICORN SRC-125):
+        # On straightaways (curvature < 0.08 rad/m), close down to 1.50m and surge closing speed
+        # to arrive in the passing window with strong forward momentum (Delta v >= +0.8 m/s).
+        opp_speed = float(self.opponent[2])
+        if local_curv < 0.08:
+            target_gap = max(1.50, self.trailing_gap - 0.50)
+            if self.gap_actual > 1.20 and opp_speed > 0.5:
+                # Tactical Slipstream Surge: allow ego to carry +0.8 m/s closing delta
+                surge_speed = min(global_speed, max(opp_speed + 0.80, opp_speed * 1.15))
+            else:
+                surge_speed = global_speed
+        else:
+            # In corners and chicanes, maintain conservative 2.0m buffer with zero surge
+            target_gap = self.trailing_gap
+            surge_speed = global_speed
+
+        self.gap_should = target_gap
         self.gap_error = self.gap_should - self.gap_actual
-        self.v_diff =  self.position_in_map_frenet[2] - self.opponent[2]
-        self.i_gap = np.clip(self.i_gap + self.gap_error/self.loop_rate, -10, 10)
+        self.v_diff = self.position_in_map_frenet[2] - opp_speed
+        self.i_gap = np.clip(self.i_gap + self.gap_error / self.loop_rate, -10, 10)
     
         p_value = self.gap_error * self.trailing_p_gain
         d_value = self.v_diff * self.trailing_d_gain
         i_value = self.i_gap * self.trailing_i_gain
 
-        
-        self.trailing_command = np.clip(self.opponent[2] - p_value - i_value - d_value, 0, global_speed) 
+        raw_cmd = opp_speed - p_value - i_value - d_value
+
+        self.trailing_command = np.clip(raw_cmd, 0, surge_speed) 
         # If the opponent is static/stopped or not visible, maintain at least the blind trailing speed
-        if (self.opponent[2] < 0.1) or (not self.opponent[4] and self.gap_actual > self.gap_should):
+        if (opp_speed < 0.1) or (not self.opponent[4] and self.gap_actual > self.gap_should):
             self.trailing_command = max(self.blind_trailing_speed, self.trailing_command)
             
         return self.trailing_command

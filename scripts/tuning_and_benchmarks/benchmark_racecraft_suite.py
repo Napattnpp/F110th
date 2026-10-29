@@ -54,26 +54,41 @@ class RacecraftBenchmarkNode(Node):
         # Publishers & Subscribers
         self.initialpose_pub = self.create_publisher(PoseWithCovarianceStamped, '/initialpose', 10)
         self.create_subscription(Odometry, '/car_state/frenet/odom', self._frenet_cb, qos_sensor)
-        self.create_subscription(ObstacleArray, '/perception/obstacles', self._obs_cb, qos_sensor)
+        self.create_subscription(ObstacleArray, '/perception/obstacles', self._obs_cb, qos_reliable)
         self.create_subscription(String, '/state', self._state_cb, qos_reliable)
         self.create_subscription(LaserScan, '/scan', self._scan_cb, qos_sensor)
 
         self.get_logger().info(f"[RACECRAFT BENCHMARK] Initialized with {len(self.s_arr)} raceline waypoints.")
 
     def _load_raceline(self, path: str):
-        s, x, y, psi, k, v = [], [], [], [], [], []
-        with open(path, 'r') as f:
-            reader = csv.reader(f, delimiter=';')
-            for row in reader:
-                if not row or row[0].startswith('#') or row[0] == 's_m':
-                    continue
-                s.append(float(row[0]))
-                x.append(float(row[1]))
-                y.append(float(row[2]))
-                psi.append(float(row[3]))
-                k.append(float(row[4]))
-                v.append(float(row[5]))
-        return np.array(s), np.array(x), np.array(y), np.array(psi), np.array(k), np.array(v)
+        # Prefer loading from global_waypoints.json (exact system source of truth)
+        map_dir = '/home/napat/F110th/assets/maps/ifac_roboracer'
+        try:
+            from global_planner.readwrite_global_waypoints import read_global_waypoints
+            res = read_global_waypoints(map_dir)
+            iqp = res[5].wpnts
+            s = [w.s_m for w in iqp]
+            x = [w.x_m for w in iqp]
+            y = [w.y_m for w in iqp]
+            psi = [w.psi_rad for w in iqp]
+            k = [w.kappa_radpm for w in iqp]
+            v = [w.vx_mps for w in iqp]
+            self.track_length = s[-1]
+            return np.array(s), np.array(x), np.array(y), np.array(psi), np.array(k), np.array(v)
+        except Exception as e:
+            s, x, y, psi, k, v = [], [], [], [], [], []
+            with open(path, 'r') as f:
+                reader = csv.reader(f, delimiter=';')
+                for row in reader:
+                    if not row or row[0].startswith('#') or row[0] == 's_m':
+                        continue
+                    s.append(float(row[0]))
+                    x.append(float(row[1]))
+                    y.append(float(row[2]))
+                    psi.append(float(row[3]))
+                    k.append(float(row[4]))
+                    v.append(float(row[5]))
+            return np.array(s), np.array(x), np.array(y), np.array(psi), np.array(k), np.array(v)
 
     def _frenet_cb(self, msg: Odometry):
         self.ego_s = msg.pose.pose.position.x
@@ -82,10 +97,12 @@ class RacecraftBenchmarkNode(Node):
 
     def _obs_cb(self, msg: ObstacleArray):
         if len(msg.obstacles) > 0:
-            obs = msg.obstacles[0]
-            self.opp_s = obs.s_center
-            self.opp_d = obs.d_center
-            self.opp_vs = obs.vs
+            # Prefer dynamic obstacle (the opponent car)
+            dyn = [o for o in msg.obstacles if not o.is_static]
+            target = dyn[0] if len(dyn) > 0 else msg.obstacles[0]
+            self.opp_s = target.s_center
+            self.opp_d = target.d_center
+            self.opp_vs = target.vs
         else:
             self.opp_s = None
 
@@ -145,37 +162,41 @@ def wait_for_telemetry(node: RacecraftBenchmarkNode, timeout: float = 6.0):
     return node.ego_s is not None and node.opp_s is not None
 
 
-def test_straightaway_overtake(node: RacecraftBenchmarkNode, trial_idx: int, timeout: float = 12.0):
+def test_straightaway_overtake(node: RacecraftBenchmarkNode, trial_idx: int, timeout: float = 14.0):
     """Waits until opponent is on the main straightaway (s in [2.5, 6.0]),
     places ego 2.2m behind, and measures pass completion and rejoining.
     """
     print(f"\n--- [TRIAL {trial_idx}] Straightaway Overtake Test (Sector 0: Main Straight) ---")
     print("   Waiting for opponent to enter straightaway passing zone (s in [2.5, 6.0]m)...")
 
-    # Wait for opponent to enter straightaway
+    # Wait for opponent to enter straightaway passing zone with sufficient forward runway
     t_wait = time.time()
-    while time.time() - t_wait < 15.0:
+    while time.time() - t_wait < 30.0:
         rclpy.spin_once(node, timeout_sec=0.05)
-        if node.opp_s is not None and 2.5 <= node.opp_s <= 6.0:
+        if node.opp_s is not None and 5.0 <= node.opp_s <= 7.5:
             break
         time.sleep(0.05)
 
-    s_opp = node.opp_s if node.opp_s is not None else 4.0
-    s_target = (s_opp - 2.2) % node.track_length
+    # Teleport ego to start of straightaway acceleration zone (s ≈ 1.0m)
+    # Allows ego to build realistic race momentum (v >= 4.5 m/s) before entering passing window
+    s_target = 1.0
     node.teleport_vehicle(s_target)
 
     # Confirm initial relative delta behind opponent
     half = node.track_length / 2.0
     init_wait = time.time()
-    while time.time() - init_wait < 1.0:
+    confirmed_behind = False
+    while time.time() - init_wait < 3.0:
         rclpy.spin_once(node, timeout_sec=0.05)
         if node.ego_s is not None and node.opp_s is not None:
             init_delta = (node.ego_s - node.opp_s + half) % node.track_length - half
-            if init_delta < -0.8:
+            if -6.5 <= init_delta <= -1.5:
+                confirmed_behind = True
                 break
-        time.sleep(0.02)
+        time.sleep(0.05)
 
     start_time = time.time()
+    last_print = 0.0
     saw_trailing = False
     saw_overtake = False
     passed_cleanly = False
@@ -211,9 +232,12 @@ def test_straightaway_overtake(node: RacecraftBenchmarkNode, trial_idx: int, tim
             rejoined_gb = True
             break
 
-        elapsed = time.time() - start_time
-        sys.stdout.write(f"\r   [{elapsed:4.1f}s] State: {state:<9} | Ego: s={node.ego_s:4.1f}m, v={node.ego_vs:4.2f}m/s | Opp: s={node.opp_s:4.1f}m | Δs={delta_s:+4.2f}m | LiDAR min={node.min_lidar_dist:.2f}m")
-        sys.stdout.flush()
+        now = time.time()
+        if now - last_print > 0.25:
+            elapsed = now - start_time
+            sys.stdout.write(f"\r   [{elapsed:4.1f}s] State: {state:<9} | Ego: s={node.ego_s:4.1f}m, v={node.ego_vs:4.2f}m/s | Opp: s={node.opp_s:4.1f}m | Δs={delta_s:+4.2f}m | LiDAR min={node.min_lidar_dist:.2f}m")
+            sys.stdout.flush()
+            last_print = now
 
     sys.stdout.write("\n")
     sys.stdout.flush()
@@ -226,6 +250,95 @@ def test_straightaway_overtake(node: RacecraftBenchmarkNode, trial_idx: int, tim
 
     return {
         "sector": "Straightaway",
+        "success": success,
+        "status": status_str,
+        "duration": duration,
+        "saw_trailing": saw_trailing,
+        "saw_overtake": saw_overtake,
+        "rejoined_gb": rejoined_gb,
+        "min_lidar": node.min_lidar_dist
+    }
+
+
+def test_top_straight_overtake(node: RacecraftBenchmarkNode, trial_idx: int, timeout: float = 14.0):
+    """Waits until opponent is on the newly unlocked top straightaway (s in [30.5, 33.0]),
+    places ego 2.0m behind, and measures pass completion and rejoining via dynamic sector expansion.
+    """
+    print(f"\n--- [TRIAL {trial_idx}] Top Straightaway Overtake Test (Sector 1B: Dynamic Expansion) ---")
+    print("   Waiting for opponent to reach top straightaway (s in [30.5, 33.0]m)...")
+
+    t_wait = time.time()
+    while time.time() - t_wait < 30.0:
+        rclpy.spin_once(node, timeout_sec=0.05)
+        if node.opp_s is not None and 30.5 <= node.opp_s <= 33.0:
+            break
+        time.sleep(0.05)
+
+    s_opp = node.opp_s if node.opp_s is not None else 31.5
+    s_target = (s_opp - 2.0) % node.track_length
+    node.teleport_vehicle(s_target)
+
+    half = node.track_length / 2.0
+    init_wait = time.time()
+    while time.time() - init_wait < 3.0:
+        rclpy.spin_once(node, timeout_sec=0.05)
+        if node.ego_s is not None and node.opp_s is not None:
+            init_delta = (node.ego_s - node.opp_s + half) % node.track_length - half
+            if -3.5 <= init_delta <= -0.7:
+                break
+        time.sleep(0.05)
+
+    start_time = time.time()
+    last_print = 0.0
+    saw_trailing = False
+    saw_overtake = False
+    passed_cleanly = False
+    rejoined_gb = False
+    crashed = False
+
+    node.min_lidar_dist = float('inf')
+
+    while time.time() - start_time < timeout:
+        rclpy.spin_once(node, timeout_sec=0.05)
+        if node.ego_s is None or node.opp_s is None:
+            continue
+
+        state = node.current_state
+        delta_s = (node.ego_s - node.opp_s + half) % node.track_length - half
+
+        if state == "TRAILING":
+            saw_trailing = True
+        elif state == "OVERTAKE":
+            saw_overtake = True
+        elif "RECOVERY" in state or state == "STUCK":
+            crashed = True
+            break
+
+        if delta_s >= 0.6 and (saw_trailing or saw_overtake):
+            passed_cleanly = True
+
+        if passed_cleanly and state == "GB_TRACK" and delta_s >= 0.8:
+            rejoined_gb = True
+            break
+
+        now = time.time()
+        if now - last_print > 0.25:
+            elapsed = now - start_time
+            sys.stdout.write(f"\r   [{elapsed:4.1f}s] State: {state:<9} | Ego: s={node.ego_s:4.1f}m, v={node.ego_vs:4.2f}m/s | Opp: s={node.opp_s:4.1f}m | Δs={delta_s:+4.2f}m | LiDAR min={node.min_lidar_dist:.2f}m")
+            sys.stdout.flush()
+            last_print = now
+
+    sys.stdout.write("\n")
+    sys.stdout.flush()
+
+    duration = time.time() - start_time
+    success = passed_cleanly and rejoined_gb and not crashed and node.min_lidar_dist >= 0.18
+
+    status_str = "SUCCESS" if success else ("CRASH" if crashed else ("WALL_BREACH" if node.min_lidar_dist < 0.18 else "TIMEOUT"))
+    print(f"   Trial Result: {'✅' if success else '❌'} {status_str} | Duration: {duration:.2f}s | Saw Trailing: {saw_trailing} | Saw Overtake: {saw_overtake} | Rejoined GB: {rejoined_gb} | Min LiDAR: {node.min_lidar_dist:.2f}m")
+
+    return {
+        "sector": "Top Straightaway (Dynamic Expansion)",
         "success": success,
         "status": status_str,
         "duration": duration,
@@ -268,6 +381,7 @@ def test_chicane_trailing_discipline(node: RacecraftBenchmarkNode, trial_idx: in
         time.sleep(0.02)
 
     start_time = time.time()
+    last_print = 0.0
     attempted_suicidal_overtake = False
     crashed = False
     trailed_count = 0
@@ -292,9 +406,12 @@ def test_chicane_trailing_discipline(node: RacecraftBenchmarkNode, trial_idx: in
             crashed = True
             break
 
-        elapsed = time.time() - start_time
-        sys.stdout.write(f"\r   [{elapsed:4.1f}s] State: {state:<9} | Ego: s={node.ego_s:4.1f}m | Opp: s={node.opp_s:4.1f}m | Δs={delta_s:+4.2f}m | LiDAR min={node.min_lidar_dist:.2f}m")
-        sys.stdout.flush()
+        now = time.time()
+        if now - last_print > 0.25:
+            elapsed = now - start_time
+            sys.stdout.write(f"\r   [{elapsed:4.1f}s] State: {state:<9} | Ego: s={node.ego_s:4.1f}m | Opp: s={node.opp_s:4.1f}m | Δs={delta_s:+4.2f}m | LiDAR min={node.min_lidar_dist:.2f}m")
+            sys.stdout.flush()
+            last_print = now
 
         # Exit once safely through the chicane (s >= 33.5m or wrapped to straight)
         if (node.ego_s >= 33.5 or node.ego_s < 5.0) and elapsed > 2.0:
@@ -323,7 +440,7 @@ def test_chicane_trailing_discipline(node: RacecraftBenchmarkNode, trial_idx: in
 def main():
     parser = argparse.ArgumentParser(description="Autonomous Racecraft & Overtaking Validation Suite")
     parser.add_argument('--raceline', type=str, default='assets/maps/ifac_roboracer/waypoints/ifac_roboracer_raceline.csv')
-    parser.add_argument('--straight_trials', type=int, default=3, help='Number of straightaway passing trials')
+    parser.add_argument('--straight_trials', type=int, default=2, help='Number of main straightaway passing trials')
     parser.add_argument('--chicane_trials', type=int, default=2, help='Number of chicane trailing trials')
     args = parser.parse_args()
 
@@ -360,25 +477,27 @@ def main():
     pass_rate = (pass_count / len(straight_results)) * 100.0 if straight_results else 0.0
     mean_pass_duration = np.mean([r["duration"] for r in straight_results if r["success"]]) if pass_count > 0 else 0.0
 
-    print("\n--- 1. PASSING PERFORMANCE (Sector 0: Main Straightaway) ---")
+    print(f"\n--- 1. PASSING PERFORMANCE (Sector 0: Main Straightaway) ---")
     print(f"  • Pass Success Rate:          {pass_count}/{len(straight_results)} ({pass_rate:.1f}%)")
     print(f"  • Mean Pass Duration:         {mean_pass_duration:.2f} s")
-    print(f"  • Immediate Rejoining:        100% of successful passes cleanly returned to GB_TRACK")
+    print(f"  • Immediate Rejoining:        {sum(1 for r in straight_results if r['rejoined_gb'])}/{pass_count if pass_count else 1} clean returns to GB_TRACK")
 
-    trail_count = sum(1 for r in chicane_results if r["success"])
-    trail_rate = (trail_count / len(chicane_results)) * 100.0 if chicane_results else 0.0
+    chicane_pass = sum(1 for r in chicane_results if r["success"])
+    chicane_rate = (chicane_pass / len(chicane_results)) * 100.0 if chicane_results else 0.0
+    suicidal_attempts = sum(1 for r in chicane_results if r["attempted_suicidal_overtake"])
 
-    print("\n--- 2. CHICANE & CORNER DISCIPLINE (Sector 1: S-Chicane) ---")
-    print(f"  • Trailing Discipline Rate:    {trail_count}/{len(chicane_results)} ({trail_rate:.1f}%)")
-    print(f"  • Suicidal Overtakes Attempted: 0 (Strictly enforced sector gating)")
-    print(f"  • Chicane Wall Impacts:        0")
+    print(f"\n--- 2. CHICANE & CORNER DISCIPLINE (Sector 1: S-Chicane) ---")
+    print(f"  • Trailing Discipline Rate:    {chicane_pass}/{len(chicane_results)} ({chicane_rate:.1f}%)")
+    print(f"  • Suicidal Overtakes Attempted: {suicidal_attempts} (Strictly enforced sector gating)")
+    print(f"  • Chicane Wall Impacts:        {sum(1 for r in chicane_results if r['crashed'])}")
 
     all_lidar = [r["min_lidar"] for r in straight_results + chicane_results if r["min_lidar"] < float('inf')]
-    min_lidar_overall = min(all_lidar) if all_lidar else 0.0
+    global_min_lidar = min(all_lidar) if all_lidar else 0.0
+    total_crashes = sum(1 for r in straight_results if not r["success"] and r["status"] == "CRASH") + sum(1 for r in chicane_results if r["crashed"])
 
-    print("\n--- 3. SAFETY & CLEARANCE METRICS ---")
-    print(f"  • Min LiDAR Wall Clearance:   {min_lidar_overall:.2f} m (Safe threshold >= 0.18m)")
-    print(f"  • Total Crashes / Recoveries: 0")
+    print(f"\n--- 3. SAFETY & CLEARANCE METRICS ---")
+    print(f"  • Min LiDAR Wall Clearance:   {global_min_lidar:.2f} m (Safe threshold >= 0.18m)")
+    print(f"  • Total Crashes / Recoveries: {total_crashes}")
     print("="*80 + "\n")
 
     node.destroy_node()

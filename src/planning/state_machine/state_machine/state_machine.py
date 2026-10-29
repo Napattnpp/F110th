@@ -141,6 +141,7 @@ class StateMachine(Node):
         self.state = StateType(self.params.initial_state)
         self.state_start_time = self.get_clock().now()
         self.state_dwell_time = 0.0
+        self.last_ot_exit_time = None
         self.local_waypoints = WpntArray()
         self.first_visualization = True
         self.x_viz = 0
@@ -459,18 +460,51 @@ class StateMachine(Node):
                     return True
         return False
 
+    def _check_dynamic_track_feasibility(self, cur_idx: int, runway_wpnts: int = 20) -> bool:
+        """Evaluates track geometry over the upcoming passing horizon (Pillar 1: Dynamic Horizon Feasibility).
+        Ensures upcoming track curvature is within safe tire limits and track has sufficient drivable width.
+        """
+        if not self.glb_wpnts or len(self.glb_wpnts) == 0:
+            return True
+        N = len(self.glb_wpnts)
+        ego_speed = max(2.5, self.cur_vs if self.cur_vs is not None else 0.0)
+        # Dynamic runway scaling: at higher speeds, require longer low-curvature runway ahead
+        wpnt_spacing = (self.track_length / N) if (self.track_length is not None and N > 0) else 0.1
+        dyn_runway = max(runway_wpnts, int((ego_speed * 1.0) / max(0.05, wpnt_spacing)))
+
+        for offset in range(dyn_runway):
+            idx = (cur_idx + offset) % N
+            w = self.glb_wpnts[idx]
+            curv = abs(getattr(w, 'kappa_radpm', 0.0))
+            if curv > 0.15:
+                return False
+            d_left = getattr(w, 'd_left', 1.0)
+            d_right = abs(getattr(w, 'd_right', 1.0))
+            if d_left > 0.1 and d_right > 0.1:
+                width = d_left + d_right
+                if width < 1.75:
+                    return False
+        return True
+
     @property
     def _check_ot_sector(self) -> bool:
         if self.params.overtake_mode == "spliner":
             # Guardrail 1: Require an actual physical obstacle/opponent ahead
             if not self._check_valid_opponent_ahead:
                 return False
-            # Guardrail 2: If overtaking sectors are loaded, enforce them
+
+            cur_idx = self.get_closest_glb_wpnt_idx(self.cur_s if self.cur_s is not None else 0.0)
+
+            # Guardrail 2: Dynamic Track Feasibility Check (Absolute Safety Floor)
+            if not self._check_dynamic_track_feasibility(cur_idx, runway_wpnts=15):
+                return False
+
+            # Guardrail 3: Sector Gating (Static ot_sectors is strictly authoritative!)
+            # Hairpins and chicanes marked with ot_flag: false must NEVER be bypassed!
             if hasattr(self, 'ot_sectors') and len(self.ot_sectors) > 0:
-                cur_idx = self.get_closest_glb_wpnt_idx(self.cur_s if self.cur_s is not None else 0.0)
                 for sector in self.ot_sectors:
                     if sector['ot_flag']:
-                        if (sector['start'] <= cur_idx <= (sector['end']+1)):
+                        if sector['start'] <= cur_idx <= (sector['end'] + 1):
                             return True
                 return False
             return True
@@ -486,25 +520,39 @@ class StateMachine(Node):
         """Evaluates whether all dynamic and sector racecraft conditions are met
         to safely launch an overtake from TRAILING mode.
         """
+        # 0. Overtake Cooldown: enforce mandatory 1.2s settling in TRAILING before re-attacking
+        # Prevents high-frequency chattering and perpetual offline dwelling.
+        now = self.get_clock().now()
+        if hasattr(self, 'last_ot_exit_time') and self.last_ot_exit_time is not None:
+            time_since_ot = (now - self.last_ot_exit_time).nanoseconds / 1e9
+            if time_since_ot < 1.2:
+                return False
+
         # 1. Must be in an approved overtaking sector
         if not self._check_ot_sector:
             return False
 
-        # 2. Must have sufficient remaining runway in the overtaking sector (>= 2.5m before corner/chicane)
+        cur_idx = self.get_closest_glb_wpnt_idx(self.cur_s if self.cur_s is not None else 0.0)
+
+        # 2. Runway enforcement: Must have at least 20 waypoints (~2.0m) remaining in passing sector
+        # Prohibits launching late passes that cannot finish before the braking zone/corner.
         if hasattr(self, 'ot_sectors') and len(self.ot_sectors) > 0:
-            cur_idx = self.get_closest_glb_wpnt_idx(self.cur_s if self.cur_s is not None else 0.0)
             in_safe_runway = False
             for sector in self.ot_sectors:
                 if sector['ot_flag']:
-                    min_runway_wpnts = 25
+                    min_runway_wpnts = 20
                     if sector['start'] <= cur_idx <= max(sector['start'], sector['end'] - min_runway_wpnts):
                         in_safe_runway = True
                         break
             if not in_safe_runway:
                 return False
 
-        # 3. Must be within the active passing window (0.6m <= gap <= 2.6m)
-        # If gap > 2.6m, ego should trail on the optimal raceline to close the distance.
+        # Dynamic curvature feasibility across the runway
+        if not self._check_dynamic_track_feasibility(cur_idx, runway_wpnts=18):
+            return False
+
+        # 3. Must be within the decisive passing window (0.60m <= gap <= 3.60m)
+        # If gap > 3.60m, ego must remain in TRAILING slipstream to close the distance.
         if not self.obstacles or self.cur_s is None or self.track_length is None:
             return False
 
@@ -512,7 +560,7 @@ class StateMachine(Node):
         opp_speed = 0.0
         for obs in self.obstacles:
             gap = (obs.s_center - self.cur_s) % self.track_length
-            if 0.60 <= gap <= 2.60:
+            if 0.60 <= gap <= 3.60:
                 obs_size = getattr(obs, 'size', 0.0)
                 if obs_size <= 0.0 and hasattr(obs, 's_start') and hasattr(obs, 's_end'):
                     obs_size = abs(obs.s_end - obs.s_start)
@@ -523,13 +571,14 @@ class StateMachine(Node):
         if not in_passing_window:
             return False
 
-        # 4. Trailing Dwell Stability: ego should have settled in TRAILING for at least 0.2s
-        if getattr(self, 'state_dwell_time', 0.0) < 0.20:
+        # 4. Trailing Dwell Stability: ego must have settled in TRAILING for at least 0.25s
+        # Guarantees PID trailing speed synchronization and stable raceline tracking before pulling out.
+        if getattr(self, 'state_dwell_time', 0.0) < 0.25:
             return False
 
-        # 5. Speed / momentum requirement: ego must have comparable speed or speed > 1.8 m/s
+        # 5. Speed / momentum requirement: ego must have sufficient speed (>= 1.5 m/s)
         ego_speed = self.cur_vs if self.cur_vs is not None else 0.0
-        if ego_speed < max(1.8, opp_speed - 0.25):
+        if ego_speed < max(1.5, opp_speed - 0.35):
             return False
 
         # 6. Avoidance corridor availability and clearance
@@ -552,7 +601,21 @@ class StateMachine(Node):
                     # Wrapping distance to check if in front
                     dist_to_obj = (obs_s - self.cur_s) % self.track_length
                     if dist_to_obj < horizon:
-                        # Find closest avoidance waypoint in Frenet s
+                        # 1. Live alongside check: if ego is physically alongside the obstacle right now,
+                        # verify obstacle has not swerved laterally into ego's path
+                        ego_s_diff = abs((self.cur_s - obs_s + half_track) % self.track_length - half_track)
+                        obs_len = max(0.30, abs(getattr(obs, 's_end', obs_s) - getattr(obs, 's_start', obs_s)))
+                        if ego_s_diff < (obs_len / 2.0 + 0.20):
+                            ego_lat_clearance = abs(self.cur_d - obs.d_center)
+                            if ego_lat_clearance < 0.25:
+                                o_free = False
+                                self.get_logger().warn(
+                                    f"[HSM] O_FREE False: obstacle encroaching alongside ego (lat_diff: {ego_lat_clearance:.3f}m < 0.25m)",
+                                    throttle_duration_sec=1.0
+                                )
+                                break
+
+                        # 2. Apex clearance check: evaluate planned avoidance path clearance strictly at the obstacle apex
                         s_diffs = np.array([
                             abs((avoid_s.s_m - obs_s + half_track) % self.track_length - half_track)
                             for avoid_s in self.last_valid_avoidance_wpnts
@@ -560,9 +623,9 @@ class StateMachine(Node):
                         min_s_diff = np.min(s_diffs)
                         avoid_wpnt_idx = int(np.argmin(s_diffs))
 
-                        # Evaluate clearance if obstacle is longitudinally co-located with spline envelope
-                        obs_len = max(0.30, abs(getattr(obs, 's_end', obs_s) - getattr(obs, 's_start', obs_s)))
-                        if min_s_diff < (obs_len / 2.0 + 0.45):
+                        # Evaluate clearance only if closest waypoint is truly alongside the apex (within 0.20m)
+                        # Prevents false aborts on initial transition/ramp waypoints where d is still near 0!
+                        if min_s_diff < 0.20:
                             ot_d = self.last_valid_avoidance_wpnts[avoid_wpnt_idx].d_m
                             obs_d_center = obs.d_center
                             obs_rad = max(0.15, abs(getattr(obs, 'd_left', obs_d_center + 0.15) - getattr(obs, 'd_right', obs_d_center - 0.15)) / 2.0)
@@ -578,7 +641,7 @@ class StateMachine(Node):
                             if clearance < self.params.lateral_width_ot_m:
                                 o_free = False
                                 self.get_logger().info(
-                                    f"[HSM] O_FREE False: clearance to obstacle ({clearance:.3f} m) < safety margin ({self.params.lateral_width_ot_m:.3f} m)",
+                                    f"[HSM] O_FREE False: apex clearance ({clearance:.3f} m) < safety margin ({self.params.lateral_width_ot_m:.3f} m)",
                                     throttle_duration_sec=1.0
                                 )
                                 break
@@ -1056,6 +1119,8 @@ class StateMachine(Node):
             new_state = self.state_transition(self)
 
         if new_state != self.state:
+            if self.state == StateType.OVERTAKE:
+                self.last_ot_exit_time = now
             self.state_start_time = now
             self.state_dwell_time = 0.0
             self.state = new_state
