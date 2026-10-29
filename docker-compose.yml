@@ -16,7 +16,7 @@ x-common-settings: &common-settings
     - "23"
     - "input"
   environment:
-    - DISPLAY=${DISPLAY}
+    - DISPLAY=${DISPLAY:-}
     - XAUTHORITY=${XAUTHORITY:-}
     - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:?ROS_DOMAIN_ID is required in .env to prevent vehicle network cross-talk}
     - ROS_AUTOMATIC_DISCOVERY_RANGE=${ROS_AUTOMATIC_DISCOVERY_RANGE:-SUBNET}
