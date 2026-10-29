@@ -88,7 +88,8 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Install additional Python packages (ensure transforms3d>=0.4.2 to prevent np.float deprecation, yamldataclassconfig<2 for gym)
-RUN python3 -m pip install --index-url https://pypi.org/simple smbus2 "transforms3d>=0.4.2" tqdm "numpy<2" scikit-image trajectory-planning-helpers casadi scikit-learn filterpy numba pandas matplotlib pynput quadprog==0.1.11 "yamldataclassconfig>=1.5.0,<2" uv
+RUN rm -rf /usr/lib/python3/dist-packages/transforms3d* \
+    && python3 -m pip install --ignore-installed --index-url https://pypi.org/simple smbus2 "transforms3d>=0.4.2" tqdm "numpy<2" scikit-image trajectory-planning-helpers casadi scikit-learn filterpy numba pandas matplotlib pynput quadprog==0.1.11 "yamldataclassconfig>=1.5.0,<2" uv
 
 # 5. Create non-root user matching the host UID/GID
 RUN groupadd -f -g ${GID} ${USER} \
