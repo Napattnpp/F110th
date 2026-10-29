@@ -44,12 +44,45 @@ echo -e "${CYAN}║  Auto-detects platform • Builds Docker • Launches stack 
 echo -e "${CYAN}╚═══════════════════════════════════════════════════════════╝${NC}"
 echo ""
 
-# Step 1: Bootstrap (Dependencies, .env initialization, virtual environment)
-section "Step 1: System & Workspace Bootstrap"
+# Step 1: Host System & Hardware Performance Optimization (First!)
+if [ -f /etc/nv_tegra_release ]; then
+    section "Step 1: Jetson Host Performance & Hardware Optimization"
+    info "Configuring host clocks, udev rules, network UDP buffers, user groups, and LiDAR static IP first."
+    if [ -t 0 ]; then
+        read -p "Run Jetson host hardware performance & latency optimization (sudo required)? (y/n) " -n 1 -r
+        echo ""
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            bash "$REPO_DIR/scripts/setup/setup-jetson.sh"
+        else
+            warn "Jetson host optimization skipped by user."
+        fi
+    else
+        bash "$REPO_DIR/scripts/setup/setup-jetson.sh"
+    fi
+elif [ "$(uname)" = "Linux" ]; then
+    section "Step 1: Linux Host Network & Wi-Fi Latency Tuning"
+    if [ -t 0 ]; then
+        read -p "Run Linux host network UDP buffer & Wi-Fi latency tuning (sudo required)? (y/n) " -n 1 -r
+        echo ""
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            bash "$REPO_DIR/scripts/setup/setup-network-host.sh"
+        else
+            warn "Linux host network latency tuning skipped by user."
+        fi
+    else
+        bash "$REPO_DIR/scripts/setup/setup-network-host.sh"
+    fi
+else
+    section "Step 1: Host Environment Audit"
+    info "Running on macOS developer workstation."
+fi
+
+# Step 2: System & Workspace Bootstrap
+section "Step 2: System & Workspace Bootstrap"
 bash "$REPO_DIR/scripts/setup/bootstrap.sh"
 
-# Step 2: Platform Configuration
-section "Step 2: Platform Configuration"
+# Step 3: Platform Configuration
+section "Step 3: Platform & Environment Configuration"
 bash "$REPO_DIR/scripts/setup/configure.sh"
 
 # Load derived configuration
@@ -59,29 +92,19 @@ set +a
 
 SERVICE="${DOCKER_PROFILE:-general}"
 
-# Step 3: Host Optimization & Latency Tuning
-if [ -f /etc/nv_tegra_release ]; then
-    section "Step 3: Jetson Host Optimization"
-    read -p "Run Jetson host performance & latency optimization (sudo required)? (y/n) " -n 1 -r
-    echo ""
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
-        bash "$REPO_DIR/scripts/setup/setup-jetson.sh"
-    else
-        warn "Jetson host optimization skipped."
-    fi
-elif [ "$(uname)" = "Linux" ]; then
-    section "Step 3: Linux Host Network & Wi-Fi Latency Tuning"
-    read -p "Run Linux host network UDP buffer & Wi-Fi latency tuning (sudo required)? (y/n) " -n 1 -r
-    echo ""
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
-        bash "$REPO_DIR/scripts/setup/setup-network-host.sh"
-    else
-        warn "Linux host network latency tuning skipped."
-    fi
-fi
+# Step 4: Docker Container Stack (The Final Step)
+section "Step 4: Build & Launch Container Stack (Final Step)"
 
-# Step 4: Docker Build & Launch
-section "Step 4: Build & Launch Container Stack"
+info "Validating Docker engine & container runtime..."
+if ! command -v docker >/dev/null 2>&1; then
+    error "Docker is not installed. Please install Docker before launching the container stack."
+fi
+if ! docker compose version >/dev/null 2>&1; then
+    error "'docker compose' plugin is not installed."
+fi
+if ! docker info >/dev/null 2>&1; then
+    error "Docker daemon is not running or current user lacks group permissions (run: sudo usermod -aG docker \$USER && newgrp docker)."
+fi
 
 info "Building Docker image for ${CYAN}$SERVICE${NC} service..."
 docker compose --env-file "$REPO_DIR/.env" build "$SERVICE"

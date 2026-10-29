@@ -42,8 +42,24 @@ help: ## Show available Makefile targets
 	@grep -E '^[a-zA-Z0-9_-]+:.*?## ' Makefile | awk 'BEGIN {FS = ":.*?## "}; {printf "    \033[32m%-18s\033[0m %s\n", $$1, $$2}'
 	@echo ""
 
-setup: ## First-time setup: bootstrap environment, configure platform, and build container stack
+setup: ## First-time setup: host optimization, bootstrap, and container stack (Docker is last)
 	@bash scripts/setup/setup.sh
+
+host_setup: ## Configure host performance, udev rules, network, and groups (No Docker required)
+	@if [ -f /etc/nv_tegra_release ]; then \
+		bash scripts/setup/setup-jetson.sh; \
+	elif [ "$$(uname)" = "Linux" ]; then \
+		bash scripts/setup/setup-network-host.sh; \
+	else \
+		echo "Host is macOS. No kernel tuning needed."; \
+	fi
+
+hardware_check: ## Run non-destructive audit of VESC, LiDAR, joystick, clocks, and buffers
+	@echo "=== Physical Hardware & Interface Audit ==="
+	@[ -e /dev/sensors/vesc ] && echo "  \033[32m[✓]\033[0m VESC Controller: Found (/dev/sensors/vesc)" || echo "  \033[33m[!]\033[0m VESC Controller: Not detected at /dev/sensors/vesc"
+	@ls /dev/input/js* >/dev/null 2>&1 && echo "  \033[32m[✓]\033[0m Gamepad / Joystick: Found" || echo "  \033[33m[!]\033[0m Gamepad / Joystick: None connected (/dev/input/js*)"
+	@ping -c 1 -W 1 192.168.0.10 >/dev/null 2>&1 && echo "  \033[32m[✓]\033[0m Hokuyo LiDAR: Reachable at 192.168.0.10" || echo "  \033[33m[!]\033[0m Hokuyo LiDAR: Not pingable at 192.168.0.10"
+	@sysctl net.core.rmem_max 2>/dev/null | grep -q "2147483647" && echo "  \033[32m[✓]\033[0m Kernel UDP Buffers: Locked to 2GB" || echo "  \033[33m[!]\033[0m Kernel UDP Buffers: Below 2GB"
 
 bootstrap: ## Validate system dependencies and initialize .env and python virtual environment
 	@bash scripts/setup/bootstrap.sh

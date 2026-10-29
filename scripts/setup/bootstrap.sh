@@ -35,11 +35,14 @@ error()   { echo -e "${RED}[✗]${NC}    $*"; exit 1; }
 info "Checking system dependencies..."
 command -v git >/dev/null 2>&1 || error "Git is not installed."
 command -v python3 >/dev/null 2>&1 || error "Python 3 is not installed."
-command -v docker >/dev/null 2>&1 || error "Docker is not installed."
-docker compose version >/dev/null 2>&1 || error "'docker compose' plugin is not installed."
-docker info >/dev/null 2>&1 || error "Docker daemon is not running. Please start Docker / Docker Desktop."
 
-success "System dependencies and Docker daemon verified."
+if ! command -v docker >/dev/null 2>&1; then
+    warn "Docker is not yet installed. Proceeding with host configuration (Docker will be checked in the final step)."
+elif ! docker info >/dev/null 2>&1; then
+    warn "Docker daemon is not running or current user lacks group permissions. Proceeding with host configuration."
+else
+    success "System dependencies and Docker daemon verified."
+fi
 
 # 1. Initialize .env with Interactive Wizard if missing or unconfigured
 if [ ! -f "$TARGET_ENV" ]; then

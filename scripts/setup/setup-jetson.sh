@@ -38,6 +38,12 @@ fi
 
 info "Starting Jetson Host Optimization..."
 
+# 0. User Group Membership (dialout, tty, input, video, i2c, docker)
+TARGET_USER="${SUDO_USER:-$USER}"
+info "Adding user '${TARGET_USER}' to hardware & container groups..."
+sudo usermod -aG dialout,tty,input,video,i2c,docker "$TARGET_USER" || warn "Failed to update user groups"
+success "User groups updated (dialout, tty, input, video, i2c, docker)."
+
 # 1. Lock NVPModel MAXN & jetson_clocks
 info "Setting NVPModel MAXN (mode 0) & locking clocks..."
 sudo nvpmodel -m 0 || warn "Failed to set nvpmodel mode 0"
@@ -106,14 +112,64 @@ fi
 info "Installing persistent jetson_clocks systemd service..."
 sudo cp "$JETSON_CFG_DIR/f1tenth-jetson-clocks.service" /etc/systemd/system/
 sudo systemctl daemon-reload
-sudo systemctl enable f1tenth-jetson-clocks.service
+sudo systemctl enable --now f1tenth-jetson-clocks.service || true
 success "Persistent jetson_clocks systemd service enabled."
 
-# 9. Tmux Dotfile Symlink
+# 9. Ethernet Static IP for Hokuyo LiDAR (ERR-LIDAR-01)
+info "Configuring LiDAR Ethernet static IP (192.168.0.15/24)..."
+ETH_IFACE=$(ip -o link show 2>/dev/null | awk -F': ' '$2 ~ /^(en|eth)/ {print $2; exit}')
+if [ -n "$ETH_IFACE" ]; then
+    CON_NAME=$(nmcli -t -f NAME,DEVICE connection show 2>/dev/null | grep ":$ETH_IFACE" | cut -d: -f1 | head -n1 || echo "")
+    if [ -z "$CON_NAME" ]; then
+        CON_NAME="Wired connection 1"
+    fi
+    sudo nmcli connection modify "$CON_NAME" ipv4.addresses 192.168.0.15/24 ipv4.method manual ipv4.never-default yes 2>/dev/null || \
+    sudo ip addr add 192.168.0.15/24 dev "$ETH_IFACE" 2>/dev/null || true
+    success "Ethernet interface '$ETH_IFACE' static IP configured (192.168.0.15/24, never-default: yes)."
+else
+    warn "No physical Ethernet interface found (skipping LiDAR IP assignment)."
+fi
+
+# 10. Tmux Dotfile Symlink
 info "Symlinking tmux configuration..."
 ln -sf "$REPO_DIR/configs/tmux.conf" ~/.tmux.conf
 success "Tmux config symlinked."
 
+# 11. Hardware Diagnostic Audit (Non-destructive)
+echo ""
+echo -e "${CYAN}╔═══════════════════════════════════════════════════════════╗${NC}"
+echo -e "${CYAN}║  Physical Hardware & Driver Audit                         ║${NC}"
+echo -e "${CYAN}╚═══════════════════════════════════════════════════════════╝${NC}"
+
+# Check VESC
+if [ -e /dev/sensors/vesc ]; then
+    success "VESC Controller: Found (/dev/sensors/vesc -> $(readlink -f /dev/sensors/vesc))"
+else
+    warn "VESC Controller: Not detected at /dev/sensors/vesc. Check USB connection."
+fi
+
+# Check Gamepad
+if ls /dev/input/js* >/dev/null 2>&1; then
+    success "Gamepad / Joystick: Found ($(ls /dev/input/js* | tr '\n' ' '))"
+else
+    warn "Gamepad / Joystick: None connected. Pair via Bluetooth or plug in wireless receiver."
+fi
+
+# Check LiDAR ping
+if ping -c 1 -W 1 192.168.0.10 >/dev/null 2>&1; then
+    success "Hokuyo LiDAR: Reachable at 192.168.0.10 (ping OK)"
+else
+    warn "Hokuyo LiDAR: 192.168.0.10 not pingable. (Cable disconnected or LiDAR unpowered)"
+fi
+
+# Check Clocks & Governor
+CUR_GOV=$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2>/dev/null || echo "unknown")
+if [ "$CUR_GOV" = "performance" ]; then
+    success "CPU Governor: performance"
+else
+    warn "CPU Governor: $CUR_GOV (expected performance)"
+fi
+
 info "====================================================="
-success "Jetson host performance setup complete!"
+success "Jetson host performance & hardware setup complete!"
 info "====================================================="
