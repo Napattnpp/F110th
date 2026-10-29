@@ -596,6 +596,9 @@ def process_map(map_rel_path):
             filter_kernel_size_=3,
             required_laps_=1,
             reverse_mapping_=False,
+            s_reg_=configured_s_reg,
+            stepsize_reg_=configured_stepsize_reg,
+            curvlim_=configured_curvlim,
             loginfo_=lambda msg: log_print(f"[INFO] {msg}"),
             logwarn_=lambda msg: log_print(f"[WARN] {msg}"),
             logerror_=lambda msg: log_print(f"[ERROR] {msg}")
@@ -616,14 +619,40 @@ def process_map(map_rel_path):
 
     configured_sw = 0.30
     configured_sw_sp = 0.30
+    configured_s_reg = None
+    configured_stepsize_reg = None
+    configured_curvlim = None
     if params_file.exists():
         try:
             with open(params_file, 'r') as f:
-                pdata = yaml.safe_load(f)
+                pdata = yaml.safe_load(f) or {}
                 ros_params = pdata.get('global_planner', {}).get('ros__parameters', {})
-                configured_sw = float(ros_params.get('safety_width', 0.30))
-                configured_sw_sp = float(ros_params.get('safety_width_sp', 0.30))
-                log_print(f"[INFO] Using {config_source} config ({params_file.name}): safety_width={configured_sw}m, safety_width_sp={configured_sw_sp}m")
+                configured_sw = float(ros_params.get('safety_width', pdata.get('safety_width', 0.30)))
+                configured_sw_sp = float(ros_params.get('safety_width_sp', pdata.get('safety_width_sp', 0.30)))
+
+                if 's_reg' in ros_params:
+                    configured_s_reg = float(ros_params['s_reg'])
+                elif 's_reg' in pdata:
+                    configured_s_reg = float(pdata['s_reg'])
+
+                if 'stepsize_reg' in ros_params:
+                    configured_stepsize_reg = float(ros_params['stepsize_reg'])
+                elif 'stepsize_reg' in pdata:
+                    configured_stepsize_reg = float(pdata['stepsize_reg'])
+
+                if 'curvlim' in ros_params:
+                    configured_curvlim = float(ros_params['curvlim'])
+                elif 'curvlim' in pdata:
+                    configured_curvlim = float(pdata['curvlim'])
+
+                param_str = f"safety_width={configured_sw}m, safety_width_sp={configured_sw_sp}m"
+                if configured_s_reg is not None:
+                    param_str += f", s_reg={configured_s_reg}"
+                if configured_stepsize_reg is not None:
+                    param_str += f", stepsize_reg={configured_stepsize_reg}m"
+                if configured_curvlim is not None:
+                    param_str += f", curvlim={configured_curvlim}rad/m"
+                log_print(f"[INFO] Using {config_source} config ({params_file.name}): {param_str}")
         except Exception as e:
             log_print(f"[WARN] Could not parse {params_file.name}: {e}")
 

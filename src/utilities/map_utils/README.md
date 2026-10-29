@@ -1,66 +1,34 @@
-# Map Cleaner
+# F1TENTH Map Cleaning & Binary Mask Utilities
 
-Lightweight Python tool for cleaning SLAM/Cartographer/similar map images. The main entry point is `map_cleaner_matplotlib.py`, which supports interactive tuning with Matplotlib and non-interactive batch export.
+Core map cleaning library and algorithms conforming to **[ADR-003](file:///Users/napat/Developer/Babel/docs/DECISIONS.md#adr-003--web-based-tooling-over-x11-double-forwarding)**, **[ADR-004](file:///Users/napat/Developer/Babel/docs/DECISIONS.md#adr-004--standardized-4-subfolder-map-architecture--testing-isolation)**, and **[ADR-010](file:///Users/napat/Developer/Babel/docs/DECISIONS.md#adr-010--single-canonical-tooling-mandate--tooling-bloat-elimination)**.
+
+---
+
+## Architecture & Canonical Tools
+
+Under **ADR-010 (Single Canonical Tooling Mandate)**, all map cleaning operations share the identical underlying engine ([`map_cleaner_core.py`](map_cleaner_core.py)) with zero display or X11 dependencies:
+
+1. **Interactive Mode (Canonical Web Studio)**:
+   ```bash
+   make clean_web MAP=<map_name>
+   # or:
+   python3 scripts/map/map_cleaner_web.py --map <map_name> --port 8051
+   ```
+   - Synchronized side-by-side view (Raw SLAM vs. Cleaned Track).
+   - Real-time parameter sliders (white threshold, wall thickness, smooth radius, min blob).
+   - Canvas tools: ✏️ Wall Brush, 🧽 Track Eraser, 📏 Metric Track Ruler.
+   - Bakes 100% ADR-004 compliant `clean/<map>.pgm` (3-value grid) and `waypoint_gen/<map>_waypoint_gen.pgm` (strict 2-color binary mask).
+
+2. **Automated Batch Mode (CI / Scripting)**:
+   ```bash
+   make clean_map MAP=<map_name>
+   # or:
+   python3 scripts/map/manage_map.py clean <map_name>
+   ```
+
+---
 
 ## Files
 
-- `map_cleaner_matplotlib.py` - main app for interactive and batch map cleaning
-- `map_cleaner_core.py` - shared cleaning logic used by the main app
-- `requirements.txt` - Python dependencies
-- `setup_jetson.sh` - optional setup helper for Jetson/Linux systems
-- `map_evaluate/` - sample maps for testing
-
-## Install
-
-```bash
-pip install -r requirements.txt
-```
-
-On Jetson/Linux, you can also run:
-
-```bash
-bash setup_jetson.sh
-```
-
-## Run
-
-Interactive mode:
-
-```bash
-python3 map_cleaner_matplotlib.py map_evaluate/cb4_7th_floor.yaml
-```
-
-Batch mode:
-
-```bash
-python3 map_cleaner_matplotlib.py map_evaluate/cb4_7th_floor.yaml --batch -o clean.pgm
-```
-
-Demo mode:
-
-```bash
-python3 map_cleaner_matplotlib.py --demo
-```
-
-Useful options:
-
-```bash
-python3 map_cleaner_matplotlib.py --help
-```
-
-The cleaner accepts ROS map YAML, PGM, PNG, and other image formats OpenCV can read. For ROS YAML files, it follows the `image:` field and reads `resolution:` for measurement.
-
-## Interactive Controls
-
-- `S` saves the cleaned map
-- `Q` quits
-- `R` resets cleaning parameters from auto-tuning
-- Click two points on the cleaned image to measure distance
-
-## Output
-
-PGM output uses:
-
-- `0` for walls
-- `255` for free space
-- `128` for unknown space
+- `map_cleaner_core.py`: Core algorithm implementation (`MapCleaner`). Contains automated morphological filtering, auto-tuning, and cubic B-spline contour smoothing.
+- `requirements.txt`: Python requirements (`opencv-python`, `numpy`, `scipy`).

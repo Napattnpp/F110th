@@ -51,13 +51,13 @@ def generate_launch_description():
     )
     map_name_arg = DeclareLaunchArgument(
         'map_name',
-        default_value='ifac_roboracer',
-        description='Target map name (e.g. ifac_roboracer)'
+        default_value='',
+        description='Target map name (optional, only needed for legacy graph_based overtake_mode)'
     )
-    sim_arg = DeclareLaunchArgument(
-        'sim',
+    fake_obstacles_arg = DeclareLaunchArgument(
+        'fake_obstacles',
         default_value='false',
-        description='True/False if you want to run simulation'
+        description='Publish synthetic fake obstacles for standalone tracker benchmarking'
     )
     enable_recovery_arg = DeclareLaunchArgument(
         'enable_recovery',
@@ -66,35 +66,43 @@ def generate_launch_description():
     )
 
     # Include controller manager
-    controller_launch = IncludeLaunchDescription(
-        get_launch_source('controller', 'controller_launch'),
-        launch_arguments={
-            'mode': LaunchConfiguration('ctrl_algo'),
-            'LU_table': LaunchConfiguration('LU_table'),
-            'racecar_version': LaunchConfiguration('racecar_version')
-        }.items()
-    )
+    controller_source = get_launch_source('controller', 'controller_launch')
+    controller_launch = None
+    if controller_source is not None:
+        controller_launch = IncludeLaunchDescription(
+            controller_source,
+            launch_arguments={
+                'mode': LaunchConfiguration('ctrl_algo'),
+                'LU_table': LaunchConfiguration('LU_table'),
+                'racecar_version': LaunchConfiguration('racecar_version')
+            }.items()
+        )
 
     # Include state machine
-    state_machine_launch = IncludeLaunchDescription(
-        get_launch_source('state_machine', 'state_machine_launch'),
-        launch_arguments={
-            'mode': 'head_to_head',
-            'overtake_mode': LaunchConfiguration('overtake_mode'),
-            'racecar_version': LaunchConfiguration('racecar_version'),
-            'enable_recovery': LaunchConfiguration('enable_recovery')
-        }.items()
-    )
+    state_machine_source = get_launch_source('state_machine', 'state_machine_launch')
+    state_machine_launch = None
+    if state_machine_source is not None:
+        state_machine_launch = IncludeLaunchDescription(
+            state_machine_source,
+            launch_arguments={
+                'param_file': os.path.join(pkg_bringup, 'config', 'state_machine_params.yaml'),
+                'mode': 'head_to_head',
+                'overtake_mode': LaunchConfiguration('overtake_mode'),
+                'racecar_version': LaunchConfiguration('racecar_version'),
+                'enable_recovery': LaunchConfiguration('enable_recovery')
+            }.items()
+        )
 
     # Spline Planner (Conditional on overtake_mode == 'spliner')
-    spline_planner_group = GroupAction(
-        condition=IfCondition(PythonExpression(["'", LaunchConfiguration('overtake_mode'), "' == 'spliner'"])),
-        actions=[
-            IncludeLaunchDescription(
-                get_launch_source('spline_planner', 'spline_planner_launch')
-            )
-        ]
-    )
+    spline_planner_source = get_launch_source('spline_planner', 'spline_planner_launch')
+    spline_planner_group = None
+    if spline_planner_source is not None:
+        spline_planner_group = GroupAction(
+            condition=IfCondition(PythonExpression(["'", LaunchConfiguration('overtake_mode'), "' == 'spliner'"])),
+            actions=[
+                IncludeLaunchDescription(spline_planner_source)
+            ]
+        )
 
     # Graph-Based Interpolator Node (Conditional on overtake_mode == 'graph_based')
     graph_planner_group = GroupAction(
@@ -113,13 +121,16 @@ def generate_launch_description():
     )
 
     # Include Perception
-    perception_launch = IncludeLaunchDescription(
-        get_launch_source('perception', 'perception_launch'),
-        launch_arguments={
-            'param_file': os.path.join(pkg_bringup, 'config', 'opponent_tracker_params.yaml'),
-            'enable_fake_obstacles': LaunchConfiguration('sim')
-        }.items()
-    )
+    perception_source = get_launch_source('perception', 'perception_launch')
+    perception_launch = None
+    if perception_source is not None:
+        perception_launch = IncludeLaunchDescription(
+            perception_source,
+            launch_arguments={
+                'param_file': os.path.join(pkg_bringup, 'config', 'opponent_tracker_params.yaml'),
+                'enable_fake_obstacles': LaunchConfiguration('fake_obstacles')
+            }.items()
+        )
 
     actions = [
         racecar_version_arg,
@@ -128,16 +139,18 @@ def generate_launch_description():
         ctrl_algo_arg,
         measure_arg,
         map_name_arg,
-        sim_arg,
+        fake_obstacles_arg,
         enable_recovery_arg,
     ]
-    actions.extend([
-        controller_launch,
-        state_machine_launch,
-        spline_planner_group,
-        graph_planner_group,
-        perception_launch
-    ])
+    if controller_launch is not None:
+        actions.append(controller_launch)
+    if state_machine_launch is not None:
+        actions.append(state_machine_launch)
+    if spline_planner_group is not None:
+        actions.append(spline_planner_group)
+    actions.append(graph_planner_group)
+    if perception_launch is not None:
+        actions.append(perception_launch)
 
     return LaunchDescription(actions)
 

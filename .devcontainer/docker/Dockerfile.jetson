@@ -71,6 +71,9 @@ RUN apt-get update && apt-get install -y \
 RUN apt-get update && apt-get install -y \
     ros-$ROS_DISTRO-serial-driver \
     ros-$ROS_DISTRO-asio-cmake-module \
+    ros-$ROS_DISTRO-ament-cmake-auto \
+    ros-$ROS_DISTRO-ament-lint-auto \
+    ros-$ROS_DISTRO-ament-lint-common \
     ros-$ROS_DISTRO-joy \
     ros-$ROS_DISTRO-urg-node \
     ros-$ROS_DISTRO-xacro \
@@ -84,8 +87,8 @@ RUN apt-get update && apt-get install -y \
     ros-$ROS_DISTRO-diagnostic-updater \
     && rm -rf /var/lib/apt/lists/*
 
-# Install additional Python packages
-RUN python3 -m pip install --index-url https://pypi.org/simple smbus2 transforms3d tqdm "numpy<2" scikit-image trajectory-planning-helpers casadi scikit-learn filterpy numba pandas matplotlib pynput quadprog==0.1.11
+# Install additional Python packages (ensure transforms3d>=0.4.2 to prevent np.float deprecation, yamldataclassconfig<2 for gym)
+RUN python3 -m pip install --index-url https://pypi.org/simple smbus2 "transforms3d>=0.4.2" tqdm "numpy<2" scikit-image trajectory-planning-helpers casadi scikit-learn filterpy numba pandas matplotlib pynput quadprog==0.1.11 "yamldataclassconfig>=1.5.0,<2" uv
 
 # 5. Create non-root user matching the host UID/GID
 RUN groupadd -f -g ${GID} ${USER} \
@@ -96,7 +99,8 @@ RUN groupadd -f -g ${GID} ${USER} \
 
 # 6. Configure user environment
 USER ${USER}
-RUN echo "source /opt/ros/$ROS_DISTRO/setup.bash" >> /home/${USER}/.bashrc \
+RUN echo "if [ -f /opt/ros/$ROS_DISTRO/install/setup.bash ]; then source /opt/ros/$ROS_DISTRO/install/setup.bash; fi" >> /home/${USER}/.bashrc \
+    && echo "if [ -f /opt/ros/$ROS_DISTRO/setup.bash ]; then source /opt/ros/$ROS_DISTRO/setup.bash; fi" >> /home/${USER}/.bashrc \
     && echo "if [ -f /home/${USER}/F110th/out/install/setup.bash ]; then source /home/${USER}/F110th/out/install/setup.bash; fi" >> /home/${USER}/.bashrc
 
 USER root

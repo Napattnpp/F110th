@@ -44,6 +44,11 @@ def generate_launch_description():
         default_value='False',
         description='Measure execution time'
     )
+    enable_recovery_arg = DeclareLaunchArgument(
+        'enable_recovery',
+        default_value='true',
+        description='Enable autonomous crash recovery'
+    )
 
     # Include controller manager
     controller_source = get_launch_source('controller', 'controller_launch')
@@ -68,17 +73,19 @@ def generate_launch_description():
                 'param_file': os.path.join(pkg_bringup, 'config', 'state_machine_params.yaml'),
                 'mode': 'timetrials',
                 'overtake_mode': 'spliner',
-                'racecar_version': LaunchConfiguration('racecar_version')
+                'racecar_version': LaunchConfiguration('racecar_version'),
+                'enable_recovery': LaunchConfiguration('enable_recovery')
             }.items()
         )
 
-    # Perception and spline planner are disabled for time trials
+    # Perception and spline planner are disabled for solo time trials
 
     actions = [
         racecar_version_arg,
         lu_table_arg,
         ctrl_algo_arg,
         measure_arg,
+        enable_recovery_arg,
     ]
     if controller_launch is not None:
         actions.append(controller_launch)

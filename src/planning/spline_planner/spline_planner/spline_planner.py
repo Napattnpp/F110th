@@ -112,6 +112,9 @@ class ObstacleSpliner(Node):
         self.corner_curvature_thresh = 0.08
         self.prediction_mode = "curvature_aware"
         self.multi_obs_safety_margin = 0.25
+        self.enable_predictive_intercept = True
+        self.max_intercept_horizon = 1.5
+        self.min_closing_speed = 0.4
         
         pd = ParameterDescriptor(
             type=ParameterType.PARAMETER_DOUBLE,
@@ -130,6 +133,11 @@ class ObstacleSpliner(Node):
             floating_point_range=[FloatingPointRange(from_value=0.001, to_value=5.0, step=0.001)]
         )
         pd_str = ParameterDescriptor(type=ParameterType.PARAMETER_STRING)
+        pd_bool = ParameterDescriptor(type=ParameterType.PARAMETER_BOOL)
+        pd_hz = ParameterDescriptor(
+            type=ParameterType.PARAMETER_DOUBLE,
+            floating_point_range=[FloatingPointRange(from_value=0.05, to_value=5.0, step=0.01)]
+        )
         param_dicts = [
             {'name': 'pre_apex_0', 'default': abs(self.pre_apex_0), 'descriptor': pd},
             {'name': 'pre_apex_1', 'default': abs(self.pre_apex_1), 'descriptor': pd},
@@ -154,7 +162,10 @@ class ObstacleSpliner(Node):
             {'name': 'min_pass_delta_v', 'default': self.min_pass_delta_v, 'descriptor': pd_acc},
             {'name': 'corner_curvature_thresh', 'default': self.corner_curvature_thresh, 'descriptor': pd_curv},
             {'name': 'prediction_mode', 'default': self.prediction_mode, 'descriptor': pd_str},
-            {'name': 'multi_obs_safety_margin', 'default': self.multi_obs_safety_margin, 'descriptor': pd}
+            {'name': 'multi_obs_safety_margin', 'default': self.multi_obs_safety_margin, 'descriptor': pd},
+            {'name': 'enable_predictive_intercept', 'default': self.enable_predictive_intercept, 'descriptor': pd_bool},
+            {'name': 'max_intercept_horizon', 'default': self.max_intercept_horizon, 'descriptor': pd_hz},
+            {'name': 'min_closing_speed', 'default': self.min_closing_speed, 'descriptor': pd_hz}
         ]
 
         self.declare_all_parameters(param_dicts=param_dicts)
@@ -236,6 +247,12 @@ class ObstacleSpliner(Node):
                 self.prediction_mode = param.value
             elif param_name == 'multi_obs_safety_margin':
                 self.multi_obs_safety_margin = param.value
+            elif param_name == 'enable_predictive_intercept':
+                self.enable_predictive_intercept = param.value
+            elif param_name == 'max_intercept_horizon':
+                self.max_intercept_horizon = param.value
+            elif param_name == 'min_closing_speed':
+                self.min_closing_speed = param.value
         
         # Ensure ascending order for spline parameters
         if self.pre_apex_1 < self.pre_apex_0:
@@ -457,15 +474,16 @@ class ObstacleSpliner(Node):
 
     def _check_ot_side_possible(self, more_space) -> bool:
         # Only enforce side commitment hysteresis while actively in OVERTAKE!
-        if self.hsm_state != "OVERTAKE":
+        if getattr(self, 'hsm_state', '') != "OVERTAKE":
             return True
         if self.last_ot_side == "":
             return True
         if abs(self.cur_d) > self.ot_side_switch_cur_d_thresh and more_space != self.last_ot_side:
-            self.get_logger().info(
-                f"Can't switch sides ({more_space} vs last {self.last_ot_side}), because cur_d ({self.cur_d:.2f}) > threshold ({self.ot_side_switch_cur_d_thresh:.2f})",
-                throttle_duration_sec=1.0
-            )
+            if hasattr(self, 'get_logger'):
+                self.get_logger().info(
+                    f"Can't switch sides ({more_space} vs last {self.last_ot_side}), because cur_d ({self.cur_d:.2f}) > threshold ({self.ot_side_switch_cur_d_thresh:.2f})",
+                    throttle_duration_sec=1.0
+                )
             return False
         return True
 
@@ -487,10 +505,11 @@ class ObstacleSpliner(Node):
 
         # 3. If neither side has safe room (corridor too narrow or opponent blocking)
         elif left_gap < min_safe_space and right_gap < min_safe_space:
-            self.get_logger().info(
-                f"[Spliner] Insufficient corridor space on BOTH sides (Left: {left_gap:.2f}m, Right: {right_gap:.2f}m, Req: {min_safe_space:.2f}m). Aborting pass.",
-                throttle_duration_sec=1.0
-            )
+            if hasattr(self, 'get_logger'):
+                self.get_logger().info(
+                    f"[Spliner] Insufficient corridor space on BOTH sides (Left: {left_gap:.2f}m, Right: {right_gap:.2f}m, Req: {min_safe_space:.2f}m). Aborting pass.",
+                    throttle_duration_sec=1.0
+                )
             return "", 0.0
 
         # 4. Both sides have sufficient clearance: ALWAYS pick the side with the LARGER physical track clearance!
@@ -559,9 +578,39 @@ class ObstacleSpliner(Node):
 
             # 2. Compute evasion apex along s
             if closest_obs.s_end < closest_obs.s_start:
-                s_apex = (closest_obs.s_end + self.gb_max_s + closest_obs.s_start) / 2.0
+                s_opp = (closest_obs.s_end + self.gb_max_s + closest_obs.s_start) / 2.0
             else:
-                s_apex = (closest_obs.s_end + closest_obs.s_start) / 2.0
+                s_opp = (closest_obs.s_end + closest_obs.s_start) / 2.0
+            s_opp %= self.gb_max_s
+
+            # Pillar 4: Predictive Frenet Intercept Horizon
+            # Calculate anticipated intercept time based on relative closing speed.
+            # Forward-project the evasion apex to the future location where ego will actually
+            # arrive alongside the opponent, eliminating "moving target" geometric lag.
+            if getattr(self, 'enable_predictive_intercept', True):
+                v_ego = max(0.0, float(self.cur_vs)) if self.cur_vs is not None else 0.0
+                is_static = getattr(closest_obs, 'is_static', False)
+                v_opp = 0.0 if is_static else max(0.0, float(getattr(closest_obs, 'vs', 0.0)))
+
+                delta_s = (s_opp - self.cur_s) % self.gb_max_s
+                min_closing = float(getattr(self, 'min_closing_speed', 0.4))
+                max_horizon = float(getattr(self, 'max_intercept_horizon', 1.5))
+                closing_speed = max(v_ego - v_opp, min_closing)
+
+                if (v_ego > v_opp) and not is_static:
+                    t_intercept = float(np.clip(delta_s / closing_speed, 0.0, max_horizon))
+                else:
+                    t_intercept = 0.0
+
+                # Bound opponent forward velocity by upcoming track curvature limit
+                w_opp_idx = int((s_opp / wpnt_dist) % self.gb_max_idx)
+                opp_kappa = abs(getattr(gb_wpnts[w_opp_idx], 'kappa_radpm', 0.0))
+                v_opp_corner_limit = np.sqrt(self.spline_max_alat / max(opp_kappa, 0.05))
+                v_opp_eff = min(v_opp, v_opp_corner_limit)
+
+                s_apex = (s_opp + v_opp_eff * t_intercept) % self.gb_max_s
+            else:
+                s_apex = s_opp
 
             # Approximate next 20 indexes of global wpnts to identify corner outside
             gb_idxs = [int(s_apex / wpnt_dist + i) % self.gb_max_idx for i in range(20)]
@@ -800,7 +849,8 @@ class ObstacleSpliner(Node):
             wpnts.side_switch = is_switch
             if is_switch:
                 self.last_switch_time = self.get_clock().now().to_msg()
-            wpnts.last_switch_time = self.last_switch_time
+            if self.last_switch_time is not None:
+                wpnts.last_switch_time = self.last_switch_time
             self.last_ot_side = chosen_side
 
         else:
@@ -866,7 +916,7 @@ class ObstacleSpliner(Node):
         mrk.color.a = 1.0
         mrk.color.b = 0.75
         mrk.color.r = 0.75
-        if self.from_bag:
+        if getattr(self, 'from_bag', False):
             mrk.color.g = 0.75
 
         mrk.id = len(mrks.markers)

@@ -62,7 +62,12 @@ class MockRobustSpliner:
         self.gb_max_s = 50.0
         self.gb_max_idx = 500
         self.last_ot_side = ""
-        self.last_switch_time = None
+        self.last_switch_time = self._clock.now().to_msg()
+        self.hsm_state = "OVERTAKE"
+        self.from_bag = False
+        self.enable_predictive_intercept = True
+        self.max_intercept_horizon = 1.5
+        self.min_closing_speed = 0.4
 
         self.converter = MockConverter()
         self.pub_propagated = MockPublisher()
@@ -81,6 +86,13 @@ class MockRobustSpliner:
 
     def get_clock(self):
         return self._clock
+
+    def get_logger(self):
+        class MockLogger:
+            def info(self, msg, throttle_duration_sec=0.0): pass
+            def warn(self, msg, throttle_duration_sec=0.0): pass
+            def error(self, msg, throttle_duration_sec=0.0): pass
+        return MockLogger()
 
     _predict_obs_movement = ObstacleSpliner._predict_obs_movement
     _check_ot_side_possible = ObstacleSpliner._check_ot_side_possible
@@ -204,9 +216,51 @@ def test_multi_obstacle_collision_rejection():
     assert len(wpnts.wpnts) == 0, "Spliner must reject overtaking when secondary obstacles block both passing lanes"
 
 
+def test_predictive_frenet_intercept():
+    """Verify Pillar 4: Predictive Frenet Intercept Horizon forward-projects the apex."""
+    spliner = MockRobustSpliner()
+    spliner.cur_s = 10.0
+    spliner.cur_vs = 5.0  # Ego speed = 5.0 m/s
+
+    # Dynamic moving obstacle in front at s=14.0 moving at vs=2.0 m/s
+    obs = Obstacle()
+    obs.s_center = 14.0
+    obs.s_start = 13.8
+    obs.s_end = 14.2
+    obs.d_center = 0.0
+    obs.d_left = 0.15
+    obs.d_right = -0.15
+    obs.vs = 2.0
+    obs.vd = 0.0
+    obs.is_static = False
+
+    obs_arr = ObstacleArray()
+    obs_arr.obstacles = [obs]
+
+    # delta_s = 14.0 - 10.0 = 4.0m
+    # closing_speed = 5.0 - 2.0 = 3.0 m/s
+    # t_intercept = 4.0 / 3.0 = 1.333s (< 1.5s max_intercept_horizon)
+    # expected_apex = 14.0 + 2.0 * (4.0 / 3.0) = 14.0 + 2.667 = 16.667m
+
+    wpnts, mrks = spliner.do_spline(obs_arr, spliner.gb_wpnts)
+    assert len(wpnts.wpnts) > 0, "Spline must be generated for moving obstacle"
+
+    # Find the peak lateral offset waypoint along the generated evasion spline
+    d_vals = np.array([abs(w.d_m) for w in wpnts.wpnts])
+    max_d = np.max(d_vals)
+    plateau_s = [w.s_m for w in wpnts.wpnts if abs(w.d_m) >= max_d - 1e-4]
+    peak_s_center = (plateau_s[0] + plateau_s[-1]) / 2.0
+
+    # The peak of the evasion spline must be forward-projected to ~16.67m (not at current 14.0m!)
+    assert peak_s_center > 15.0, f"Apex ({peak_s_center:.2f}m) must be forward-projected ahead of current obstacle position (14.0m)"
+    assert min(plateau_s) <= 16.67 <= max(plateau_s), f"Predicted intercept 16.67m must lie within peak evasion corridor [{min(plateau_s):.2f}, {max(plateau_s):.2f}]"
+    assert peak_s_center == pytest.approx(16.67, abs=0.6), f"Apex center {peak_s_center:.2f}m should align with predicted intercept (~16.67m)"
+
+
 if __name__ == '__main__':
     test_curvature_aware_prediction()
     test_curvature_constrained_velocity_profiling()
     test_full_horizon_boundary_rejection()
     test_multi_obstacle_collision_rejection()
+    test_predictive_frenet_intercept()
     print("All overtaking robustness unit tests passed successfully!")

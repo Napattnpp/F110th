@@ -33,7 +33,7 @@ class SectorTuner(Node):
         if 'n_sectors' not in self.sectors_params:
             self.get_logger().error(
                 "Missing required parameter 'n_sectors'! Make sure 'speed_scaling.yaml' exists for this map or run:\n"
-                "  ros2 run sector_tuner sector_slicer --map_name <map_name>"
+                "  make tuner"
             )
             raise RuntimeError("Missing required parameter 'n_sectors' in speed_scaling.yaml")
         self.n_sectors = self.sectors_params['n_sectors']

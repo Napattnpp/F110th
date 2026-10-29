@@ -18,6 +18,7 @@
 
         <Discovery>
             <ParticipantIndex>auto</ParticipantIndex>
+            <MaxAutoParticipantIndex>100</MaxAutoParticipantIndex>
         </Discovery>
 
         <Internal>

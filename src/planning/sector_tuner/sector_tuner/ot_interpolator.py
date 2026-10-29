@@ -37,7 +37,7 @@ class OvertakingInterpolator(Node):
         if 'n_sectors' not in self.sectors_params:
             self.get_logger().error(
                 "Missing required parameter 'n_sectors'! Make sure 'ot_sectors.yaml' exists for this map or run:\n"
-                "  ros2 run sector_tuner ot_sector_slicer --map_name <map_name>"
+                "  make tuner"
             )
             raise RuntimeError("Missing required parameter 'n_sectors' in ot_sectors.yaml")
         self.n_sectors = self.sectors_params['n_sectors']

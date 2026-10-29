@@ -107,10 +107,22 @@ def cmd_clean(args):
     raw_pgm = raw_pgm_candidates[0]
     print(f"Selected source raw map: {raw_pgm.name}")
 
-    # If --gui requested and DISPLAY exists, launch matplotlib app
-    if args.gui and os.environ.get("DISPLAY"):
-        gui_script = MAP_UTILS_DIR / "map_cleaner_matplotlib.py"
-        cmd = [sys.executable, str(gui_script), str(raw_pgm)]
+    # If --web requested, launch browser-based Map Cleaner (ADR-003 Zero X11)
+    if getattr(args, "web", False):
+        web_script = REPO_ROOT / "scripts" / "map" / "map_cleaner_web.py"
+        port = str(getattr(args, "port", 8051))
+        cmd = [sys.executable, str(web_script), "--map", args.map, "--port", port]
+        subprocess.run(cmd)
+        return
+
+    # If --web or legacy --gui requested, launch canonical Web Map Cleaner (ADR-003 & ADR-010)
+    if getattr(args, "web", False) or getattr(args, "gui", False):
+        if getattr(args, "gui", False) and not getattr(args, "web", False):
+            print("\n[!] Notice: Legacy Matplotlib GUI retired under ADR-010.")
+            print("    Launching canonical Web Map Studio instead (http://localhost:8051)...")
+        web_script = REPO_ROOT / "scripts" / "map" / "map_cleaner_web.py"
+        port = str(getattr(args, "port", 8051))
+        cmd = [sys.executable, str(web_script), "--map", args.map, "--port", port]
         subprocess.run(cmd)
         return
 
@@ -185,7 +197,7 @@ def cmd_pipeline(args):
     print("\n[Stage 1/3] Initializing 4-subfolder structure...")
     cmd_init(args)
 
-    print("\n[Stage 2/3] Cleaning map & generating binary mask (Headless)...")
+    print(f"\n[Stage 2/3] Cleaning map & generating binary mask ({'Web Studio' if getattr(args, 'web', False) else 'Headless'})...")
     cmd_clean(args)
 
     print("\n[Stage 3/3] Optimizing raceline & generating waypoints...")
@@ -211,9 +223,11 @@ def main():
     p_init.set_defaults(func=cmd_init)
 
     # clean
-    p_clean = subparsers.add_parser("clean", help="Clean occupancy grid & generate binary mask (Headless)")
+    p_clean = subparsers.add_parser("clean", help="Clean occupancy grid & generate binary mask (Headless by default)")
     p_clean.add_argument("map", help="Target map name")
-    p_clean.add_argument("--gui", action="store_true", help="Launch interactive Matplotlib GUI (requires X11)")
+    p_clean.add_argument("--web", action="store_true", help="Launch interactive Web Map Cleaner in browser (Zero X11 / ADR-003)")
+    p_clean.add_argument("--gui", action="store_true", help="Launch legacy Matplotlib GUI (requires X11)")
+    p_clean.add_argument("--port", type=int, default=8051, help="Port for Web Map Cleaner (default: 8051)")
     p_clean.set_defaults(func=cmd_clean)
 
     # optimize
@@ -224,7 +238,9 @@ def main():
     # pipeline
     p_pipe = subparsers.add_parser("pipeline", help="Automated end-to-end map build (init -> clean -> optimize)")
     p_pipe.add_argument("map", help="Target map name")
-    p_pipe.add_argument("--gui", action="store_true", help="Use GUI for cleaning stage")
+    p_pipe.add_argument("--web", action="store_true", help="Use Web Map Cleaner for cleaning stage")
+    p_pipe.add_argument("--gui", action="store_true", help="Use legacy GUI for cleaning stage")
+    p_pipe.add_argument("--port", type=int, default=8051, help="Port for Web Map Cleaner (default: 8051)")
     p_pipe.set_defaults(func=cmd_pipeline)
 
     args = parser.parse_args()

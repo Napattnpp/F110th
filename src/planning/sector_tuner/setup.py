@@ -21,10 +21,7 @@ setup(
     entry_points={
         'console_scripts': [
             'sector_tuner = sector_tuner.sector_tuner:main',
-            'sector_slicer = sector_tuner.sector_slicer:main',
-            'ot_interpolator = sector_tuner.ot_interpolator:main',
-            'ot_sector_slicer = sector_tuner.ot_sector_slicer:main'
+            'ot_interpolator = sector_tuner.ot_interpolator:main'
         ],
     },
-    scripts=["scripts/finish_sector.sh"]
 )

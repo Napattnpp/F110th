@@ -1,33 +1,15 @@
-# Quick Start
+# Map Cleaner Quickstart
 
-## Install
+Under **[ADR-010](file:///Users/napat/Developer/Babel/docs/DECISIONS.md#adr-010--single-canonical-tooling-mandate--tooling-bloat-elimination)**, all map cleaning is executed via the canonical tools:
 
+### Interactive Web Studio (Zero X11)
 ```bash
-pip install -r requirements.txt
+make clean_web MAP=rectangle1
 ```
+Open `http://localhost:8051` in any browser.
 
-Or on Jetson/Linux:
-
+### Headless Batch Cleaning
 ```bash
-bash setup_jetson.sh
+make clean_map MAP=rectangle1
 ```
-
-## Interactive Cleaning
-
-```bash
-python3 map_cleaner_matplotlib.py map_evaluate/cb4_7th_floor.yaml
-```
-
-Use the sliders to tune the cleaned map. Press `S` to save, `Q` to quit, and `R` to reset.
-
-## Batch Cleaning
-
-```bash
-python3 map_cleaner_matplotlib.py map_evaluate/cb4_7th_floor.yaml --batch -o clean.pgm
-```
-
-## Test Without a Map
-
-```bash
-python3 map_cleaner_matplotlib.py --demo
-```
+Automatically generates `clean/rectangle1.pgm` and `waypoint_gen/rectangle1_waypoint_gen.pgm` adhering strictly to **[ADR-004](file:///Users/napat/Developer/Babel/docs/DECISIONS.md#adr-004--standardized-4-subfolder-map-architecture--testing-isolation)**.

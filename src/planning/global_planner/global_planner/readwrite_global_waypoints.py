@@ -137,16 +137,41 @@ def read_global_waypoints(map_dir: str) -> Tuple[
     trackbounds_markers = MarkerArray()
     set_message_fields(trackbounds_markers, d['trackbounds_markers'])
 
-    # If raceline waypoints lack track boundaries (d_left == 0.0), transfer them from centerline
+    # Ensure raceline waypoints have true physical track boundary distances (d_left and d_right)
+    # derived accurately from the centerline boundary envelope rather than naive 1D s-interpolation.
     if len(centerline_waypoints.wpnts) > 0:
-        cl_s = np.array([w.s_m for w in centerline_waypoints.wpnts])
-        cl_dl = np.array([w.d_left for w in centerline_waypoints.wpnts])
-        cl_dr = np.array([w.d_right for w in centerline_waypoints.wpnts])
-        for traj_wpnts in [global_traj_wpnts_sp, global_traj_wpnts_iqp]:
-            if len(traj_wpnts.wpnts) > 0 and traj_wpnts.wpnts[0].d_left == 0.0:
-                for w in traj_wpnts.wpnts:
-                    w.d_left = float(np.interp(w.s_m, cl_s, cl_dl))
-                    w.d_right = float(np.interp(w.s_m, cl_s, cl_dr))
+        try:
+            cl_xy = np.array([[w.x_m, w.y_m] for w in centerline_waypoints.wpnts])
+            cl_psi = np.array([w.psi_rad for w in centerline_waypoints.wpnts])
+            cl_dl = np.array([w.d_left for w in centerline_waypoints.wpnts])
+            cl_dr = np.array([w.d_right for w in centerline_waypoints.wpnts])
+
+            normals = np.column_stack([-np.sin(cl_psi), np.cos(cl_psi)])
+            bound_l = cl_xy + normals * cl_dl[:, None]
+            bound_r = cl_xy - normals * cl_dr[:, None]
+
+            from scipy.spatial import cKDTree
+            tree_l = cKDTree(bound_l)
+            tree_r = cKDTree(bound_r)
+
+            for traj_wpnts in [global_traj_wpnts_sp, global_traj_wpnts_iqp]:
+                if len(traj_wpnts.wpnts) > 0:
+                    traj_xy = np.array([[w.x_m, w.y_m] for w in traj_wpnts.wpnts])
+                    dists_l, _ = tree_l.query(traj_xy)
+                    dists_r, _ = tree_r.query(traj_xy)
+                    for i, w in enumerate(traj_wpnts.wpnts):
+                        w.d_left = float(dists_l[i])
+                        w.d_right = float(dists_r[i])
+        except Exception as ex:
+            print(f"[WARN] Failed to compute exact track boundaries from centerline: {ex}")
+            cl_s = np.array([w.s_m for w in centerline_waypoints.wpnts])
+            cl_dl = np.array([w.d_left for w in centerline_waypoints.wpnts])
+            cl_dr = np.array([w.d_right for w in centerline_waypoints.wpnts])
+            for traj_wpnts in [global_traj_wpnts_sp, global_traj_wpnts_iqp]:
+                if len(traj_wpnts.wpnts) > 0 and traj_wpnts.wpnts[0].d_left == 0.0:
+                    for w in traj_wpnts.wpnts:
+                        w.d_left = float(np.interp(w.s_m, cl_s, cl_dl))
+                        w.d_right = float(np.interp(w.s_m, cl_s, cl_dr))
 
     for ma in [centerline_markers, global_traj_markers_iqp, global_traj_markers_sp, trackbounds_markers]:
         for m in ma.markers:

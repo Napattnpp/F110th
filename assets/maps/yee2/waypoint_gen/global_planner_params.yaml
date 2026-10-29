@@ -1,0 +1,18 @@
+global_planner:
+  ros__parameters:
+    rate: 10  # [hz]
+    required_laps: 3  # how many laps to drive until calculating global waypoints
+    # ── Safety Width Clearance Margins (Total Corridor Reduction = 2 * Wall Buffer) ──
+    safety_width: 0.60     # [m] Clearance buffer for Minimum Curvature raceline
+    safety_width_sp: 0.60  # [m] Clearance buffer specifically for Shortest Path trajectory
+    # ── Scale-Adaptive Spline Smoothing & Kinematic Limits (F1TENTH Small-Scale Optimization) ──
+    s_reg: 2.0             # B-Spline smoothing factor (essential for small tracks <25m to prevent corner-cutting)
+    stepsize_reg: 0.15     # [m] Discretization step along reference spline
+    curvlim: 2.5           # [rad/m] Kinematic curvature limit (allows hairpin apexing)
+    occupancy_grid_threshold: 10
+    filter_kernel_size: 3  # Morphological filter kernel size for raw map image noise removal (keep <= 5 for narrow tracks)
+    reverse_mapping: False # By default, do not reverse the direction of the track
+
+    show_plots: False
+
+ 

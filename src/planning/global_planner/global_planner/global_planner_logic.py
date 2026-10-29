@@ -89,6 +89,9 @@ class GlobalPlannerLogic:
                  filter_kernel_size_: int = 3,
                  required_laps_: int = 1,
                  reverse_mapping_: bool = False,
+                 s_reg_: float = None,
+                 stepsize_reg_: float = None,
+                 curvlim_: float = None,
                  loginfo_: Callable[[str], None] = print,
                  logwarn_: Callable[[str], None] = sys.stderr.write,
                  logerror_: Callable[[str], None] = sys.stderr.write) -> None:
@@ -98,6 +101,9 @@ class GlobalPlannerLogic:
         self.safety_width_sp = safety_width_sp_
         self.occupancy_grid_threshold = occupancy_grid_thresh_
         self.filter_kernel_size = filter_kernel_size_
+        self.s_reg = s_reg_
+        self.stepsize_reg = stepsize_reg_
+        self.curvlim = curvlim_
 
         # Debugging
         self.show_plots = show_plots_
@@ -475,7 +481,10 @@ class GlobalPlannerLogic:
                 track_name=iqp_centerline_path,
                 curv_opt_type='mincurv',
                 safety_width=self.safety_width,
-                plot=(self.show_plots and not self.map_editor_mode)
+                plot=(self.show_plots and not self.map_editor_mode),
+                s_reg=self.s_reg,
+                stepsize_reg=self.stepsize_reg,
+                curvlim=self.curvlim
             )
             self.loginfo('mincurv optimization succeeded.')
         except (RuntimeError, ValueError) as e:
@@ -486,7 +495,10 @@ class GlobalPlannerLogic:
                     track_name=iqp_centerline_path,
                     curv_opt_type='shortest_path',
                     safety_width=self.safety_width,
-                    plot=(self.show_plots and not self.map_editor_mode)
+                    plot=(self.show_plots and not self.map_editor_mode),
+                    s_reg=self.s_reg,
+                    stepsize_reg=self.stepsize_reg,
+                    curvlim=self.curvlim
                 )
                 self.loginfo('shortest_path fallback optimization succeeded.')
             except (RuntimeError, ValueError) as e2:
@@ -531,7 +543,10 @@ class GlobalPlannerLogic:
                                                                 track_name=iqp_centerline_path,
                                                                 curv_opt_type='mincurv',
                                                                 safety_width=self.safety_width_sp,
-                                                                plot=(self.show_plots and not self.map_editor_mode))
+                                                                plot=(self.show_plots and not self.map_editor_mode),
+                                                                s_reg=self.s_reg,
+                                                                stepsize_reg=self.stepsize_reg,
+                                                                curvlim=self.curvlim)
         except (RuntimeError, ValueError) as e:
             self.logwarn(f"mincurv overtaking optimization failed ({e}), using centerline as fallback...")
             # Use the main trajectory as fallback for overtaking
@@ -557,7 +572,10 @@ class GlobalPlannerLogic:
 
         global_trajectory_sp, bound_r_sp, bound_l_sp, est_t_sp = trajectory_optimizer(
             input_path=self.input_path, track_name=iqp_ref_path, curv_opt_type='shortest_path', safety_width=self.safety_width_sp, plot=(
-                self.show_plots and not self.map_editor_mode))
+                self.show_plots and not self.map_editor_mode),
+            s_reg=self.s_reg,
+            stepsize_reg=self.stepsize_reg,
+            curvlim=self.curvlim)
 
         self.est_lap_time = Float32()  # variable which will be published and used in l1_param_optimizer
         self.est_lap_time.data = est_t_sp

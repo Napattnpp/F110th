@@ -21,7 +21,10 @@ def trajectory_optimizer(input_path: str,
                          track_name: str,
                          curv_opt_type: str,
                          safety_width: float = 0.8,
-                         plot: bool = False) -> Tuple[np.ndarray, np.ndarray, np.ndarray, float]:
+                         plot: bool = False,
+                         s_reg: float = None,
+                         stepsize_reg: float = None,
+                         curvlim: float = None) -> Tuple[np.ndarray, np.ndarray, np.ndarray, float]:
     """
     Optimizes a trajectory based on the given input parameters.
 
@@ -151,11 +154,19 @@ def trajectory_optimizer(input_path: str,
     parser = configparser.ConfigParser()
     pars = {}
 
-    ini_path = os.path.join(file_paths["inputs"], file_paths["veh_params_file"])
-    if not os.path.exists(ini_path):
-        ini_path = os.path.join(file_paths["module"], "params", file_paths["veh_params_file"])
-    if not parser.read(ini_path):
-        raise ValueError(f'Specified config file does not exist or is empty! Checked: {ini_path}')
+    ini_candidates = [
+        os.path.join(file_paths["inputs"], "global_planner", "racecar_f110.ini"),
+        os.path.join(file_paths["inputs"], "racecar_f110.ini"),
+        os.path.join(file_paths["inputs"], file_paths["veh_params_file"]),
+        os.path.join(file_paths["module"], "params", file_paths["veh_params_file"])
+    ]
+    ini_path = None
+    for cand in ini_candidates:
+        if os.path.exists(cand):
+            ini_path = cand
+            break
+    if not ini_path or not parser.read(ini_path):
+        raise ValueError(f'Specified config file does not exist or is empty! Checked: {ini_candidates}')
 
     pars["ggv_file"] = json.loads(parser.get('GENERAL_OPTIONS', 'ggv_file'))
     pars["ax_max_machines_file"] = json.loads(parser.get('GENERAL_OPTIONS', 'ax_max_machines_file'))
@@ -163,6 +174,14 @@ def trajectory_optimizer(input_path: str,
     pars["reg_smooth_opts"] = json.loads(parser.get('GENERAL_OPTIONS', 'reg_smooth_opts'))
     pars["veh_params"] = json.loads(parser.get('GENERAL_OPTIONS', 'veh_params'))
     pars["vel_calc_opts"] = json.loads(parser.get('GENERAL_OPTIONS', 'vel_calc_opts'))
+
+    # Apply runtime overrides if provided
+    if s_reg is not None:
+        pars["reg_smooth_opts"]["s_reg"] = float(s_reg)
+    if stepsize_reg is not None:
+        pars["stepsize_opts"]["stepsize_reg"] = float(stepsize_reg)
+    if curvlim is not None:
+        pars["veh_params"]["curvlim"] = float(curvlim)
 
     if curv_opt_type == 'shortest_path':
         pars["optim_opts"] = json.loads(parser.get('OPTIMIZATION_OPTIONS', 'optim_opts_shortest_path'))

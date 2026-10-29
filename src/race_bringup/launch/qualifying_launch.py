@@ -34,6 +34,11 @@ def generate_launch_description():
         default_value='ORIN1_hangar_pacejka',
         description='LU table parameter'
     )
+    overtake_mode_arg = DeclareLaunchArgument(
+        'overtake_mode',
+        default_value='spliner',
+        description='Overtake mode: spliner'
+    )
     ctrl_algo_arg = DeclareLaunchArgument(
         'ctrl_algo',
         default_value='MAP',
@@ -43,6 +48,16 @@ def generate_launch_description():
         'measure',
         default_value='False',
         description='Measure execution time'
+    )
+    fake_obstacles_arg = DeclareLaunchArgument(
+        'fake_obstacles',
+        default_value='false',
+        description='Publish synthetic fake obstacles for standalone tracker benchmarking'
+    )
+    enable_recovery_arg = DeclareLaunchArgument(
+        'enable_recovery',
+        default_value='true',
+        description='Enable autonomous crash recovery'
     )
 
     # Include controller manager
@@ -67,8 +82,9 @@ def generate_launch_description():
             launch_arguments={
                 'param_file': os.path.join(pkg_bringup, 'config', 'state_machine_params.yaml'),
                 'mode': 'qualifying',
-                'overtake_mode': 'spliner',
-                'racecar_version': LaunchConfiguration('racecar_version')
+                'overtake_mode': LaunchConfiguration('overtake_mode'),
+                'racecar_version': LaunchConfiguration('racecar_version'),
+                'enable_recovery': LaunchConfiguration('enable_recovery')
             }.items()
         )
 
@@ -79,7 +95,8 @@ def generate_launch_description():
         perception_launch = IncludeLaunchDescription(
             perception_source,
             launch_arguments={
-                'param_file': os.path.join(pkg_bringup, 'config', 'opponent_tracker_params.yaml')
+                'param_file': os.path.join(pkg_bringup, 'config', 'opponent_tracker_params.yaml'),
+                'enable_fake_obstacles': LaunchConfiguration('fake_obstacles')
             }.items()
         )
 
@@ -92,8 +109,11 @@ def generate_launch_description():
     actions = [
         racecar_version_arg,
         lu_table_arg,
+        overtake_mode_arg,
         ctrl_algo_arg,
         measure_arg,
+        fake_obstacles_arg,
+        enable_recovery_arg,
     ]
     if controller_launch is not None:
         actions.append(controller_launch)

@@ -4,14 +4,14 @@ ot_interpolator:
     yeet_factor: 1.2500
     spline_len: 30
     ot_sector_begin: 0.5000
-    # Sector 0: Main Bottom Straightaway (s ≈ 2.5m -> 15.0m, κ < 0.05 rad/m) - Primary safe passing zone
+    # Sector 0: Main Bottom Straightaway (s ≈ 2.5m -> 16.5m, κ < 0.20 rad/m) - Primary safe passing zone
     Overtaking_sector0:
       start: 25
-      end: 150
+      end: 165
       ot_flag: true
-    # Sector 1: Right Hairpin, Top S-Chicane, and Left Hairpin (s ≈ 15.1m -> 40.1m) - No overtaking, trail safely
+    # Sector 1: Right Hairpin, Top S-Chicane, and Left Hairpin (s ≈ 16.6m -> 40.1m) - No overtaking, trail safely
     Overtaking_sector1:
-      start: 151
+      start: 166
       end: 402
       ot_flag: false
     # Sector 2: Left Hairpin Exit Curvature (s ≈ 0.0m -> 2.4m) - Settle and align before passing
