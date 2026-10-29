@@ -1643,12 +1643,22 @@ def main():
     httpd = HTTPServer(server_address, MapCleanerHandler)
 
     map_query = f"?map={args.map}" if args.map else ""
+    hostname = socket.gethostname()
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        host_ip = s.getsockname()[0]
+        s.close()
+    except Exception:
+        host_ip = "<jetson_or_host_ip>"
+
     print("\n" + "=" * 75)
     print("  F1TENTH Web-Based Map Cleaner & Binary Mask Studio")
     print("  [ADR-003 Zero X11 Tooling & ADR-004 4-Subfolder Architecture]")
     print("=" * 75)
     print(f"  → Local URL:     http://localhost:{args.port}/{map_query}")
-    print(f"  → Pitlane Wi-Fi: http://<jetson_or_host_ip>:{args.port}/{map_query}")
+    print(f"  → mDNS / Mac:    http://{hostname}.local:{args.port}/{map_query}")
+    print(f"  → Pitlane IP:    http://{host_ip}:{args.port}/{map_query}")
     print("=" * 75 + "\n")
     print("Press Ctrl+C to stop the server.\n")
 

@@ -10,7 +10,11 @@ export
 
 .PHONY: help setup bootstrap configure build up attach stop clean push prune tuner optimize start_line benchmark monitor profile init_map finish_map clean_map clean_web map_status map_pipeline
 
-PYTHON := $(if $(wildcard .venv/bin/python),.venv/bin/python,python3)
+ifneq ($(wildcard /.dockerenv),)
+    PYTHON := python3
+else
+    PYTHON := $(if $(wildcard .venv/bin/python),.venv/bin/python,python3)
+endif
 
 HOST_OS := $(shell uname)
 ifeq ($(HOST_OS),Darwin)
@@ -34,12 +38,23 @@ endif
 
 help: ## Show available Makefile targets
 	@echo ""
-	@echo "  \033[1;36m🏁 F1TENTH Autonomous Racing Stack\033[0m"
+	@echo "  \033[1;36m🏎️ F1TENTH Autonomous Racing Stack\033[0m"
 	@echo "  Usage: \033[33mmake\033[0m \033[32m<target>\033[0m"
 	@echo ""
-	@awk 'BEGIN {FS = ":.*##"} \
-		/^[a-zA-Z0-9_-]+:.*?##/ { printf "    \033[32m%-18s\033[0m %s\n", $$1, $$2 } \
-		/^##@/ { printf "\n  \033[1;36m%s\033[0m\n", substr($$0, 5) }' Makefile
+	@awk 'BEGIN {FS = ":.*##"; reset = "\033[0m"} \
+		/^##@/ { \
+			sec = substr($$0, 5); \
+			if (sec ~ /Host Setup/) { color = "\033[1;36m"; tcolor = "\033[36m" } \
+			else if (sec ~ /Docker/) { color = "\033[1;34m"; tcolor = "\033[34m" } \
+			else if (sec ~ /Workspace/) { color = "\033[1;33m"; tcolor = "\033[33m" } \
+			else if (sec ~ /Map/) { color = "\033[1;35m"; tcolor = "\033[35m" } \
+			else if (sec ~ /Race/) { color = "\033[1;32m"; tcolor = "\033[32m" } \
+			else { color = "\033[1;37m"; tcolor = "\033[32m" } \
+			printf "\n  %s%s%s\n", color, sec, reset; \
+		} \
+		/^[a-zA-Z0-9_-]+:.*?##/ { \
+			printf "    %s%-18s%s %s\n", tcolor, $$1, reset, $$2; \
+		}' Makefile
 	@echo ""
 
 ##@ 💻 Host Setup & Physical Diagnostics
