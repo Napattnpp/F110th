@@ -568,8 +568,11 @@ HTML_PAGE = """<!DOCTYPE html>
       gap: 16px;
       font-size: 0.8rem;
       font-family: 'JetBrains Mono', monospace;
-      pointer-events: none;
-      z-index: 5;
+      pointer-events: auto;
+      user-select: none;
+      cursor: default;
+      z-index: 10;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
     }
     .hud-metric { display: flex; flex-direction: column; gap: 2px; }
     .hud-label { color: var(--text-muted); font-size: 0.7rem; }
@@ -591,6 +594,7 @@ HTML_PAGE = """<!DOCTYPE html>
       z-index: 10;
       box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
       max-width: calc(100% - 40px);
+      user-select: none;
     }
     .tool-btn {
       background: transparent;
@@ -624,23 +628,6 @@ HTML_PAGE = """<!DOCTYPE html>
       accent-color: var(--primary-cyan);
       cursor: pointer;
     }
-
-    .canvas-instructions {
-      position: absolute;
-      top: 16px;
-      right: 16px;
-      background: rgba(15, 21, 33, 0.9);
-      backdrop-filter: blur(10px);
-      border: 1px solid var(--border-color);
-      border-radius: 20px;
-      padding: 7px 16px;
-      font-size: 0.75rem;
-      color: var(--text-muted);
-      pointer-events: none;
-      z-index: 10;
-      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
-    }
-    .canvas-instructions span { color: var(--primary-cyan); font-weight: 600; }
 
     /* Side Panel */
     .sidebar {
@@ -931,10 +918,6 @@ HTML_PAGE = """<!DOCTYPE html>
           <input type="range" min="0.1" max="1.0" step="0.05" value="0.75" id="sliderMapOpacity" oninput="setMapOpacity(this.value)">
         </div>
         <button class="tool-btn" onclick="toggleCenterline()" id="btnCenterline">Centerline: ON</button>
-      </div>
-
-      <div class="canvas-instructions">
-        💡 <span>Click anywhere on raceline</span> to create a sector gate & divider
       </div>
     </div>
 
@@ -1734,8 +1717,21 @@ HTML_PAGE = """<!DOCTYPE html>
     // -------------------------------------------------------------------------
     function setupCanvasInteractions() {
       const c = document.getElementById('canvasContainer');
+      const cv = document.getElementById('trackCanvas');
+      const hud = document.querySelector('.canvas-hud');
+      const toolbar = document.querySelector('.canvas-toolbar');
+
+      // Floating overlays act as independent layers: stop event bubbling so canvas never captures them
+      [hud, toolbar].forEach(el => {
+        if (!el) return;
+        el.addEventListener('mousedown', (e) => e.stopPropagation());
+        el.addEventListener('click', (e) => e.stopPropagation());
+        el.addEventListener('dblclick', (e) => e.stopPropagation());
+        el.addEventListener('wheel', (e) => e.stopPropagation(), { passive: true });
+      });
 
       c.addEventListener('wheel', (e) => {
+        if (e.target.closest && e.target.closest('.canvas-hud, .canvas-toolbar')) return;
         e.preventDefault();
         const factor = e.deltaY < 0 ? 1.15 : 0.87;
         const rect = c.getBoundingClientRect();
@@ -1749,6 +1745,8 @@ HTML_PAGE = """<!DOCTYPE html>
       }, { passive: false });
 
       c.addEventListener('mousedown', (e) => {
+        // Only initiate canvas panning if the click was directly on the canvas background
+        if (e.target !== cv) return;
         if (e.button === 0) {
           isDragging = true;
           dragStartX = e.clientX - viewX;
@@ -1761,6 +1759,15 @@ HTML_PAGE = """<!DOCTYPE html>
           viewX = e.clientX - dragStartX;
           viewY = e.clientY - dragStartY;
           renderCanvas();
+          return;
+        }
+
+        // If cursor is over floating overlay bars, do not test or highlight waypoints
+        if (e.target.closest && e.target.closest('.canvas-hud, .canvas-toolbar')) {
+          if (hoveredWpIdx !== -1) {
+            hoveredWpIdx = -1;
+            renderCanvas();
+          }
           return;
         }
 
@@ -1796,6 +1803,8 @@ HTML_PAGE = """<!DOCTYPE html>
       window.addEventListener('mouseup', () => { isDragging = false; });
 
       c.addEventListener('click', (e) => {
+        // Only create sector gates if clicking directly on the canvas
+        if (e.target !== cv) return;
         if (hoveredWpIdx >= 0) {
           addSectorAtSplit(hoveredWpIdx);
         }
