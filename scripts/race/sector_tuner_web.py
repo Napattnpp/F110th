@@ -234,6 +234,12 @@ def get_map_metadata(map_rel):
                 img_path = cand
                 break
 
+    # If PGM has a sibling PNG, prefer PNG for native instant browser rendering
+    if img_path.exists() and img_path.suffix.lower() == '.pgm':
+        png_sibling = img_dir / f"{img_path.stem}.png"
+        if png_sibling.exists():
+            img_path = png_sibling
+
     if not img_path.exists():
         return {"has_image": False}
 
@@ -246,14 +252,25 @@ def get_map_metadata(map_rel):
     except Exception:
         try:
             with open(img_path, 'rb') as f:
-                header = f.readline().decode('latin1').strip()
-                if header in ['P5', 'P2']:
-                    line = f.readline().decode('latin1').strip()
-                    while line.startswith('#'):
-                        line = f.readline().decode('latin1').strip()
-                    parts = line.split()
-                    width_px = int(parts[0])
-                    height_px = int(parts[1])
+                sig = f.read(8)
+                if sig == b'\x89PNG\r\n\x1a\n':
+                    f.read(4) # chunk length
+                    if f.read(4) == b'IHDR':
+                        import struct
+                        width_px, height_px = struct.unpack('>II', f.read(8))
+                elif sig[:2] in (b'P5', b'P2'):
+                    f.seek(0)
+                    tokens = []
+                    while len(tokens) < 4:
+                        line = f.readline()
+                        if not line:
+                            break
+                        if b'#' in line:
+                            line = line[:line.index(b'#')]
+                        tokens.extend(line.split())
+                    if len(tokens) >= 3:
+                        width_px = int(tokens[1])
+                        height_px = int(tokens[2])
         except Exception:
             pass
 
@@ -925,7 +942,6 @@ HTML_PAGE = """<!DOCTYPE html>
         <button class="tool-btn" onclick="zoom(1.25)">🔍 +</button>
         <button class="tool-btn" onclick="zoom(0.8)">🔍 -</button>
         <button class="tool-btn active" id="btnMap" onclick="toggleMap()">🗺️ Map: ON</button>
-        <button class="tool-btn active" id="btnInvert" onclick="toggleInvertMap()">🌓 Dark Walls</button>
         <div class="tool-slider-wrap">
           <span>Opacity:</span>
           <input type="range" min="0.1" max="1.0" step="0.05" value="0.75" id="sliderMapOpacity" oninput="setMapOpacity(this.value)">
@@ -965,59 +981,8 @@ HTML_PAGE = """<!DOCTYPE html>
 
     // Map Underlay Image State
     let showMap = true;
-    let invertMap = true;
     let mapOpacity = 0.75;
     let mapImg = new Image();
-    let mapCanvasRaw = null;
-    let mapCanvasDark = null;
-
-    function processMapTextures() {
-      if (!mapImg.complete || mapImg.naturalWidth === 0) return;
-      const w = mapImg.naturalWidth;
-      const h = mapImg.naturalHeight;
-
-      mapCanvasRaw = document.createElement('canvas');
-      mapCanvasRaw.width = w;
-      mapCanvasRaw.height = h;
-      const rCtx = mapCanvasRaw.getContext('2d');
-      rCtx.drawImage(mapImg, 0, 0);
-
-      mapCanvasDark = document.createElement('canvas');
-      mapCanvasDark.width = w;
-      mapCanvasDark.height = h;
-      const dCtx = mapCanvasDark.getContext('2d');
-      dCtx.drawImage(mapImg, 0, 0);
-
-      try {
-        const imgData = dCtx.getImageData(0, 0, w, h);
-        const data = imgData.data;
-        for (let i = 0; i < data.length; i += 4) {
-          const lum = (data[i] + data[i+1] + data[i+2]) / 3;
-          if (lum < 60) {
-            // Occupied obstacle / wall -> Bright white high-contrast barrier
-            data[i] = 255;
-            data[i+1] = 255;
-            data[i+2] = 255;
-            data[i+3] = 255;
-          } else if (lum > 210) {
-            // Free driveable track -> Sleek dark asphalt
-            data[i] = 24;
-            data[i+1] = 32;
-            data[i+2] = 46;
-            data[i+3] = 255;
-          } else {
-            // Unknown outside area -> Seamless transparent background
-            data[i] = 10;
-            data[i+1] = 14;
-            data[i+2] = 23;
-            data[i+3] = 0;
-          }
-        }
-        dCtx.putImageData(imgData, 0, 0);
-      } catch (e) {
-        console.warn('Cannot process dark map texture:', e);
-      }
-    }
 
     // Canvas & View State
     const canvas = document.getElementById('trackCanvas');
@@ -1082,15 +1047,10 @@ HTML_PAGE = """<!DOCTYPE html>
         mapData = data;
 
         // Load background map image
-        mapCanvasRaw = null;
-        mapCanvasDark = null;
         if (mapData.map_meta && mapData.map_meta.has_image) {
           mapImg = new Image();
           mapImg.src = mapData.map_meta.image_url;
-          mapImg.onload = () => {
-            processMapTextures();
-            renderCanvas();
-          };
+          mapImg.onload = () => { renderCanvas(); };
         } else {
           mapImg = new Image();
         }
@@ -1121,14 +1081,6 @@ HTML_PAGE = """<!DOCTYPE html>
       const btn = document.getElementById('btnMap');
       btn.innerText = `🗺️ Map: ${showMap ? 'ON' : 'OFF'}`;
       btn.className = `tool-btn ${showMap ? 'active' : ''}`;
-      renderCanvas();
-    }
-
-    function toggleInvertMap() {
-      invertMap = !invertMap;
-      const btn = document.getElementById('btnInvert');
-      btn.innerText = invertMap ? '🌓 Dark Walls' : '☀️ Raw Grid';
-      btn.className = `tool-btn ${invertMap ? 'active' : ''}`;
       renderCanvas();
     }
 
@@ -1233,26 +1185,22 @@ HTML_PAGE = """<!DOCTYPE html>
       const sectors = activeMode === 'speed' ? mapData.speed_config.sectors : mapData.ot_config.sectors;
 
       // 0. Occupancy Grid Map Image Underlay
-      if (showMap && mapData.map_meta && mapData.map_meta.has_image) {
-        const source = (invertMap && mapCanvasDark) ? mapCanvasDark : (mapCanvasRaw || mapImg);
-        const hasContent = source && (source.width > 0 || source.naturalWidth > 0);
-        if (hasContent) {
-          const meta = mapData.map_meta;
-          const x0 = meta.origin[0];
-          const y0 = meta.origin[1];
-          const w_m = meta.width_m;
-          const h_m = meta.height_m;
+      if (showMap && mapImg.complete && mapImg.naturalWidth > 0 && mapData.map_meta && mapData.map_meta.has_image) {
+        const meta = mapData.map_meta;
+        const x0 = meta.origin[0];
+        const y0 = meta.origin[1];
+        const w_m = meta.width_m;
+        const h_m = meta.height_m;
 
-          // Top-left in world is (x0, y0 + h_m)
-          const screenTL = worldToScreen(x0, y0 + h_m);
-          const screenW = w_m * viewScale;
-          const screenH = h_m * viewScale;
+        // Top-left in world is (x0, y0 + h_m)
+        const screenTL = worldToScreen(x0, y0 + h_m);
+        const screenW = w_m * viewScale;
+        const screenH = h_m * viewScale;
 
-          ctx.save();
-          ctx.globalAlpha = mapOpacity;
-          ctx.drawImage(source, screenTL.x, screenTL.y, screenW, screenH);
-          ctx.restore();
-        }
+        ctx.save();
+        ctx.globalAlpha = mapOpacity;
+        ctx.drawImage(mapImg, screenTL.x, screenTL.y, screenW, screenH);
+        ctx.restore();
       }
 
       // 1. Centerline
@@ -1939,19 +1887,28 @@ def pgm_to_png_bytes(pgm_path):
     import struct
     try:
         with open(pgm_path, 'rb') as f:
-            magic = f.readline().strip()
+            tokens = []
+            while len(tokens) < 4:
+                line = f.readline()
+                if not line:
+                    break
+                if b'#' in line:
+                    line = line[:line.index(b'#')]
+                tokens.extend(line.split())
+            if len(tokens) < 4:
+                return None
+            magic = tokens[0]
             if magic not in (b'P5', b'P2'):
                 return None
-            line = f.readline().strip()
-            while line.startswith(b'#'):
-                line = f.readline().strip()
-            w, h = map(int, line.split())
-            maxval = int(f.readline().strip())
+            w = int(tokens[1])
+            h = int(tokens[2])
+            maxval = int(tokens[3])
+
             if magic == b'P5':
                 raw_pixels = f.read()
             else:
-                tokens = f.read().split()
-                raw_pixels = bytes([int(t) for t in tokens])
+                rest_tokens = f.read().split()
+                raw_pixels = bytes([int(t) for t in rest_tokens])
 
         # Prepend filter byte 0 to each scanline
         scanlines = []
