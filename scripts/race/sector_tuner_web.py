@@ -968,6 +968,56 @@ HTML_PAGE = """<!DOCTYPE html>
     let invertMap = true;
     let mapOpacity = 0.75;
     let mapImg = new Image();
+    let mapCanvasRaw = null;
+    let mapCanvasDark = null;
+
+    function processMapTextures() {
+      if (!mapImg.complete || mapImg.naturalWidth === 0) return;
+      const w = mapImg.naturalWidth;
+      const h = mapImg.naturalHeight;
+
+      mapCanvasRaw = document.createElement('canvas');
+      mapCanvasRaw.width = w;
+      mapCanvasRaw.height = h;
+      const rCtx = mapCanvasRaw.getContext('2d');
+      rCtx.drawImage(mapImg, 0, 0);
+
+      mapCanvasDark = document.createElement('canvas');
+      mapCanvasDark.width = w;
+      mapCanvasDark.height = h;
+      const dCtx = mapCanvasDark.getContext('2d');
+      dCtx.drawImage(mapImg, 0, 0);
+
+      try {
+        const imgData = dCtx.getImageData(0, 0, w, h);
+        const data = imgData.data;
+        for (let i = 0; i < data.length; i += 4) {
+          const lum = (data[i] + data[i+1] + data[i+2]) / 3;
+          if (lum < 60) {
+            // Occupied obstacle / wall -> Bright white high-contrast barrier
+            data[i] = 255;
+            data[i+1] = 255;
+            data[i+2] = 255;
+            data[i+3] = 255;
+          } else if (lum > 210) {
+            // Free driveable track -> Sleek dark asphalt
+            data[i] = 24;
+            data[i+1] = 32;
+            data[i+2] = 46;
+            data[i+3] = 255;
+          } else {
+            // Unknown outside area -> Seamless transparent background
+            data[i] = 10;
+            data[i+1] = 14;
+            data[i+2] = 23;
+            data[i+3] = 0;
+          }
+        }
+        dCtx.putImageData(imgData, 0, 0);
+      } catch (e) {
+        console.warn('Cannot process dark map texture:', e);
+      }
+    }
 
     // Canvas & View State
     const canvas = document.getElementById('trackCanvas');
@@ -1032,10 +1082,15 @@ HTML_PAGE = """<!DOCTYPE html>
         mapData = data;
 
         // Load background map image
+        mapCanvasRaw = null;
+        mapCanvasDark = null;
         if (mapData.map_meta && mapData.map_meta.has_image) {
           mapImg = new Image();
           mapImg.src = mapData.map_meta.image_url;
-          mapImg.onload = () => { renderCanvas(); };
+          mapImg.onload = () => {
+            processMapTextures();
+            renderCanvas();
+          };
         } else {
           mapImg = new Image();
         }
@@ -1178,26 +1233,26 @@ HTML_PAGE = """<!DOCTYPE html>
       const sectors = activeMode === 'speed' ? mapData.speed_config.sectors : mapData.ot_config.sectors;
 
       // 0. Occupancy Grid Map Image Underlay
-      if (showMap && mapImg.complete && mapImg.naturalWidth > 0 && mapData.map_meta && mapData.map_meta.has_image) {
-        const meta = mapData.map_meta;
-        const x0 = meta.origin[0];
-        const y0 = meta.origin[1];
-        const w_m = meta.width_m;
-        const h_m = meta.height_m;
+      if (showMap && mapData.map_meta && mapData.map_meta.has_image) {
+        const source = (invertMap && mapCanvasDark) ? mapCanvasDark : (mapCanvasRaw || mapImg);
+        const hasContent = source && (source.width > 0 || source.naturalWidth > 0);
+        if (hasContent) {
+          const meta = mapData.map_meta;
+          const x0 = meta.origin[0];
+          const y0 = meta.origin[1];
+          const w_m = meta.width_m;
+          const h_m = meta.height_m;
 
-        // Top-left in world is (x0, y0 + h_m)
-        const screenTL = worldToScreen(x0, y0 + h_m);
-        const screenW = w_m * viewScale;
-        const screenH = h_m * viewScale;
+          // Top-left in world is (x0, y0 + h_m)
+          const screenTL = worldToScreen(x0, y0 + h_m);
+          const screenW = w_m * viewScale;
+          const screenH = h_m * viewScale;
 
-        ctx.save();
-        ctx.globalAlpha = mapOpacity;
-        if (invertMap) {
-          // Neon dark-mode: Invert black walls to crisp white, darken floor
-          ctx.filter = 'invert(100%) contrast(150%) brightness(85%)';
+          ctx.save();
+          ctx.globalAlpha = mapOpacity;
+          ctx.drawImage(source, screenTL.x, screenTL.y, screenW, screenH);
+          ctx.restore();
         }
-        ctx.drawImage(mapImg, screenTL.x, screenTL.y, screenW, screenH);
-        ctx.restore();
       }
 
       // 1. Centerline
