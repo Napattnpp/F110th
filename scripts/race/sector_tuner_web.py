@@ -2005,14 +2005,18 @@ def main():
     server_address = (args.host, args.port)
     httpd = HTTPServer(server_address, SectorTunerHandler)
 
-    print("=" * 65)
-    print("🏎️  F1TENTH Web Sector Tuner & Visualizer")
-    print("=" * 65)
-    print(f"Server active at: http://localhost:{args.port}")
-    if args.host == "0.0.0.0":
-        print(f"Pit-lane network access: http://<CAR_OR_HOST_IP>:{args.port}")
-    print("Zero X11 required. Press Ctrl+C to stop.")
-    print("=" * 65)
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    try:
+        from common.network_info import print_service_banner
+        print_service_banner(
+            title="🏎️  F1TENTH Web Sector Tuner & Visualizer",
+            subtitle="[Live Sector Speed & Overtaking Boundary Tuning / Zero X11]",
+            port=args.port
+        )
+    except Exception:
+        print("=" * 65)
+        print(f"Server active at: http://localhost:{args.port}")
+        print("=" * 65)
 
     try:
         httpd.serve_forever()

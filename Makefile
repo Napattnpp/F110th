@@ -74,7 +74,7 @@ hardware_check: ## Run non-destructive audit of VESC, LiDAR, joystick, clocks, a
 	@echo "=== Physical Hardware & Interface Audit ==="
 	@[ -e /dev/sensors/vesc ] && echo "  \033[32m[✓]\033[0m VESC Controller: Found (/dev/sensors/vesc)" || echo "  \033[33m[!]\033[0m VESC Controller: Not detected at /dev/sensors/vesc"
 	@ls /dev/input/js* >/dev/null 2>&1 && echo "  \033[32m[✓]\033[0m Gamepad / Joystick: Found" || echo "  \033[33m[!]\033[0m Gamepad / Joystick: None connected (/dev/input/js*)"
-	@ping -c 1 -W 1 192.168.0.10 >/dev/null 2>&1 && echo "  \033[32m[✓]\033[0m Hokuyo LiDAR: Reachable at 192.168.0.10" || echo "  \033[33m[!]\033[0m Hokuyo LiDAR: Not pingable at 192.168.0.10"
+	@[ -e /dev/sensors/rplidar ] && echo "  \033[32m[✓]\033[0m RPLiDAR S1: Found (/dev/sensors/rplidar)" || ([ -e /dev/ttyUSB0 ] && echo "  \033[33m[!]\033[0m LiDAR on /dev/ttyUSB0 (udev rule not active)" || (ping -c 1 -W 1 192.168.0.10 >/dev/null 2>&1 && echo "  \033[32m[✓]\033[0m Hokuyo LiDAR: Reachable at 192.168.0.10" || echo "  \033[33m[!]\033[0m LiDAR: Neither RPLiDAR (/dev/sensors/rplidar) nor Hokuyo (192.168.0.10) detected"))
 	@sysctl net.core.rmem_max 2>/dev/null | grep -q "2147483647" && echo "  \033[32m[✓]\033[0m Kernel UDP Buffers: Locked to 2GB" || echo "  \033[33m[!]\033[0m Kernel UDP Buffers: Below 2GB"
 
 bootstrap: ## Validate system dependencies and initialize .env and python virtual environment
@@ -124,14 +124,22 @@ prune: stop ## Stop containers, remove volumes, and clean generated build output
 	@echo "Workspace fully pruned."
 
 ##@ 🔨 Workspace Build & Clean
-colcon_build: ## Build workspace natively into out/
-	@echo "Building with colcon to out/ ..."
-	@mkdir -p out/build out/install out/logs
-	@bash -c "source /opt/ros/humble/setup.bash && PYTHONWARNINGS='ignore:::setuptools.command.install,ignore:::setuptools.command.easy_install,ignore:::setuptools.command.develop' colcon --log-base out/logs build --base-paths src --build-base out/build --install-base out/install --symlink-install"
+colcon_build: ## Build workspace into out/ (natively in Docker or delegated from host)
+	@if [ -f /opt/ros/humble/setup.bash ]; then \
+		echo "Building with colcon to out/ ..."; \
+		mkdir -p out/build out/install out/logs; \
+		bash -c "source /opt/ros/humble/setup.bash && PYTHONWARNINGS='ignore:::setuptools.command.install,ignore:::setuptools.command.easy_install,ignore:::setuptools.command.develop' colcon --log-base out/logs build --base-paths src --build-base out/build --install-base out/install --symlink-install"; \
+	else \
+		echo "Host does not have ROS 2 Humble. Delegating colcon_build to $(SERVICE) container..."; \
+		docker compose exec -e DISPLAY= -u $(USER) $(SERVICE) bash -c "make colcon_build"; \
+	fi
 
 clean: ## Remove colcon build outputs (out/)
 	@echo "Removing out/ build contents..."
-	rm -rf out/build out/install out/logs
+	@rm -rf out/build out/install out/logs 2>/dev/null || true
+	@if [ -z "$$(wildcard /.dockerenv)" ] && docker compose ps --services --filter "status=running" 2>/dev/null | grep -q "$(SERVICE)"; then \
+		docker compose exec -u $(USER) $(SERVICE) rm -rf out/build out/install out/logs 2>/dev/null || true; \
+	fi
 	@echo "Colcon build output removed."
 
 ##@ 🗺️ Map & Raceline Pipeline (Zero X11)
@@ -188,9 +196,12 @@ tuner: ## Launch Web Sector Tuner (speed & overtaking sectors): make tuner [PORT
 	@echo "Launching Web Sector Tuner using $(PYTHON)..."
 	@$(PYTHON) scripts/race/sector_tuner_web.py --port $(or $(PORT),8050)
 
-monitor: ## Open Foxglove Studio / Web connected to live vehicle bridge (ws://localhost:8765)
-	@echo "Connecting to Foxglove WebSocket on ws://localhost:8765..."
-	@python3 -c "import webbrowser, subprocess; (subprocess.run(['open', 'foxglove://open?ds=foxglove-websocket&ds.url=ws://localhost:8765'], capture_output=True).returncode == 0) or webbrowser.open('https://app.foxglove.dev/?ds=foxglove-websocket&ds.url=ws://localhost:8765')"
+monitor: ## Open Foxglove Studio / Web connected to live vehicle bridge (ws://localhost:8765 or ws://<car>:8765)
+	@TARGET_HOST=$$(grep '^CAR_HOSTNAME=' .env 2>/dev/null | cut -d= -f2); \
+	TARGET_HOST=$${TARGET_HOST:-localhost}; \
+	if [ -f /.dockerenv ] || [ -f /etc/nv_tegra_release ]; then TARGET_HOST=localhost; fi; \
+	echo "Connecting to Foxglove WebSocket at ws://$$TARGET_HOST:8765..."; \
+	python3 -c "import webbrowser, subprocess; (subprocess.run(['open', f'foxglove://open?ds=foxglove-websocket&ds.url=ws://{TARGET_HOST}:8765'], capture_output=True).returncode == 0) or webbrowser.open(f'https://app.foxglove.dev/?ds=foxglove-websocket&ds.url=ws://{TARGET_HOST}:8765')"
 
 benchmark: ## Run raceline benchmark comparison across tracks
 	@echo "Running Benchmarks using $(PYTHON)..."

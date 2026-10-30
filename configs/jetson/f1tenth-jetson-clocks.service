@@ -1,9 +1,10 @@
 [Unit]
 Description=Lock NVIDIA Jetson Clocks to Maximum Performance Mode
-After=syslog.target NVPower.service
+After=syslog.target NVPower.service multi-user.target
 
 [Service]
 Type=oneshot
+ExecStartPre=/bin/sleep 5
 ExecStart=/usr/bin/jetson_clocks
 RemainAfterExit=yes
 

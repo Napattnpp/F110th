@@ -54,8 +54,8 @@ def generate_launch_description():
     )
     localize_method_arg = DeclareLaunchArgument(
         'localize_method',
-        default_value='pf',
-        description="Localization method: 'pf' (Particle Filter) / 'amcl' / 'cartographer'"
+        default_value='amcl',
+        description="Localization method: 'amcl' (Adaptive Monte Carlo) / 'pf' (Particle Filter) / 'cartographer'"
     )
 
     trajectory_type_arg = DeclareLaunchArgument(
