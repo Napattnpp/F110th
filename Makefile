@@ -171,12 +171,35 @@ map_pipeline: ## End-to-end automated map build (init -> clean -> optimize): mak
 	@[ -n "$(MAP)" ] || (echo "[!] Error: MAP argument required (e.g. make map_pipeline MAP=rectangle1)"; exit 1)
 	@$(PYTHON) scripts/map/manage_map.py pipeline $(MAP)
 
+mapping: ## Launch real-time SLAM mapping: make mapping [MAP=rectangle1] [METHOD=cartographer|slam_toolbox] [FTG=false|true]
+	@if command -v ros2 >/dev/null 2>&1 && [ -f /opt/ros/humble/setup.bash ]; then \
+		bash -c "source /opt/ros/humble/setup.bash && source out/install/setup.bash 2>/dev/null || true; ros2 launch race_bringup mapping_launch.py map_name:=$(or $(MAP),rectangle1) slam_method:=$(or $(METHOD),cartographer) run_ftg:=$(or $(FTG),false)"; \
+	elif [ -n "$$(wildcard /.dockerenv)" ]; then \
+		bash -c "source /opt/ros/humble/install/setup.bash 2>/dev/null || source /opt/ros/humble/setup.bash; source out/install/setup.bash 2>/dev/null || true; ros2 launch race_bringup mapping_launch.py map_name:=$(or $(MAP),rectangle1) slam_method:=$(or $(METHOD),cartographer) run_ftg:=$(or $(FTG),false)"; \
+	else \
+		echo "Host does not have ROS 2 Humble. Delegating mapping to $(SERVICE) container..."; \
+		docker compose exec -e DISPLAY= -u $(USER) $(SERVICE) bash -c "make mapping $(if $(MAP),MAP=$(MAP),) $(if $(METHOD),METHOD=$(METHOD),) $(if $(FTG),FTG=$(FTG),)"; \
+	fi
+
 finish_map: ## Save SLAM map and organize into 4-subfolder assets: make finish_map MAP=rectangle1
 	@[ -n "$(MAP)" ] || (echo "[!] Error: MAP argument required (e.g. make finish_map MAP=rectangle1)"; exit 1)
-	@echo "Finishing SLAM map and organizing assets..."
-	@bash scripts/map/finish_map.sh $(MAP)
+	@if command -v ros2 >/dev/null 2>&1 && [ -f /opt/ros/humble/setup.bash ]; then \
+		bash scripts/map/finish_map.sh $(MAP); \
+	elif [ -n "$$(wildcard /.dockerenv)" ]; then \
+		bash scripts/map/finish_map.sh $(MAP); \
+	else \
+		echo "Host does not have ROS 2 Humble. Delegating finish_map to $(SERVICE) container..."; \
+		docker compose exec -e DISPLAY= -u $(USER) $(SERVICE) bash -c "make finish_map MAP=$(MAP)"; \
+	fi
 
 ##@ 🏎️ Race Operations & Telemetry
+pitlane: ## Launch interactive 4-pane trackside tmux pitlane dashboard: make pitlane [MAP=yee2] [SIM=false|true]
+	@if [ -n "$$(wildcard /.dockerenv)" ] || [ "$$(uname -s)" = "Linux" ]; then \
+		bash scripts/race/pitlane_session.sh $(or $(MAP),yee2) $(or $(SIM),false); \
+	else \
+		docker compose exec -it -u $(USER) $(SERVICE) bash scripts/race/pitlane_session.sh $(or $(MAP),yee2) $(or $(SIM),false); \
+	fi
+
 profile: ## View or switch active racecar profile: make profile [CAR=ORIN1|SIM]
 	@if [ -n "$(CAR)" ]; then \
 		sed -i '' 's/^RACECAR_VERSION=.*/RACECAR_VERSION=$(CAR)/' .env 2>/dev/null || sed -i 's/^RACECAR_VERSION=.*/RACECAR_VERSION=$(CAR)/' .env; \

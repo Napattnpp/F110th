@@ -32,7 +32,7 @@ def generate_launch_description():
     )
     map_name_arg = DeclareLaunchArgument(
         'map_name',
-        default_value='competition/rectangle1',
+        default_value='rectangle1',
         description='Name of the map to be created'
     )
     sim_arg = DeclareLaunchArgument(
