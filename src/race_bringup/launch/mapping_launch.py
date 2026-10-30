@@ -136,32 +136,32 @@ def generate_launch_description():
         physical_actions.append(cartographer_mapping)
 
         # Include state estimation (Slam Toolbox mode - Cartographer disabled)
-        slam_toolbox_mapping = GroupAction(
-            condition=IfCondition(PythonExpression(["'", LaunchConfiguration('slam_method'), "' == 'slam_toolbox'"])),
-            actions=[
-                IncludeLaunchDescription(
-                    state_estimation_source,
-                    launch_arguments={
-                        'racecar_version': LaunchConfiguration('racecar_version'),
-                        'mapping_bool': 'False',
-                        'localize_bool': 'False',
-                        'map_name': LaunchConfiguration('map_name'),
-                        'frenet_bool': 'False',
-                        'ekf_config': ekf_config
-                    }.items()
-                ),
-                IncludeLaunchDescription(
-                    PythonLaunchDescriptionSource(
-                        os.path.join(get_package_share_directory('slam_toolbox'), 'launch', 'online_async_launch.py')
+        slam_toolbox_source = get_launch_source('slam_toolbox', 'online_async_launch')
+        if slam_toolbox_source is not None:
+            slam_toolbox_mapping = GroupAction(
+                condition=IfCondition(PythonExpression(["'", LaunchConfiguration('slam_method'), "' == 'slam_toolbox'"])),
+                actions=[
+                    IncludeLaunchDescription(
+                        state_estimation_source,
+                        launch_arguments={
+                            'racecar_version': LaunchConfiguration('racecar_version'),
+                            'mapping_bool': 'False',
+                            'localize_bool': 'False',
+                            'map_name': LaunchConfiguration('map_name'),
+                            'frenet_bool': 'False',
+                            'ekf_config': ekf_config
+                        }.items()
                     ),
-                    launch_arguments={
-                        'slam_params_file': slam_toolbox_config,
-                        'use_sim_time': LaunchConfiguration('sim')
-                    }.items()
-                )
-            ]
-        )
-        physical_actions.append(slam_toolbox_mapping)
+                    IncludeLaunchDescription(
+                        slam_toolbox_source,
+                        launch_arguments={
+                            'slam_params_file': slam_toolbox_config,
+                            'use_sim_time': LaunchConfiguration('sim')
+                        }.items()
+                    )
+                ]
+            )
+            physical_actions.append(slam_toolbox_mapping)
 
     physical_group = GroupAction(
         condition=UnlessCondition(LaunchConfiguration('sim')),
