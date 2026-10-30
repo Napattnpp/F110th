@@ -1,6 +1,6 @@
 sector_tuner:
   ros__parameters:
-    global_limit: 0.8500
+    global_limit: 1.0000
     n_sectors: 5
     Sector0:
       start: 0
@@ -11,7 +11,7 @@ sector_tuner:
     Sector1:
       start: 235
       end: 251
-      scaling: 0.8000
+      scaling: 0.9500
       only_FTG: false
       no_FTG: false
     Sector2:
@@ -23,7 +23,7 @@ sector_tuner:
     Sector3:
       start: 309
       end: 325
-      scaling: 0.8000
+      scaling: 0.9500
       only_FTG: false
       no_FTG: false
     Sector4:
