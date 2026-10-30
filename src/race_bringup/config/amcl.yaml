@@ -27,7 +27,7 @@ amcl:
     z_rand: 0.05
     laser_likelihood_max_dist: 2.0
     max_beams: 100
-    do_beamskip: false
+    do_beamskip: true
     beam_skip_distance: 0.5
     beam_skip_error_threshold: 0.9
     beam_skip_threshold: 0.3
