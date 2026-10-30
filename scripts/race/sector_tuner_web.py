@@ -303,7 +303,13 @@ def load_map_data(map_rel):
                     "no_FTG": bool(s_obj.get('no_FTG', False))
                 })
 
-    if not speed_sectors and raceline:
+    if speed_sectors and raceline:
+        if len(speed_sectors) == 1:
+            speed_sectors[0]["start"] = 0
+            speed_sectors[0]["end"] = len(raceline)
+        elif speed_sectors[-1]["end"] != len(raceline):
+            speed_sectors[-1]["end"] = len(raceline)
+    elif not speed_sectors and raceline:
         speed_sectors = [{
             "id": 0,
             "start": 0,
@@ -338,7 +344,13 @@ def load_map_data(map_rel):
                     "ot_flag": bool(ot_obj.get('ot_flag', False))
                 })
 
-    if not ot_sectors and raceline:
+    if ot_sectors and raceline:
+        if len(ot_sectors) == 1:
+            ot_sectors[0]["start"] = 0
+            ot_sectors[0]["end"] = len(raceline)
+        elif ot_sectors[-1]["end"] != len(raceline):
+            ot_sectors[-1]["end"] = len(raceline)
+    elif not ot_sectors and raceline:
         ot_sectors = [{
             "id": 0,
             "start": 0,
@@ -1208,6 +1220,20 @@ HTML_PAGE = """<!DOCTYPE html>
         ctx.setLineDash([]);
       }
 
+      // 1.5 Full Raceline Baseline Underlay (Ensures track geometry is never broken)
+      if (raceline && raceline.length > 1) {
+        ctx.beginPath();
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.18)';
+        ctx.lineWidth = 2.0;
+        raceline.forEach((p, i) => {
+          const pt = worldToScreen(p.x_m, p.y_m);
+          if (i === 0) ctx.moveTo(pt.x, pt.y);
+          else ctx.lineTo(pt.x, pt.y);
+        });
+        ctx.closePath();
+        ctx.stroke();
+      }
+
       // 2. Raceline by Sector
       sectors.forEach((sec, sIdx) => {
         ctx.beginPath();
@@ -1230,10 +1256,28 @@ HTML_PAGE = """<!DOCTYPE html>
         const endIdx = Math.max(0, Math.min(sec.end, raceline.length));
 
         let first = true;
-        for (let i = startIdx; i <= endIdx && i < raceline.length; i++) {
-          const pt = worldToScreen(raceline[i].x_m, raceline[i].y_m);
-          if (first) { ctx.moveTo(pt.x, pt.y); first = false; }
-          else ctx.lineTo(pt.x, pt.y);
+        if (startIdx <= endIdx) {
+          for (let i = startIdx; i <= endIdx && i < raceline.length; i++) {
+            const pt = worldToScreen(raceline[i].x_m, raceline[i].y_m);
+            if (first) { ctx.moveTo(pt.x, pt.y); first = false; }
+            else ctx.lineTo(pt.x, pt.y);
+          }
+          // If sector spans to the end of the raceline, draw closing segment back to WP 0
+          if (endIdx >= raceline.length && raceline.length > 0) {
+            const pt0 = worldToScreen(raceline[0].x_m, raceline[0].y_m);
+            ctx.lineTo(pt0.x, pt0.y);
+          }
+        } else {
+          // Wrapped sector: startIdx > endIdx (spans through start/finish line)
+          for (let i = startIdx; i < raceline.length; i++) {
+            const pt = worldToScreen(raceline[i].x_m, raceline[i].y_m);
+            if (first) { ctx.moveTo(pt.x, pt.y); first = false; }
+            else ctx.lineTo(pt.x, pt.y);
+          }
+          for (let i = 0; i <= endIdx && i < raceline.length; i++) {
+            const pt = worldToScreen(raceline[i].x_m, raceline[i].y_m);
+            ctx.lineTo(pt.x, pt.y);
+          }
         }
         ctx.stroke();
         ctx.shadowBlur = 0;
@@ -1489,11 +1533,25 @@ HTML_PAGE = """<!DOCTYPE html>
     }
 
     function calculateSectorDistance(start, end) {
-      if (!mapData || !mapData.raceline) return 0;
+      if (!mapData || !mapData.raceline || mapData.raceline.length === 0) return 0;
       const pts = mapData.raceline;
+      const n = pts.length;
       let d = 0;
-      for (let i = start; i < end && i < pts.length - 1; i++) {
-        d += Math.sqrt((pts[i+1].x_m - pts[i].x_m)**2 + (pts[i+1].y_m - pts[i].y_m)**2);
+      if (start <= end) {
+        for (let i = start; i < end && i < n - 1; i++) {
+          d += Math.hypot(pts[i+1].x_m - pts[i].x_m, pts[i+1].y_m - pts[i].y_m);
+        }
+        if (end >= n) {
+          d += Math.hypot(pts[0].x_m - pts[n-1].x_m, pts[0].y_m - pts[n-1].y_m);
+        }
+      } else {
+        for (let i = start; i < n; i++) {
+          const next = (i + 1) % n;
+          d += Math.hypot(pts[next].x_m - pts[i].x_m, pts[next].y_m - pts[i].y_m);
+        }
+        for (let i = 0; i < end; i++) {
+          d += Math.hypot(pts[i+1].x_m - pts[i].x_m, pts[i+1].y_m - pts[i].y_m);
+        }
       }
       return d;
     }
@@ -1591,7 +1649,7 @@ HTML_PAGE = """<!DOCTYPE html>
       const mid = Math.floor((target.start + target.end) / 2);
       const newSec = JSON.parse(JSON.stringify(target));
       target.end = mid;
-      newSec.start = mid + 1;
+      newSec.start = mid;
       sectors.splice(targetIdx + 1, 0, newSec);
       reindexSectors(sectors);
       activeSectorId = targetIdx + 1;
@@ -1611,7 +1669,7 @@ HTML_PAGE = """<!DOCTYPE html>
       const mid = Math.floor((target.start + target.end) / 2);
       const newSec = JSON.parse(JSON.stringify(target));
       target.end = mid;
-      newSec.start = mid + 1;
+      newSec.start = mid;
       sectors.splice(idx + 1, 0, newSec);
       reindexSectors(sectors);
       activeSectorId = idx + 1;
@@ -1625,11 +1683,15 @@ HTML_PAGE = """<!DOCTYPE html>
       const sectors = activeMode === 'speed' ? mapData.speed_config.sectors : mapData.ot_config.sectors;
       if (sectors.length <= 1) return;
       if (idx === 0) {
-        sectors[1].start = sectors[0].start;
+        sectors[1].start = 0;
       } else {
         sectors[idx - 1].end = sectors[idx].end;
       }
       sectors.splice(idx, 1);
+      if (sectors.length === 1 && mapData.raceline) {
+        sectors[0].start = 0;
+        sectors[0].end = mapData.raceline.length;
+      }
       reindexSectors(sectors);
       activeSectorId = null;
       renderSidebar();
@@ -1639,7 +1701,12 @@ HTML_PAGE = """<!DOCTYPE html>
     }
 
     function reindexSectors(sectors) {
-      sectors.forEach((s, i) => s.id = i);
+      sectors.forEach((s, i) => {
+        s.id = i;
+        if (s.start >= s.end && mapData.raceline) {
+          s.end = mapData.raceline.length;
+        }
+      });
     }
 
     function addSectorAtSplit(wpIdx) {
@@ -1649,7 +1716,7 @@ HTML_PAGE = """<!DOCTYPE html>
         if (wpIdx > s.start && wpIdx < s.end) {
           const newSec = JSON.parse(JSON.stringify(s));
           s.end = wpIdx;
-          newSec.start = wpIdx + 1;
+          newSec.start = wpIdx;
           sectors.splice(i + 1, 0, newSec);
           reindexSectors(sectors);
           activeSectorId = i + 1;

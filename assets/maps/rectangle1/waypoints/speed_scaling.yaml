@@ -22,7 +22,7 @@ sector_tuner:
       no_FTG: false
     Sector3:
       start: 161
-      end: 190
+      end: 168
       scaling: 0.7000
       only_FTG: false
       no_FTG: false
