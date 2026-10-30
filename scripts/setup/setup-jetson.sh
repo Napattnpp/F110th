@@ -82,7 +82,7 @@ fi
 info "Configuring Wi-Fi latency settings (NetworkManager, Intel, & Realtek drivers)..."
 if [ -d /etc/NetworkManager/conf.d ]; then
     sudo cp "$JETSON_CFG_DIR/20-f1tenth-wifi-powersave.conf" /etc/NetworkManager/conf.d/
-    sudo systemctl restart NetworkManager || true
+    sudo nmcli general reload conf 2>/dev/null || sudo systemctl reload NetworkManager || true
     success "Protocol-level Wi-Fi power saving disabled."
 fi
 
