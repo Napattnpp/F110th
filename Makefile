@@ -134,13 +134,16 @@ colcon_build: ## Build workspace into out/ (natively in Docker or delegated from
 		docker compose exec -e DISPLAY= -u $(USER) $(SERVICE) bash -c "make colcon_build"; \
 	fi
 
-clean: ## Remove colcon build outputs (out/)
+clean: ## Remove colcon build outputs (out/) and Python cache (__pycache__)
 	@echo "Removing out/ build contents..."
 	@rm -rf out/build out/install out/logs 2>/dev/null || true
 	@if [ -z "$$(wildcard /.dockerenv)" ] && docker compose ps --services --filter "status=running" 2>/dev/null | grep -q "$(SERVICE)"; then \
 		docker compose exec -u $(USER) $(SERVICE) rm -rf out/build out/install out/logs 2>/dev/null || true; \
 	fi
-	@echo "Colcon build output removed."
+	@echo "Purging Python __pycache__ and bytecode artifacts..."
+	@find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+	@find . -type f -name "*.pyc" -delete 2>/dev/null || true
+	@echo "Clean completed."
 
 ##@ 🗺️ Map & Raceline Pipeline (Zero X11)
 map_status: ## Inspect ADR-004 map compliance across tracks: make map_status [MAP=rectangle1]
