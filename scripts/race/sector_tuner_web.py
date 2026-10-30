@@ -61,6 +61,7 @@ def parse_yaml_file(fpath):
             lines = f.readlines()
         data = {}
         stack = [(0, data)]
+        last_key = None
         for line in lines:
             line_str = line.rstrip()
             if not line_str or line_str.lstrip().startswith('#'):
@@ -75,14 +76,26 @@ def parse_yaml_file(fpath):
                     val = float(val_str) if '.' in val_str or 'e' in val_str.lower() else int(val_str)
                 except ValueError:
                     val = val_str
-                # find parent list
+
+                while stack and indent < stack[-1][0]:
+                    stack.pop()
+
                 parent = stack[-1][1]
                 if isinstance(parent, list):
                     parent.append(val)
+                elif isinstance(parent, dict):
+                    # Convert empty placeholder dict to list for block sequences
+                    if len(parent) == 0 and len(stack) > 1 and last_key:
+                        new_list = [val]
+                        gp = stack[-2][1]
+                        if isinstance(gp, dict):
+                            gp[last_key] = new_list
+                        stack[-1] = (stack[-1][0], new_list)
                 continue
 
             key_val = stripped.split(':', 1)
             key = key_val[0].strip()
+            last_key = key
             val_str = key_val[1].strip() if len(key_val) > 1 else ""
 
             while stack and indent <= stack[-1][0] and len(stack) > 1:
