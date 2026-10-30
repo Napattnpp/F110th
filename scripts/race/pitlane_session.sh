@@ -55,7 +55,7 @@ tmux send-keys -t "${SESSION_NAME}:1.1" "ros2 launch race_bringup base_launch.py
 
 # Pre-populate Pane 3 (Top-Right): Head to Head
 tmux send-keys -t "${SESSION_NAME}:1.3" "# 2. Race Controller & Head-to-Head Planner" C-m
-tmux send-keys -t "${SESSION_NAME}:1.3" "ros2 launch race_bringup head_to_head_launch.py overtake_mode:=spliner fake_obstacles:=false"
+tmux send-keys -t "${SESSION_NAME}:1.3" "ros2 launch race_bringup head_to_head_launch.py sim:=${SIM_MODE} overtake_mode:=spliner fake_obstacles:=false"
 
 # Pre-populate Pane 2 (Bottom-Left): Topic Monitor
 tmux send-keys -t "${SESSION_NAME}:1.2" "# 3. Live Diagnostics" C-m
@@ -79,3 +79,4 @@ tmux select-pane -t "${SESSION_NAME}:1.1"
 
 echo "Launching tmux dashboard..."
 tmux attach-session -t "$SESSION_NAME"
+

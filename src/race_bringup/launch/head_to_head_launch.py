@@ -64,6 +64,18 @@ def generate_launch_description():
         default_value='true',
         description='Enable autonomous crash recovery'
     )
+    sim_arg = DeclareLaunchArgument(
+        'sim',
+        default_value='false',
+        description='Simulation mode: true/false'
+    )
+
+    resolved_racecar_version = PythonExpression([
+        "'SIM' if '", LaunchConfiguration('sim'), "'.lower() in ('true', '1') or '", LaunchConfiguration('racecar_version'), "' == 'SIM' else '", LaunchConfiguration('racecar_version'), "'"
+    ])
+    resolved_lu_table = PythonExpression([
+        "'SIM_linear' if '", LaunchConfiguration('sim'), "'.lower() in ('true', '1') or '", LaunchConfiguration('racecar_version'), "' == 'SIM' else '", LaunchConfiguration('LU_table'), "'"
+    ])
 
     # Include controller manager
     controller_source = get_launch_source('controller', 'controller_launch')
@@ -73,8 +85,8 @@ def generate_launch_description():
             controller_source,
             launch_arguments={
                 'mode': LaunchConfiguration('ctrl_algo'),
-                'LU_table': LaunchConfiguration('LU_table'),
-                'racecar_version': LaunchConfiguration('racecar_version')
+                'LU_table': resolved_lu_table,
+                'racecar_version': resolved_racecar_version
             }.items()
         )
 
@@ -88,7 +100,7 @@ def generate_launch_description():
                 'param_file': os.path.join(pkg_bringup, 'config', 'state_machine_params.yaml'),
                 'mode': 'head_to_head',
                 'overtake_mode': LaunchConfiguration('overtake_mode'),
-                'racecar_version': LaunchConfiguration('racecar_version'),
+                'racecar_version': resolved_racecar_version,
                 'enable_recovery': LaunchConfiguration('enable_recovery')
             }.items()
         )
@@ -135,6 +147,7 @@ def generate_launch_description():
     actions = [
         racecar_version_arg,
         lu_table_arg,
+        sim_arg,
         overtake_mode_arg,
         ctrl_algo_arg,
         measure_arg,
