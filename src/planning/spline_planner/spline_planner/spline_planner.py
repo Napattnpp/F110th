@@ -48,6 +48,7 @@ class ObstacleSpliner(Node):
         self.cur_s = None
         self.cur_d = None
         self.cur_vs = None
+        self.gb_s_arr = np.array([])
         self.lookahead_min = 4.0
         self.lookahead_max = 12.0
         self.lookahead_kv = 1.0
@@ -314,15 +315,47 @@ class ObstacleSpliner(Node):
     def gb_cb(self, msg: WpntArray):
         # Callback function for global waypoints
         self.gb_wpnts = msg
-        if self.gb_vmax is None:
-            self.gb_vmax = np.max(
-                np.array([wpnt.vx_mps for wpnt in msg.wpnts]))
-            self.gb_max_idx = msg.wpnts[-1].id if msg.wpnts[-1].id > 0 else len(msg.wpnts)
+        if len(msg.wpnts) > 0:
+            self.gb_s_arr = np.array([w.s_m for w in msg.wpnts])
+            self.gb_max_idx = len(msg.wpnts)
             self.gb_max_s = msg.wpnts[-1].s_m
+            if self.gb_vmax is None:
+                self.gb_vmax = np.max(
+                    np.array([wpnt.vx_mps for wpnt in msg.wpnts]))
 
     def gb_scaled_cb(self, msg: WpntArray):
         # Callback function for scaled global waypoints
         self.gb_scaled_wpnts = msg
+        if (not hasattr(self, 'gb_s_arr') or len(self.gb_s_arr) == 0) and len(msg.wpnts) > 0:
+            self.gb_s_arr = np.array([w.s_m for w in msg.wpnts])
+            self.gb_max_idx = len(msg.wpnts)
+            self.gb_max_s = msg.wpnts[-1].s_m
+
+    def get_closest_glb_wpnt_idx(self, s: float) -> int:
+        """Find the index of the global waypoint with s_m closest to the given s."""
+        if not hasattr(self, 'gb_s_arr') or len(self.gb_s_arr) == 0:
+            active_list = None
+            if hasattr(self, 'gb_wpnts') and self.gb_wpnts is not None:
+                active_list = self.gb_wpnts.wpnts if hasattr(self.gb_wpnts, 'wpnts') else self.gb_wpnts
+            elif hasattr(self, 'gb_scaled_wpnts') and self.gb_scaled_wpnts is not None:
+                active_list = self.gb_scaled_wpnts.wpnts if hasattr(self.gb_scaled_wpnts, 'wpnts') else self.gb_scaled_wpnts
+            if active_list is not None and len(active_list) > 0:
+                self.gb_s_arr = np.array([w.s_m for w in active_list])
+                self.gb_max_idx = len(active_list)
+                self.gb_max_s = active_list[-1].s_m
+            else:
+                return 0
+
+        n_pts = len(self.gb_s_arr)
+        if n_pts == 0:
+            return 0
+        s_wrapped = s % self.gb_max_s if (self.gb_max_s and self.gb_max_s > 0) else s
+        idx = int(np.searchsorted(self.gb_s_arr, s_wrapped))
+        if idx >= n_pts:
+            idx = 0
+        elif idx > 0 and abs(self.gb_s_arr[idx - 1] - s_wrapped) < abs(self.gb_s_arr[idx] - s_wrapped):
+            idx = idx - 1
+        return idx
 
     #################### HELPER FUNCTIONS####################
     def wait_for_messages(self):
@@ -582,10 +615,6 @@ class ObstacleSpliner(Node):
         mrks = MarkerArray()
         wpnts = OTWpntArray()
 
-        # Get spacing between wpnts for rough approximations
-        wpnt_dist = gb_wpnts[1].s_m - gb_wpnts[0].s_m if len(gb_wpnts) > 1 else 0.1
-        if wpnt_dist <= 0:
-            wpnt_dist = (self.gb_max_s / self.gb_max_idx) if (self.gb_max_idx and self.gb_max_idx > 0) else 0.1
 
         # Only use obstacles that are within a threshold of the raceline
         close_obs = self._obs_filtering(obstacles=obstacles)
@@ -631,7 +660,7 @@ class ObstacleSpliner(Node):
                     t_intercept = 0.0
 
                 # Bound opponent forward velocity by upcoming track curvature limit
-                w_opp_idx = int((s_opp / wpnt_dist) % self.gb_max_idx)
+                w_opp_idx = self.get_closest_glb_wpnt_idx(s_opp)
                 opp_kappa = abs(getattr(gb_wpnts[w_opp_idx], 'kappa_radpm', 0.0))
                 v_opp_corner_limit = np.sqrt(self.spline_max_alat / max(opp_kappa, 0.05))
                 v_opp_eff = min(v_opp, v_opp_corner_limit)
@@ -641,7 +670,8 @@ class ObstacleSpliner(Node):
                 s_apex = s_opp
 
             # Approximate next 20 indexes of global wpnts to identify corner outside
-            gb_idxs = [int(s_apex / wpnt_dist + i) % self.gb_max_idx for i in range(20)]
+            apex_idx = self.get_closest_glb_wpnt_idx(s_apex)
+            gb_idxs = [(apex_idx + i) % self.gb_max_idx for i in range(20)]
             kappas = np.array([gb_wpnts[gb_idx].kappa_radpm for gb_idx in gb_idxs])
             outside = "left" if np.sum(kappas) < 0 else "right"
 
@@ -726,10 +756,10 @@ class ObstacleSpliner(Node):
                 # Track length upper bound (prevent spline wrapping more than 22% of total track)
                 target_span = min(target_span, 0.22 * self.gb_max_s)
 
-                # Curvature compression: in tight corners (high kappa), compress span to fit corner geometry
-                avg_curv = float(np.mean(np.abs(kappas[:10]))) if len(kappas) > 0 else 0.0
-                if avg_curv > 0.35:
-                    curv_factor = float(np.clip(1.0 - 0.40 * (avg_curv - 0.35), 0.60, 1.0))
+                # Curvature compression: when approaching or inside a tight corner, compress span
+                avg_curv = float(np.mean(np.abs(kappas[:12]))) if len(kappas) > 0 else 0.0
+                if avg_curv > 0.20:
+                    curv_factor = float(np.clip(1.0 - 0.45 * (avg_curv - 0.20), 0.55, 1.0))
                     target_span *= curv_factor
 
                 nominal_span = evasion_offsets[-1][0] - evasion_offsets[0][0]
@@ -756,7 +786,7 @@ class ObstacleSpliner(Node):
                 eff_bound_mindist = self.spline_bound_mindist if v_ego_eff > 2.5 else max(0.12, self.spline_bound_mindist * 0.75)
                 spatially_feasible = True
                 for i in range(len(s_cand_wrapped)):
-                    idx = int((s_cand_wrapped[i] / wpnt_dist) % self.gb_max_idx)
+                    idx = self.get_closest_glb_wpnt_idx(s_cand_wrapped[i])
                     w = gb_wpnts[idx]
                     di = d_cand[i]
                     if di >= 0:
@@ -803,8 +833,8 @@ class ObstacleSpliner(Node):
                     cand_curv = float(np.max(np.abs(cand_dx * cand_ddy - cand_dy * cand_ddx) / ((cand_dx**2 + cand_dy**2)**1.5 + 1e-9)))
 
                     min_clr = min(
-                        (gb_wpnts[int((s / wpnt_dist) % self.gb_max_idx)].d_left - di) if di >= 0
-                        else (abs(gb_wpnts[int((s / wpnt_dist) % self.gb_max_idx)].d_right) - abs(di))
+                        (gb_wpnts[self.get_closest_glb_wpnt_idx(s)].d_left - di) if di >= 0
+                        else (abs(gb_wpnts[self.get_closest_glb_wpnt_idx(s)].d_right) - abs(di))
                         for s, di in zip(s_cand_wrapped, d_cand)
                     )
                     # Cost: penalize high peak curvature, low track margin, and excessive lateral excursion
@@ -867,7 +897,7 @@ class ObstacleSpliner(Node):
             min_pass_delta_v = getattr(self, 'min_pass_delta_v', 0.8)
             v_targets = np.zeros(n_pts)
             for i in range(n_pts):
-                gb_wpnt_i = int((evasion_s[i] / wpnt_dist) % self.gb_max_idx)
+                gb_wpnt_i = self.get_closest_glb_wpnt_idx(evasion_s[i])
                 v_raceline = gb_wpnts[gb_wpnt_i].vx_mps
                 
                 # Check if raceline is in a genuine track corner (avoidance spline curvature is constrained by v_lat_limits)

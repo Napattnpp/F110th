@@ -100,6 +100,7 @@ class MockRobustSpliner:
     _more_space = ObstacleSpliner._more_space
     _obs_filtering = ObstacleSpliner._obs_filtering
     compute_dynamic_lookahead = ObstacleSpliner.compute_dynamic_lookahead
+    get_closest_glb_wpnt_idx = ObstacleSpliner.get_closest_glb_wpnt_idx
     do_spline = ObstacleSpliner.do_spline
     xy_to_point = ObstacleSpliner.xy_to_point
     xyv_to_markers = ObstacleSpliner.xyv_to_markers
@@ -257,10 +258,129 @@ def test_predictive_frenet_intercept():
     assert (min(plateau_s) - 0.05) <= 16.67 <= (max(plateau_s) + 0.05), f"Predicted intercept 16.67m must lie within peak evasion corridor [{min(plateau_s):.2f}, {max(plateau_s):.2f}]"
 
 
+def test_non_uniform_waypoint_indexing():
+    """Verify that get_closest_glb_wpnt_idx accurately maps s to waypoint index even with non-uniform point spacing."""
+    spliner = MockRobustSpliner()
+    # Construct non-uniform waypoints: dense (0.075m) in corners [0, 3m], wide (0.115m) on straights [3m, 10m]
+    s_vals = []
+    s = 0.0
+    while s < 3.0:
+        s_vals.append(s)
+        s += 0.075
+    while s < 10.0:
+        s_vals.append(s)
+        s += 0.115
+    while s < 17.5:
+        s_vals.append(s)
+        s += 0.080
+
+    wpnts = []
+    for i, s_m in enumerate(s_vals):
+        w = Wpnt()
+        w.s_m = float(s_m)
+        w.vx_mps = 5.0
+        w.d_left = 0.50
+        w.d_right = -0.50
+        wpnts.append(w)
+
+    spliner.gb_wpnts = wpnts
+    spliner.gb_max_idx = len(wpnts)
+    spliner.gb_max_s = s_vals[-1]
+    spliner.gb_s_arr = np.array(s_vals)
+
+    # Test indexing at s = 6.5m (on the wide straight)
+    target_s = 6.5
+    expected_idx = min(range(len(s_vals)), key=lambda i: abs(s_vals[i] - target_s))
+    computed_idx = spliner.get_closest_glb_wpnt_idx(target_s)
+    assert computed_idx == expected_idx, f"Computed idx ({computed_idx}) must match nearest true index ({expected_idx})"
+    assert abs(spliner.gb_wpnts[computed_idx].s_m - target_s) < 0.06, f"Distance offset error must be < 6cm"
+
+
+def test_before_turn_corridor_selection_on_yee2():
+    """Verify that when an obstacle is located right before a turn, the planner selects the inside corridor and rejects the narrow wall side."""
+    import os, json
+    from scipy.spatial import cKDTree
+    from frenet_conversion.frenet_converter import FrenetConverter
+
+    spliner = MockRobustSpliner()
+    json_path = '/home/napat/F110th/assets/maps/yee2/waypoints/global_waypoints.json'
+    if not os.path.exists(json_path):
+        json_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../../assets/maps/yee2/waypoints/global_waypoints.json'))
+
+    with open(json_path) as f:
+        d = json.load(f)
+
+    cl = d['centerline_waypoints']['wpnts']
+    iqp = d['global_traj_wpnts_iqp']['wpnts']
+
+    cl_xy = np.array([[w['x_m'], w['y_m']] for w in cl])
+    cl_psi = np.array([w['psi_rad'] for w in cl])
+    cl_dl = np.array([w['d_left'] for w in cl])
+    cl_dr = np.array([w['d_right'] for w in cl])
+
+    normals = np.column_stack([-np.sin(cl_psi), np.cos(cl_psi)])
+    bound_l = cl_xy + normals * cl_dl[:, None]
+    bound_r = cl_xy - normals * cl_dr[:, None]
+
+    tree_l = cKDTree(bound_l)
+    tree_r = cKDTree(bound_r)
+
+    iqp_xy = np.array([[w['x_m'], w['y_m']] for w in iqp])
+    dists_l, _ = tree_l.query(iqp_xy)
+    dists_r, _ = tree_r.query(iqp_xy)
+
+    wpnts = []
+    for i, pt in enumerate(iqp):
+        w = Wpnt()
+        w.s_m = float(pt['s_m'])
+        w.x_m = float(pt['x_m'])
+        w.y_m = float(pt['y_m'])
+        w.psi_rad = float(pt['psi_rad'])
+        w.kappa_radpm = float(pt['kappa_radpm'])
+        w.vx_mps = float(pt['vx_mps'])
+        w.d_left = float(dists_l[i])
+        w.d_right = -float(dists_r[i])
+        wpnts.append(w)
+
+    spliner.gb_wpnts = wpnts
+    spliner.gb_max_idx = len(wpnts)
+    spliner.gb_max_s = wpnts[-1].s_m
+    spliner.gb_s_arr = np.array([w.s_m for w in wpnts])
+    spliner.converter = FrenetConverter(
+        np.array([w.x_m for w in wpnts]),
+        np.array([w.y_m for w in wpnts]),
+        np.array([w.psi_rad for w in wpnts])
+    )
+
+    # Obstacle placed right before the turn at s=6.5m on the raceline (d=0)
+    obs = Obstacle()
+    obs.s_center = 6.5
+    obs.s_start = 6.35
+    obs.s_end = 6.65
+    obs.d_center = 0.0
+    obs.d_left = 0.15
+    obs.d_right = -0.15
+    obs.size = 0.30
+    obs.vs = 0.0
+    obs.is_static = True
+
+    obs_arr = ObstacleArray()
+    obs_arr.obstacles = [obs]
+    spliner.cur_s = 4.5
+    spliner.cur_d = 0.0
+    spliner.cur_vs = 2.0
+
+    wpnts_out, mrks_out = spliner.do_spline(obs_arr, spliner.gb_wpnts)
+    assert len(wpnts_out.wpnts) > 0, "Avoidance spline must be generated"
+    assert wpnts_out.ot_side == "right", f"Planner must select 'right' (inside track), got '{wpnts_out.ot_side}'"
+
+
 if __name__ == '__main__':
     test_curvature_aware_prediction()
     test_curvature_constrained_velocity_profiling()
     test_full_horizon_boundary_rejection()
     test_multi_obstacle_collision_rejection()
     test_predictive_frenet_intercept()
+    test_non_uniform_waypoint_indexing()
+    test_before_turn_corridor_selection_on_yee2()
     print("All overtaking robustness unit tests passed successfully!")
