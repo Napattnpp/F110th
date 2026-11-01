@@ -221,3 +221,37 @@ def test_overtake_does_not_abort_on_sector_boundary_while_alongside():
     assert next_state == StateType.OVERTAKE, (
         f"Safety violation: Car aborted to {next_state} while alongside on sector boundary!"
     )
+
+
+def test_avoidance_waypoint_approach_stitching():
+    """Verify that when the car is in OVERTAKE but still approaching the start of the evasion spline,
+    get_avoidance_local_wpnts seamlessly prepends raceline waypoints so the vehicle tracks the raceline
+    up to the evasion entry instead of jumping across the track.
+    """
+    from state_machine.state_machine import StateMachine
+
+    sm = MockStateMachine()
+    sm.track_length = 17.5
+    sm.num_glb_wpnts = 175
+    sm.glb_s_array = np.array([i * 0.1 for i in range(175)])
+    sm.glb_wpnts = [Wpnt(s_m=i*0.1, d_m=0.0, vx_mps=3.0) for i in range(175)]
+    sm.get_closest_glb_wpnt_idx = StateMachine.get_closest_glb_wpnt_idx.__get__(sm, MockStateMachine)
+    sm.get_avoidance_local_wpnts = StateMachine.get_avoidance_local_wpnts.__get__(sm, MockStateMachine)
+
+    # Car at s = 4.5m on the straightaway
+    sm.cur_s = 4.5
+    # Avoidance spline starts at s = 8.0m
+    sm.last_valid_avoidance_wpnts = [Wpnt(s_m=8.0 + i*0.1, d_m=0.35, vx_mps=2.0) for i in range(16)]
+
+    local_pts = sm.get_avoidance_local_wpnts()
+    assert len(local_pts) > 0, "Local waypoints must not be empty"
+    # Waypoint 0 must be right in front of the car at s=4.5m, NOT at 8.0m!
+    assert abs(local_pts[0].s_m - 4.5) < 0.15, (
+        f"Waypoints must start at ego position s=4.5m, got s={local_pts[0].s_m:.2f}m (gap={local_pts[0].s_m - 4.5:.2f}m)"
+    )
+    # The first 35 waypoints should be on the raceline (d_m = 0.0)
+    assert local_pts[0].d_m == 0.0, "Approaching waypoints must be on raceline (d=0.0)"
+    assert local_pts[34].d_m == 0.0, "Point immediately before spline must be on raceline"
+    # Transition to avoidance spline at s=8.0m
+    assert abs(local_pts[35].s_m - 8.0) < 0.15, "Transition point must connect to avoidance spline start at 8.0m"
+    assert local_pts[35].d_m == 0.35, "Avoidance spline points must carry lateral offset"

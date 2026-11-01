@@ -717,6 +717,9 @@ class StateMachine(Node):
         opp_speed = 0.0
         is_static = False
         horizon_m = getattr(self.params, 'gb_horizon_m', 4.5)
+        # Adapt horizon to track length so that on short indoor tracks (< 30m),
+        # passing is not triggered an entire quarter-lap early!
+        eff_horizon = min(horizon_m, max(2.5, 0.16 * self.track_length)) if (self.track_length and self.track_length > 0) else horizon_m
 
         for obs in self.obstacles:
             half_track = self.track_length / 2.0
@@ -724,9 +727,9 @@ class StateMachine(Node):
             obs_speed = getattr(obs, 'vs', 0.0)
             obs_is_static = getattr(obs, 'is_static', False) or (obs_speed < 0.5)
 
-            # Static obstacles can be passed from the full detection horizon down through alongside (-2.5m)
+            # Static obstacles can be passed within eff_horizon down through alongside (-2.5m)
             # Moving opponents use the tactical slipstream window (0.40m to 3.60m)
-            max_gap = max(3.60, min(5.50, horizon_m)) if obs_is_static else 3.60
+            max_gap = max(2.50, min(eff_horizon, 4.50)) if obs_is_static else min(3.60, eff_horizon)
             min_gap = -2.50 if obs_is_static else 0.40
             if min_gap <= s_rel <= max_gap:
                 obs_size = getattr(obs, 'size', 0.0)
@@ -817,6 +820,8 @@ class StateMachine(Node):
         gb_free = True
         # If we are in time trial only mode -> return free overtake i.e. GB_FREE True
         horizon = self.params.gb_horizon_m  # Horizon in front of cur_s [m]
+        if self.track_length and self.track_length > 0:
+            horizon = min(horizon, max(2.5, 0.16 * self.track_length))
 
         for obs in self.obstacles:
             obs_s = (obs.s_start + obs.s_end) / 2
@@ -835,6 +840,8 @@ class StateMachine(Node):
     @property
     def _check_enemy_in_front(self) -> bool:
         horizon = self.params.gb_horizon_m  # Horizon in front of cur_s [m]
+        if self.track_length and self.track_length > 0:
+            horizon = min(horizon, max(2.5, 0.16 * self.track_length))
         for obs in self.obstacles:
             gap = (obs.s_start - self.cur_s) % self.track_length
             if gap < horizon:
@@ -944,14 +951,29 @@ class StateMachine(Node):
         # Cap avoidance points to n_loc_wpnts
         ahead_avoid = ahead_avoid[:self.params.n_loc_wpnts]
 
+        # Check if car is still approaching the start of the avoidance trajectory:
+        # If there is a gap between ego's current position and the first avoidance point,
+        # prepend global raceline waypoints so ego stays cleanly on the raceline up to the evasion start!
+        first_avoid_s = ahead_avoid[0].s_m
+        s_lead_gap = (first_avoid_s - cur_s) % self.track_length if self.track_length > 0 else 0.0
+        lead_pts = []
+        if 0.15 < s_lead_gap < (self.track_length / 2.0 if self.track_length > 0 else 50.0):
+            cur_idx = self.get_closest_glb_wpnt_idx(cur_s)
+            avoid_start_idx = self.get_closest_glb_wpnt_idx(first_avoid_s)
+            num_lead = (avoid_start_idx - cur_idx) % self.num_glb_wpnts
+            lead_pts = [self.glb_wpnts[(cur_idx + i) % self.num_glb_wpnts] for i in range(num_lead)]
+
+        combined = lead_pts + ahead_avoid
+        combined = combined[:self.params.n_loc_wpnts]
+
         # Seamlessly pad the remaining waypoints from the global raceline resuming after the spline
-        needed = self.params.n_loc_wpnts - len(ahead_avoid)
+        needed = self.params.n_loc_wpnts - len(combined)
         if needed > 0:
             end_s = avoid_wpnts[-1].s_m
             resume_idx = (self.get_closest_glb_wpnt_idx(end_s) + 1) % self.num_glb_wpnts
             resume_pts = [self.glb_wpnts[(resume_idx + i) % self.num_glb_wpnts] for i in range(needed)]
-            return ahead_avoid + resume_pts
-        return ahead_avoid
+            return combined + resume_pts
+        return combined
 
     def get_splini_wpts(self) -> WpntArray:
         """Obtain the waypoints by fusing those obtained by spliner with the
