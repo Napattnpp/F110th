@@ -197,11 +197,44 @@ def message_to_ordereddict(msg):
             "ax_mps2": float(msg.ax_mps2)
         }
     elif isinstance(msg, Marker):
+        pos = getattr(getattr(msg, "pose", None), "position", None)
+        ori = getattr(getattr(msg, "pose", None), "orientation", None)
+        scl = getattr(msg, "scale", None)
+        clr = getattr(msg, "color", None)
+        hdr = getattr(msg, "header", None)
+
         return {
-            "id": msg.id,
-            "ns": msg.ns,
-            "type": msg.type,
-            "action": msg.action,
+            "id": int(getattr(msg, "id", 0)),
+            "ns": str(getattr(msg, "ns", "")),
+            "type": int(getattr(msg, "type", 0)),
+            "action": int(getattr(msg, "action", 0)),
+            "header": {
+                "frame_id": str(getattr(hdr, "frame_id", "map")) if hdr and getattr(hdr, "frame_id", None) else "map"
+            },
+            "pose": {
+                "position": {
+                    "x": float(getattr(pos, "x", 0.0)) if pos else 0.0,
+                    "y": float(getattr(pos, "y", 0.0)) if pos else 0.0,
+                    "z": float(getattr(pos, "z", 0.0)) if pos else 0.0
+                },
+                "orientation": {
+                    "x": float(getattr(ori, "x", 0.0)) if ori else 0.0,
+                    "y": float(getattr(ori, "y", 0.0)) if ori else 0.0,
+                    "z": float(getattr(ori, "z", 0.0)) if ori else 0.0,
+                    "w": float(getattr(ori, "w", 1.0)) if ori else 1.0
+                }
+            },
+            "scale": {
+                "x": float(getattr(scl, "x", 0.12)) if scl else 0.12,
+                "y": float(getattr(scl, "y", 0.12)) if scl else 0.12,
+                "z": float(getattr(scl, "z", 0.15)) if scl else 0.15
+            },
+            "color": {
+                "r": float(getattr(clr, "r", 0.0)) if clr else 0.0,
+                "g": float(getattr(clr, "g", 0.85)) if clr else 0.85,
+                "b": float(getattr(clr, "b", 1.0)) if clr else 1.0,
+                "a": float(getattr(clr, "a", 1.0)) if clr else 1.0
+            },
             "points": [{"x": float(p.x), "y": float(p.y), "z": float(p.z)} for p in getattr(msg, "points", [])]
         }
     elif isinstance(msg, dict):
@@ -606,16 +639,25 @@ def process_map(map_rel_path):
         success, _ = planner.global_plan_logic()
         return success, sw
 
-    # Check for per-map global_planner_params.yaml first in waypoint_gen/, falling back to central config
+    # ADR-004 & ADR-005: Every map must have its own global_planner_params.yaml in waypoint_gen/ (Single Source of Truth)
     map_params_file = Path(resolve_map_filepath(map_dir, "global_planner_params.yaml"))
-    central_params_file = repo_root / "src" / "race_bringup" / "config" / "global_planner" / "global_planner_params.yaml"
+    template_params_file = repo_root / "src" / "race_bringup" / "config" / "global_planner" / "global_planner_params.template.yaml"
+    legacy_central_file = repo_root / "src" / "race_bringup" / "config" / "global_planner" / "global_planner_params.yaml"
 
-    if map_params_file.exists():
-        params_file = map_params_file
-        config_source = f"per-map ({map_params_file.parent.name})"
-    else:
-        params_file = central_params_file
-        config_source = "central"
+    if not map_params_file.exists():
+        template_src = template_params_file if template_params_file.exists() else legacy_central_file
+        if template_src.exists():
+            log_print(f"[WARN] Map '{map_name}' missing per-map config. Initializing {map_params_file} from template {template_src.name} (ADR-005 SSOT)...")
+            map_params_file.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(template_src, map_params_file)
+        else:
+            raise FileNotFoundError(
+                f"[ERROR] Missing '{map_params_file}'. Each map must have its own global_planner_params.yaml in waypoint_gen/ (ADR-004/ADR-005). "
+                f"Run 'python3 scripts/map/init_map.py {map_name}' to initialize it."
+            )
+
+    params_file = map_params_file
+    config_source = f"per-map ({map_params_file.parent.name})"
 
     configured_sw = 0.30
     configured_sw_sp = 0.30

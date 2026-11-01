@@ -316,7 +316,9 @@ class Detect(Node):
     def clearmarkers(self) -> MarkerArray:
         marker_array = MarkerArray()
         marker = Marker()
-        marker.action = 3
+        marker.header.frame_id = "map"
+        marker.header.stamp = self.get_clock().now().to_msg()
+        marker.action = Marker.DELETEALL
         marker_array.markers = [marker]
         return marker_array
 
@@ -638,6 +640,8 @@ class Detect(Node):
             marker.header.stamp = self.current_stamp
             marker.id = obs.id
             marker.type = Marker.CUBE
+            marker.lifetime.sec = 0
+            marker.lifetime.nanosec = 300000000
             marker.scale.x = obs.size
             marker.scale.y = obs.size
             marker.scale.z = obs.size

@@ -291,9 +291,18 @@ class MAP_Controller:
 
         raw_cmd = opp_speed - p_value - i_value - d_value
 
-        self.trailing_command = np.clip(raw_cmd, 0, surge_speed) 
-        # If the opponent is static/stopped or not visible, maintain at least the blind trailing speed
-        if (opp_speed < 0.1) or (not self.opponent[4] and self.gap_actual > self.gap_should):
+        # Static Obstacle Continuous Momentum:
+        # Stationary obstacles require approach momentum to smoothly initiate and execute evasion corridors.
+        # Preserve a controlled forward momentum (0.80 - 1.20 m/s) so the vehicle never dead-stops side by side.
+        is_opp_static = bool(self.opponent[3]) or (opp_speed < 0.5)
+        if is_opp_static:
+            min_crawl = float(np.clip(0.85 + 0.35 * max(0.0, self.gap_actual - 0.65), 0.85, 1.40))
+            self.trailing_command = float(np.clip(raw_cmd, min_crawl, surge_speed))
+        else:
+            self.trailing_command = float(np.clip(raw_cmd, 0, surge_speed))
+
+        # If the opponent is lost/not visible and we are beyond target gap, cruise at blind trailing speed
+        if (not self.opponent[4] and self.gap_actual > self.gap_should):
             self.trailing_command = max(self.blind_trailing_speed, self.trailing_command)
             
         return self.trailing_command

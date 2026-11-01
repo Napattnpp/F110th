@@ -1022,8 +1022,16 @@ HTML_PAGE = """<!DOCTYPE html>
           sel.appendChild(opt);
         });
 
+        const urlParams = new URLSearchParams(window.location.search);
+        const mapArg = urlParams.get('map');
         if (maps.length > 0) {
-          sel.value = maps.includes('rectangle1') ? 'rectangle1' : maps[0];
+          if (mapArg && maps.includes(mapArg)) {
+            sel.value = mapArg;
+          } else if (maps.includes('ifac_roboracer')) {
+            sel.value = 'ifac_roboracer';
+          } else {
+            sel.value = maps[0];
+          }
           currentMap = sel.value;
           await loadMap(currentMap);
         }
@@ -2101,7 +2109,26 @@ def main():
     parser = argparse.ArgumentParser(description="F1TENTH Web-Based Sector Tuner")
     parser.add_argument("-p", "--port", type=int, default=8050, help="Port to serve the Web UI on (default: 8050)")
     parser.add_argument("--host", type=str, default="0.0.0.0", help="Host interface to bind (default: 0.0.0.0)")
+    parser.add_argument("-m", "--map", type=str, default="", help="Target map name (default: auto from .env or ifac_roboracer)")
     args = parser.parse_args()
+
+    # Resolve active map from CLI, .env, or fallback to ifac_roboracer
+    active_map = args.map
+    if not active_map:
+        env_file = REPO_ROOT / ".env"
+        if env_file.exists():
+            try:
+                with open(env_file, 'r') as f:
+                    for line in f:
+                        if line.strip().startswith('MAP='):
+                            val = line.strip().split('=', 1)[1].strip().strip('"').strip("'")
+                            if val and (MAPS_ROOT / val).is_dir():
+                                active_map = val
+                                break
+            except Exception:
+                pass
+    if not active_map:
+        active_map = "ifac_roboracer"
 
     server_address = (args.host, args.port)
     httpd = HTTPServer(server_address, SectorTunerHandler)
@@ -2111,12 +2138,13 @@ def main():
         from common.network_info import print_service_banner
         print_service_banner(
             title="🏎️  F1TENTH Web Sector Tuner & Visualizer",
-            subtitle="[Live Sector Speed & Overtaking Boundary Tuning / Zero X11]",
-            port=args.port
+            subtitle="Live Sector Speed & Overtaking Boundary Tuning",
+            port=args.port,
+            query=f"map={active_map}" if active_map else ""
         )
     except Exception:
         print("=" * 65)
-        print(f"Server active at: http://localhost:{args.port}")
+        print(f"Server active at: http://localhost:{args.port}/?map={active_map}")
         print("=" * 65)
 
     try:

@@ -103,7 +103,8 @@ RUN groupadd -f -g ${GID} ${USER} \
 USER ${USER}
 RUN echo "if [ -f /opt/ros/$ROS_DISTRO/install/setup.bash ]; then source /opt/ros/$ROS_DISTRO/install/setup.bash; fi" >> /home/${USER}/.bashrc \
     && echo "if [ -f /opt/ros/$ROS_DISTRO/setup.bash ]; then source /opt/ros/$ROS_DISTRO/setup.bash; fi" >> /home/${USER}/.bashrc \
-    && echo "if [ -f /home/${USER}/F110th/out/install/setup.bash ]; then source /home/${USER}/F110th/out/install/setup.bash; fi" >> /home/${USER}/.bashrc
+    && echo "if [ -f /home/${USER}/F110th/out/install/setup.bash ]; then source /home/${USER}/F110th/out/install/setup.bash; fi" >> /home/${USER}/.bashrc \
+    && echo "export CYCLONEDDS_URI=file:///etc/cyclonedds.xml" >> /home/${USER}/.bashrc
 
 USER root
 COPY ./.devcontainer/docker/ros_entrypoint.sh /

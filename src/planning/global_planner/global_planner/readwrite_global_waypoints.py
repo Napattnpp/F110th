@@ -8,7 +8,7 @@ from rosidl_runtime_py.convert import message_to_ordereddict
 from rosidl_runtime_py.set_message import set_message_fields
 
 import numpy as np
-from visualization_msgs.msg import MarkerArray
+from visualization_msgs.msg import Marker, MarkerArray
 from f110_msgs.msg import WpntArray
 from std_msgs.msg import String, Float32
 from typing import Tuple, List, Dict
@@ -96,6 +96,60 @@ def _resolve_map_dir(map_dir: str) -> str:
     return map_dir
 
 
+def _repair_markers(markers: MarkerArray, wpnts: WpntArray, color_rgb=(0.0, 0.85, 1.0)) -> MarkerArray:
+    if not hasattr(wpnts, 'wpnts') or len(wpnts.wpnts) == 0:
+        return markers
+
+    needs_rebuild = False
+    if not hasattr(markers, 'markers') or len(markers.markers) == 0 or len(markers.markers) != len(wpnts.wpnts):
+        needs_rebuild = True
+    elif len(markers.markers) > 0:
+        m0 = markers.markers[0]
+        scale_x = getattr(getattr(m0, 'scale', None), 'x', 0.0)
+        pos = getattr(getattr(m0, 'pose', None), 'position', None)
+        if scale_x == 0.0:
+            needs_rebuild = True
+        elif pos is not None and pos.x == 0.0 and pos.y == 0.0 and (wpnts.wpnts[0].x_m != 0.0 or wpnts.wpnts[0].y_m != 0.0):
+            needs_rebuild = True
+
+    if not needs_rebuild:
+        for m in markers.markers:
+            if not getattr(getattr(m, 'header', None), 'frame_id', None):
+                m.header.frame_id = 'map'
+            if getattr(getattr(m, 'color', None), 'a', 0.0) == 0.0:
+                m.color.a = 1.0
+                m.color.r = float(color_rgb[0])
+                m.color.g = float(color_rgb[1])
+                m.color.b = float(color_rgb[2])
+        return markers
+
+    rebuilt = MarkerArray()
+    max_vx = max([w.vx_mps for w in wpnts.wpnts]) if len(wpnts.wpnts) > 0 else 1.0
+    max_vx = max(max_vx, 1.0)
+
+    for i, w in enumerate(wpnts.wpnts):
+        m = Marker()
+        m.header.frame_id = 'map'
+        m.id = i
+        m.type = Marker.CYLINDER
+        m.action = Marker.ADD
+        m.scale.x = 0.12
+        m.scale.y = 0.12
+        m.scale.z = max(0.12, float(w.vx_mps / max_vx * 0.5))
+        m.color.r = float(color_rgb[0])
+        m.color.g = float(color_rgb[1])
+        m.color.b = float(color_rgb[2])
+        m.color.a = 1.0
+
+        m.pose.position.x = float(w.x_m)
+        m.pose.position.y = float(w.y_m)
+        m.pose.position.z = m.scale.z / 2.0
+        m.pose.orientation.w = 1.0
+        rebuilt.markers.append(m)
+
+    return rebuilt
+
+
 def read_global_waypoints(map_dir: str) -> Tuple[
     String, Float32, MarkerArray, WpntArray, MarkerArray, WpntArray, MarkerArray, WpntArray, MarkerArray
 ]:
@@ -172,6 +226,10 @@ def read_global_waypoints(map_dir: str) -> Tuple[
                     for w in traj_wpnts.wpnts:
                         w.d_left = float(np.interp(w.s_m, cl_s, cl_dl))
                         w.d_right = float(np.interp(w.s_m, cl_s, cl_dr))
+
+    global_traj_markers_iqp = _repair_markers(global_traj_markers_iqp, global_traj_wpnts_iqp, color_rgb=(0.0, 0.85, 1.0))
+    global_traj_markers_sp = _repair_markers(global_traj_markers_sp, global_traj_wpnts_sp, color_rgb=(1.0, 0.85, 0.0))
+    centerline_markers = _repair_markers(centerline_markers, centerline_waypoints, color_rgb=(0.5, 0.5, 0.5))
 
     for ma in [centerline_markers, global_traj_markers_iqp, global_traj_markers_sp, trackbounds_markers]:
         for m in ma.markers:

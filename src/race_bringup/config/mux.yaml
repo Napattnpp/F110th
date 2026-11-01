@@ -7,7 +7,7 @@ ackermann_mux:
         priority: 10
       joystick:
         topic   : teleop
-        timeout : 0.2
+        timeout : 0.1
         priority: 100
       emergency_stop:
         topic   : e_stop

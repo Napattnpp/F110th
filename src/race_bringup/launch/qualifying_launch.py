@@ -4,7 +4,7 @@ from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, GroupAction
 from launch.conditions import IfCondition
 from launch.launch_description_sources import AnyLaunchDescriptionSource
-from launch.substitutions import LaunchConfiguration
+from launch.substitutions import LaunchConfiguration, PythonExpression
 from launch_ros.actions import SetParameter
 
 def get_launch_source(package_name, base_name):
@@ -48,11 +48,6 @@ def generate_launch_description():
         'measure',
         default_value='False',
         description='Measure execution time'
-    )
-    fake_obstacles_arg = DeclareLaunchArgument(
-        'fake_obstacles',
-        default_value='false',
-        description='Publish synthetic fake obstacles for standalone tracker benchmarking'
     )
     enable_recovery_arg = DeclareLaunchArgument(
         'enable_recovery',
@@ -108,7 +103,7 @@ def generate_launch_description():
             perception_source,
             launch_arguments={
                 'param_file': os.path.join(pkg_bringup, 'config', 'opponent_tracker_params.yaml'),
-                'enable_fake_obstacles': LaunchConfiguration('fake_obstacles')
+                'enable_fake_obstacles': 'false'
             }.items()
         )
 
@@ -125,7 +120,6 @@ def generate_launch_description():
         overtake_mode_arg,
         ctrl_algo_arg,
         measure_arg,
-        fake_obstacles_arg,
         enable_recovery_arg,
     ]
     if controller_launch is not None:

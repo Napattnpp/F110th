@@ -134,12 +134,18 @@ class JoyComboNode(Node):
         self.ego_odom_sub = self.create_subscription(Odometry, '/ego_racecar/odom', self.odom_callback, 10)
         self.pose_sub = self.create_subscription(PoseStamped, '/car_state/pose', self.pose_callback, 10)
 
-        # 6. E-stop active burst timer (20Hz)
+        # 6. E-stop active burst timer (20Hz) & pause navigation state heartbeat
         self.timer = self.create_timer(0.05, self.timer_callback)
+
+        # Immediately lock autonomy on boot (Safe Startup Guard)
+        init_pause = Bool()
+        init_pause.data = self.pause_nav_state
+        self.pause_nav_pub.publish(init_pause)
 
         self.get_logger().info(
             f"[{self.get_name()}] Started with LT modifier (axis {self.lt_axis}) "
-            f"and RT modifier (axis {self.rt_axis}). Base layer buttons unassigned (safe)."
+            f"and RT modifier (axis {self.rt_axis}). Base layer buttons unassigned (safe). "
+            f"Autonomy initialized in PAUSED mode (/pause_navigation = True). Press RB to toggle."
         )
 
     def _get_param_int(self, name: str, default: int) -> int:
@@ -183,7 +189,7 @@ class JoyComboNode(Node):
         self.latest_pose = (x, y, yaw)
 
     def timer_callback(self):
-        """Maintain burst of zero-speed commands when E-STOP is active."""
+        """Maintain burst of zero-speed commands when E-STOP is active, and publish pause lock heartbeat."""
         if self.e_stop_burst_count > 0:
             self.e_stop_burst_count -= 1
             e_stop_msg = AckermannDriveStamped()
@@ -192,6 +198,11 @@ class JoyComboNode(Node):
             e_stop_msg.drive.speed = 0.0
             e_stop_msg.drive.steering_angle = 0.0
             self.e_stop_pub.publish(e_stop_msg)
+
+        # Continuous heartbeat to ensure ackermann_mux lock stays synchronized across node launches
+        pause_msg = Bool()
+        pause_msg.data = self.pause_nav_state
+        self.pause_nav_pub.publish(pause_msg)
 
     # ------------------ Main Gamepad Processing ------------------
 

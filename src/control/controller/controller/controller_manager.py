@@ -74,7 +74,7 @@ class Controller(Node):
         self.declare_parameter('debug', False)
         self.declare_parameter('safety_radius', 40)
         self.declare_parameter('max_lidar_dist', 9.0)
-        self.declare_parameter('max_speed', 6.0)
+        self.declare_parameter('max_speed', 3.2)
         self.declare_parameter('range_offset', 180)
         self.declare_parameter('track_width', 2.6)
 
@@ -663,6 +663,7 @@ class Controller(Node):
             self.get_logger().info(f"[RECOVERY_ALIGN] Executing FTG alignment cycle (v={speed:.2f} m/s)", throttle_duration_sec=0.5)
         elif self.state == "FTGONLY":
             speed, steer = self.ftg_cycle()
+            speed = min(speed, 1.30)  # Cap FTG fallback speed to safe crawl to prevent AMCL particle divergence
             self.get_logger().info(f"[FTGONLY] Executing Follow-The-Gap reactive cycle (v={speed:.2f} m/s, steer={steer:.2f} rad)", throttle_duration_sec=0.5)
         elif self.mode == "MAP":
             speed, steer = self.map_cycle()
@@ -769,6 +770,8 @@ class Controller(Node):
         opponent_marker.scale.x = 0.3
         opponent_marker.scale.y = 0.3
         opponent_marker.scale.z = 0.3
+        opponent_marker.lifetime.sec = 0
+        opponent_marker.lifetime.nanosec = 300000000
         opponent_marker.color.r = 1.0
         opponent_marker.color.g = 0.0
         opponent_marker.color.b = 0.0

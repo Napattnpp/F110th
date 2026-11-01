@@ -12,7 +12,7 @@ perception:
 
     tracking:
       rate: 40 # rate at which the node is running
-      min_persistence_frames: 3 # require 3 consecutive matched frames (75ms) to suppress ghost obstacles
+      min_persistence_frames: 2 # require 2 consecutive matched frames to suppress ghost obstacles while minimizing detection latency
       min_nb_meas: 5 # minimum number of measurements before static/dynamic voting
       ttl_static: 15 # time-to-live for static obstacles to prevent corner dropout
       P_vs: 0.2 # proportional gain for the vs

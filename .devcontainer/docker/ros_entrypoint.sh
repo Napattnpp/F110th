@@ -19,4 +19,9 @@ if [ -f "/home/${USER}/F110th/out/install/setup.bash" ]; then
     source "/home/${USER}/F110th/out/install/setup.bash"
 fi
 
+# CycloneDDS fallback: enforce container-safe URI if missing or invalid
+if [ -f "/etc/cyclonedds.xml" ]; then
+    export CYCLONEDDS_URI="file:///etc/cyclonedds.xml"
+fi
+
 exec "$@"

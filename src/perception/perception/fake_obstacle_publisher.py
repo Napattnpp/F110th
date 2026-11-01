@@ -138,6 +138,8 @@ class FakeObstaclePublisher(Node):
             marker.header.stamp = self.get_clock().now().to_msg()
             marker.type = Marker.CUBE
             marker.action = Marker.ADD
+            marker.lifetime.sec = 0
+            marker.lifetime.nanosec = 300000000
             marker.ns = "fake_obs"
             marker.id = obs.id
             if self.obs_mode == 'static_ahead':

@@ -4,7 +4,7 @@ import rclpy
 from rclpy.node import Node
 from std_msgs.msg import String, Float32
 from f110_msgs.msg import WpntArray
-from visualization_msgs.msg import MarkerArray
+from visualization_msgs.msg import Marker, MarkerArray
 
 # the `.` tells Python to look in the current directory at runtime
 from .readwrite_global_waypoints import read_global_waypoints
@@ -145,6 +145,46 @@ class GlobalRepublisher(Node):
         else: # default to minimum_curvature
             wpnts_to_pub = self.glb_wpnts
             markers_to_pub = self.glb_markers
+
+        # Defensive reconstruction for Foxglove: ensure markers_to_pub has non-zero scale and real coordinates
+        needs_rebuild = False
+        if markers_to_pub is None or not hasattr(markers_to_pub, 'markers') or len(markers_to_pub.markers) == 0:
+            needs_rebuild = True
+        elif len(markers_to_pub.markers) > 0:
+            m0 = markers_to_pub.markers[0]
+            if getattr(getattr(m0, 'scale', None), 'x', 0.0) == 0.0:
+                needs_rebuild = True
+
+        if needs_rebuild and wpnts_to_pub is not None and hasattr(wpnts_to_pub, 'wpnts') and len(wpnts_to_pub.wpnts) > 0:
+            rebuilt = MarkerArray()
+            max_vx = max([w.vx_mps for w in wpnts_to_pub.wpnts]) if len(wpnts_to_pub.wpnts) > 0 else 1.0
+            max_vx = max(max_vx, 1.0)
+            color_rgb = (1.0, 0.85, 0.0) if traj_type == 'shortest_path' else (0.0, 0.85, 1.0)
+            for i, w in enumerate(wpnts_to_pub.wpnts):
+                m = Marker()
+                m.header.frame_id = 'map'
+                m.id = i
+                m.type = Marker.CYLINDER
+                m.action = Marker.ADD
+                m.scale.x = 0.12
+                m.scale.y = 0.12
+                m.scale.z = max(0.15, float(w.vx_mps / max_vx * 0.5))
+                m.color.r = float(color_rgb[0])
+                m.color.g = float(color_rgb[1])
+                m.color.b = float(color_rgb[2])
+                m.color.a = 1.0
+                m.pose.position.x = float(w.x_m)
+                m.pose.position.y = float(w.y_m)
+                m.pose.position.z = m.scale.z / 2.0
+                m.pose.orientation.w = 1.0
+                rebuilt.markers.append(m)
+            markers_to_pub = rebuilt
+            if traj_type == 'shortest_path':
+                self.glb_sp_markers = rebuilt
+            elif traj_type == 'centerline':
+                self.centerline_markers = rebuilt
+            else:
+                self.glb_markers = rebuilt
 
         # Ensure all markers have frame_id set to 'map' and bright visible colors
         for ma in [markers_to_pub, self.glb_sp_markers, self.centerline_markers, self.track_bounds]:

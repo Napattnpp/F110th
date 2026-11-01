@@ -91,11 +91,21 @@ def recovery_transition(state_machine: StateMachine) -> StateType:
         return StateType.RECOVERY_REVERSE
 
     elif state_machine.state == StateType.RECOVERY_ALIGN:
-        # Stay in ALIGN (FTG mode stabilization) for recovery_align_time
-        if substate_elapsed >= p.recovery_align_time:
+        # Stay in ALIGN (FTG mode stabilization) until recovery_align_time AND vehicle heading
+        # is aligned with the track direction AND front clearance is restored.
+        heading_ok = state_machine._check_heading_aligned
+        front_safe = front_clear >= getattr(p, 'recovery_front_safe_dist', 0.50)
+
+        # If front remains trapped against the barrier during ALIGN after 2.0s, re-engage reverse
+        if substate_elapsed >= 2.0 and front_clear < 0.40:
+            state_machine.get_logger().warn(f"[RECOVERY] Front still obstructed ({front_clear:.2f}m < 0.40m). Re-engaging REVERSE.")
+            state_machine.recovery_substate_start = now_sec
+            return StateType.RECOVERY_REVERSE
+
+        if substate_elapsed >= p.recovery_align_time and ((heading_ok and front_safe) or substate_elapsed >= 3.0):
             # Localization Health Gate: verify particle filter covariance has converged
             if state_machine._check_localization_healthy:
-                state_machine.get_logger().info("[RECOVERY] Recovery sequence complete and localization converged! Resuming NORMAL_RACING.")
+                state_machine.get_logger().info("[RECOVERY] Recovery sequence complete, front clear and vehicle aligned! Resuming NORMAL_RACING.")
                 state_machine.top_level_mode = TopLevelMode.NORMAL_RACING
                 state_machine.stuck_counter = 0
                 return StateType.GB_TRACK
@@ -210,6 +220,9 @@ def SpliniGlobalTrackingTransition(state_machine: StateMachine) -> StateType:
     if not state_machine._check_only_ftg_zone:
         if state_machine._check_gbfree:
             return StateType.GB_TRACK
+        elif state_machine._check_can_initiate_overtake:
+            # Immediate evasion bypass: seamlessly launch evasion without settling in TRAILING (matches Aug 17 behavior)
+            return StateType.OVERTAKE
         else:
             return StateType.TRAILING
     else:
@@ -224,7 +237,7 @@ def SpliniTrailingTransition(state_machine: StateMachine) -> StateType:
         # If we have been sitting around in TRAILING for a while then FTG
         if state_machine._check_ftg:
             return StateType.FTGONLY
-        if gb_free:
+        if gb_free and state_machine._check_close_to_raceline:
             return StateType.GB_TRACK
         elif state_machine._check_can_initiate_overtake:
             return StateType.OVERTAKE
@@ -241,21 +254,31 @@ def SpliniOvertakingTransition(state_machine: StateMachine) -> StateType:
         spline_valid = state_machine._check_availability_splini_wpts
         o_free = state_machine._check_ofree
         dwell_time = getattr(state_machine, 'state_dwell_time', 1.0)
+        is_alongside = state_machine._check_alongside_obstacle
 
-        # 1. Primary Success Exit: Opponent is passed and cleanly behind ego
-        if state_machine._check_opponent_behind:
+        # 1. Primary Success Exit: Opponent is passed cleanly behind ego
+        if state_machine._check_opponent_behind and not is_alongside:
             state_machine.last_valid_avoidance_wpnts = None
             return StateType.GB_TRACK
 
         # 2. Secondary Success Exit: Raceline ahead is completely clear of obstacles
-        if state_machine._check_gbfree and not state_machine._check_enemy_in_front:
-            state_machine.last_valid_avoidance_wpnts = None
-            return StateType.GB_TRACK
+        # CRITICAL: Never exit to GB_TRACK mid-maneuver while alongside an obstacle or actively passing!
+        if state_machine._check_gbfree and not state_machine._check_enemy_in_front and not is_alongside:
+            has_active_pass = False
+            half_t = (state_machine.track_length / 2.0) if state_machine.track_length else 500.0
+            for o in (state_machine.obstacles or []):
+                r_s = (o.s_center - state_machine.cur_s + half_t) % state_machine.track_length - half_t
+                if -2.5 <= r_s <= 0.0:
+                    has_active_pass = True
+                    break
+            if not has_active_pass:
+                state_machine.last_valid_avoidance_wpnts = None
+                return StateType.GB_TRACK
 
         # 3. Sector Boundary Abort: Approaching corner/chicane without completing pass
         # Rejoin raceline immediately rather than carrying an offline spline into a narrow turn!
-        # Sector safety takes absolute precedence over dwell hysteresis!
-        if not in_ot_sector:
+        # CRITICAL: Never abort while physically alongside an obstacle!
+        if not in_ot_sector and not is_alongside:
             state_machine.last_valid_avoidance_wpnts = None
             return StateType.GB_TRACK if state_machine._check_gbfree else StateType.TRAILING
 
@@ -263,22 +286,39 @@ def SpliniOvertakingTransition(state_machine: StateMachine) -> StateType:
         if dwell_time < 0.35 and (spline_valid or state_machine.last_valid_avoidance_wpnts is not None):
             return StateType.OVERTAKE
 
-        # 5. Timeout / Stalled Maneuver Abort: Pass taking longer than 2.0s
-        # Re-tuck onto optimal raceline behind opponent instead of lingering offline
-        if dwell_time > 2.0:
+        # 5. Timeout / Stalled Maneuver Abort: Pass taking longer than allowable window
+        # Allow extra time if attacking a moving opponent (4.5 - 6.0s) or navigating from low speed.
+        # CRITICAL: Never abort while physically alongside an obstacle!
+        # If the opponent is already behind or raceline is clear, return to GB_TRACK (never slam brakes in TRAILING!)
+        is_dynamic_opp = any(
+            getattr(o, 'vs', 0.0) >= 0.5 for o in (state_machine.obstacles or [])
+        )
+        if is_dynamic_opp:
+            max_ot_time = 6.0
+        else:
+            max_ot_time = 4.5 if (getattr(state_machine, 'cur_vs', 0.0) or 0.0) < 1.5 else 3.5
+
+        if dwell_time > max_ot_time and not is_alongside:
             state_machine.last_valid_avoidance_wpnts = None
+            if state_machine._check_opponent_behind or state_machine._check_gbfree:
+                return StateType.GB_TRACK
             return StateType.TRAILING
 
         # 6. Clearance Abort: Opponent encroaching onto corridor / safe clearance compromised
-        if not o_free:
+        # Never abort to TRAILING while physically alongside an obstacle
+        if not o_free and not is_alongside:
             state_machine.last_valid_avoidance_wpnts = None
+            if state_machine._check_opponent_behind or state_machine._check_gbfree:
+                return StateType.GB_TRACK
             return StateType.TRAILING
 
-        # Continue overtaking if corridor is valid and clear
-        if spline_valid or state_machine.last_valid_avoidance_wpnts is not None:
+        # Continue overtaking if corridor is valid, avoidance path is cached, or ego is alongside
+        if spline_valid or state_machine.last_valid_avoidance_wpnts is not None or is_alongside:
             return StateType.OVERTAKE
         else:
             state_machine.last_valid_avoidance_wpnts = None
+            if state_machine._check_opponent_behind or state_machine._check_gbfree:
+                return StateType.GB_TRACK
             return StateType.TRAILING
     else:
         return StateType.FTGONLY

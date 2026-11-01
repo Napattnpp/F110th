@@ -33,7 +33,7 @@ vesc_to_odom_node:
     base_frame: base_link
     publish_tf: false
     # "servo": uses servo command to calc angular velocity, "imu": uses raw IMU yaw, "none": no heading
-    heading_source: none
+    heading_source: servo
     # car wheelbase is about 29.5cm
     wheelbase: 0.300
 
@@ -49,7 +49,8 @@ throttle_interpolator:
     servo_output_topic: commands/servo/position
 
     # servo smoother - limits acceleration and smooths anything above limit
-    max_acceleration: 2.0 # meters/second^2 (faster straightaway acceleration ramp)
+    max_acceleration: 6.0 # meters/second^2 (crisp, responsive throttle ramp)
+    watchdog_timeout: 0.1 # seconds (cuts power immediately when joystick released)
     throttle_smoother_rate: 75.0 # messages/sec
     # servo smoother - limits rotation speed and smooths anything above limit
     max_servo_speed: 5.5 # radians/second

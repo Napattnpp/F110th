@@ -964,6 +964,8 @@ class StaticDynamic(Node):
     def clearmarkers(self) -> MarkerArray:
         """Return a Marker that clears all markers."""
         marker = Marker()
+        marker.header.frame_id = "map"
+        marker.header.stamp = self.get_clock().now().to_msg()
         marker.action = Marker.DELETEALL
         return MarkerArray(markers=[marker])
 
@@ -983,6 +985,8 @@ class StaticDynamic(Node):
             marker.header.stamp = self.current_stamp
             marker.id = tracked_obstacle.id
             marker.type = Marker.SPHERE
+            marker.lifetime.sec = 0
+            marker.lifetime.nanosec = 300000000
 
             if tracked_obstacle.isInFront:
                 marker.scale.x = 0.5
@@ -1028,6 +1032,8 @@ class StaticDynamic(Node):
             marker.header.stamp = self.current_stamp
             marker.id = self.opponent_obstacle.id
             marker.type = Marker.SPHERE
+            marker.lifetime.sec = 0
+            marker.lifetime.nanosec = 300000000
 
             if self.opponent_obstacle.dynamic_kf.P[0][0] < self.var_pub:
                 marker.scale.x = 0.5

@@ -1,22 +1,22 @@
 spline_planner:
   ros__parameters:
-    evasion_dist: 0.40                # [m] lateral offset for smooth, controlled evasion around opponent
+    evasion_dist: 0.32                # [m] lateral offset for smooth, controlled evasion around opponent
     spline_bound_mindist: 0.18        # [m] minimum clearance distance from track boundary
     lookahead_min: 2.0                # [m] minimum spline lookahead
     lookahead_max: 4.5                # [m] maximum spline lookahead
     lookahead_kv: 0.35                # speed scaling for lookahead
     ot_side_switch_cur_d_thresh: 0.55 # [m] lateral threshold preventing side switches when off-center
-    pre_apex_0: 5.5                   # [m] approach distance start point before apex (smoother entry)
-    pre_apex_1: 3.8                   # [m] approach distance mid point before apex
-    pre_apex_2: 2.0                   # [m] approach distance end point before apex
-    post_apex_0: 1.5                  # [m] return distance start point after apex
-    post_apex_1: 3.2                  # [m] return distance mid point after apex
-    post_apex_2: 5.0                  # [m] return distance end point (smoother rejoin)
+    pre_apex_0: 4.0                   # [m] approach distance start point before apex (smoother entry)
+    pre_apex_1: 2.5                   # [m] approach distance mid point before apex
+    pre_apex_2: 1.2                   # [m] approach distance end point before apex
+    post_apex_0: 1.3                  # [m] return distance start point after apex
+    post_apex_1: 2.0                  # [m] return distance mid point after apex
+    post_apex_2: 2.8                  # [m] return distance end point (smoother rejoin)
     spline_max_alat: 6.5              # [m/s^2] max lateral acceleration budget for avoidance trajectory (safe under mu=0.75)
     spline_abrake_max: 5.0            # [m/s^2] max braking deceleration along avoidance spline
     spline_aaccel_max: 4.0            # [m/s^2] max acceleration along avoidance spline
     overtake_speed_boost: 1.05        # [scale] target speed multiplier on straightaways (gated by curvature)
     min_pass_delta_v: 0.8             # [m/s] minimum relative speed advantage over opponent on straights
-    corner_curvature_thresh: 0.08     # [rad/m] curvature threshold: no speed boost allowed above this value
+    corner_curvature_thresh: 0.22     # [rad/m] curvature threshold: raceline corner detection threshold
     prediction_mode: "curvature_aware" # Opponent propagation mode: curvature_aware / constant / adaptive
     multi_obs_safety_margin: 0.25     # [m] minimum spatial clearance to secondary tracked obstacles

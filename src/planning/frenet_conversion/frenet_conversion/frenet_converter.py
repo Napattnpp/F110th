@@ -100,8 +100,10 @@ class FrenetConverter:
                 dists[j, opposing_mask] += 1000.0
 
         # 2. Temporal Window Continuity: if previously tracked single vehicle, prioritize local forward window
-        if self.closest_index is not None and lenx == 1:
-            prev_idx = int(self.closest_index[0] if hasattr(self.closest_index, '__len__') else self.closest_index)
+        has_len = hasattr(self.closest_index, '__len__')
+        has_items = (len(self.closest_index) > 0) if has_len else (self.closest_index is not None)
+        if self.closest_index is not None and has_items and lenx == 1:
+            prev_idx = int(self.closest_index[0] if has_len else self.closest_index)
             num_pts = len(self.waypoints_x)
             window_indices = np.array([(prev_idx + offset) % num_pts for offset in range(-15, 45)])
             local_dists = dists[0, window_indices]

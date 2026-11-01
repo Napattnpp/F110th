@@ -160,10 +160,12 @@ def format_map_directory(map_dir: Path):
         shutil.move(str(old_params), str(track_params))
         print(f"✓ Moved global_planner_params.yaml to waypoint_gen/")
     elif not track_params.exists():
+        template_params = REPO_ROOT / "src" / "race_bringup" / "config" / "global_planner" / "global_planner_params.template.yaml"
         central_params = REPO_ROOT / "src" / "race_bringup" / "config" / "global_planner" / "global_planner_params.yaml"
-        if central_params.exists():
-            shutil.copy2(central_params, track_params)
-            print(f"✓ Initialized waypoint_gen/global_planner_params.yaml template")
+        src_params = template_params if template_params.exists() else central_params
+        if src_params.exists():
+            shutil.copy2(src_params, track_params)
+            print(f"✓ Initialized waypoint_gen/global_planner_params.yaml from template")
 
     # Remove all loose top-level files from map_dir root (keep ONLY the 4 subfolders)
     for item in list(map_dir.iterdir()):

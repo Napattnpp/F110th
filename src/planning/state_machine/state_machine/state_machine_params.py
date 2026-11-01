@@ -197,9 +197,9 @@ class StateMachineParams:
             read_only=False,
             type=ParameterType.PARAMETER_DOUBLE,
             floating_point_range=[FloatingPointRange(
-                from_value=1.0,
-                to_value=5.0,
-                step=0.1)]
+                from_value=0.1,
+                to_value=10.0,
+                step=0.01)]
         )
         node.set_descriptor("ftg_timer_sec", descriptor=descriptor)
         self.ftg_timer_sec: float = node.get_parameter("ftg_timer_sec").value
@@ -211,7 +211,7 @@ class StateMachineParams:
             floating_point_range=[FloatingPointRange(
                 from_value=0.0,
                 to_value=5.0,
-                step=0.1)]
+                step=0.01)]
         )
         node.set_descriptor("ftg_threshold_speed", descriptor=descriptor)
         self.ftg_threshold_speed: float = node.get_parameter("ftg_threshold_speed").value
@@ -319,10 +319,10 @@ class StateMachineParams:
             return node.get_parameter(name).value
 
         self.enable_recovery: bool = bool(_get_or_decl("enable_recovery", True))
-        self.crash_dist_threshold: float = float(_get_or_decl("crash_dist_threshold", 0.25))
+        self.crash_dist_threshold: float = float(_get_or_decl("crash_dist_threshold", 0.35))
         self.stuck_speed_threshold: float = float(_get_or_decl("stuck_speed_threshold", 0.1))
-        self.stuck_time_threshold: float = float(_get_or_decl("stuck_time_threshold", 0.6))
-        self.recovery_stop_time: float = float(_get_or_decl("recovery_stop_time", 0.5))
+        self.stuck_time_threshold: float = float(_get_or_decl("stuck_time_threshold", 0.25))
+        self.recovery_stop_time: float = float(_get_or_decl("recovery_stop_time", 0.25))
         self.recovery_reverse_speed: float = float(_get_or_decl("recovery_reverse_speed", -0.7))
         self.recovery_max_reverse_time: float = float(_get_or_decl("recovery_max_reverse_time", 1.5))
         self.recovery_align_time: float = float(_get_or_decl("recovery_align_time", 0.8))
@@ -330,24 +330,26 @@ class StateMachineParams:
         self.recovery_front_safe_dist: float = float(_get_or_decl("recovery_front_safe_dist", 0.70))
         self.max_loc_cov_trace: float = float(_get_or_decl("max_loc_cov_trace", 0.15))
         self.relocalization_timeout: float = float(_get_or_decl("relocalization_timeout", 3.0))
+        self.imu_shock_threshold: float = float(_get_or_decl("imu_shock_threshold", 18.0))
+        self.stall_current_threshold: float = float(_get_or_decl("stall_current_threshold", 14.0))
+        self.cornering_yaw_rate_thresh: float = float(_get_or_decl("cornering_yaw_rate_thresh", 0.45))
 
 
 
     def parameters_callback(self, parameters: List[Parameter]) -> SetParametersResult:
         for param in parameters:
-            match param.name:
-                case "rate_hz":
-                    self.node.main_loop.timer_period_ns = int(1e9 / param.value)
-                case "initial_state":
-                    self.node.state = StateType(param.value)
-                case "force_state_choice":
-                    try:
-                        self.force_state_choice = StateType(param.value)
-                    except ValueError:
-                        self.node.get_logger().error(f"Invalid state '{param.value}'")
-                        return SetParametersResult(successful=False)
-                case _:
-                    self.__dict__[param.name] = param.value
+            if param.name == "rate_hz":
+                self.node.main_loop.timer_period_ns = int(1e9 / param.value)
+            elif param.name == "initial_state":
+                self.node.state = StateType(param.value)
+            elif param.name == "force_state_choice":
+                try:
+                    self.force_state_choice = StateType(param.value)
+                except ValueError:
+                    self.node.get_logger().error(f"Invalid state '{param.value}'")
+                    return SetParametersResult(successful=False)
+            else:
+                self.__dict__[param.name] = param.value
             
             self.node.get_logger().info(f"Parameter '{param.name}' was set to {param.value}")
 

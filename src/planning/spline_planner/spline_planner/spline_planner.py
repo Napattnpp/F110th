@@ -92,13 +92,13 @@ class ObstacleSpliner(Node):
             Marker, '/planner/avoidance/propagated_obs', QoSProfile(depth=10))
 
         # dyn params sub
-        self.pre_apex_0 = -5.5
-        self.pre_apex_1 = -3.8
-        self.pre_apex_2 = -2.0
-        self.post_apex_0 = 1.5
-        self.post_apex_1 = 3.2
-        self.post_apex_2 = 5.0
-        self.evasion_dist = 0.40
+        self.pre_apex_0 = -4.0
+        self.pre_apex_1 = -2.5
+        self.pre_apex_2 = -1.2
+        self.post_apex_0 = 1.3
+        self.post_apex_1 = 2.0
+        self.post_apex_2 = 2.8
+        self.evasion_dist = 0.32
         self.obs_traj_tresh = 0.55
         self.spline_bound_mindist = 0.18
         self.fixed_pred_time = 0.15
@@ -109,10 +109,11 @@ class ObstacleSpliner(Node):
         self.spline_aaccel_max = 4.0
         self.overtake_speed_boost = 1.05
         self.min_pass_delta_v = 0.8
-        self.corner_curvature_thresh = 0.08
+        self.corner_curvature_thresh = 0.22
         self.prediction_mode = "curvature_aware"
         self.multi_obs_safety_margin = 0.25
         self.enable_predictive_intercept = True
+        self.last_target_obs_id = None
         self.max_intercept_horizon = 1.5
         self.min_closing_speed = 0.4
         
@@ -490,30 +491,49 @@ class ObstacleSpliner(Node):
     def _more_space(self, obstacle: Obstacle, gb_wpnts: List[Any], gb_idxs: List[int]) -> Tuple[str, float]:
         left_gap = gb_wpnts[gb_idxs[0]].d_left - obstacle.d_left
         right_gap = abs(gb_wpnts[gb_idxs[0]].d_right) + obstacle.d_right
-        min_safe_space = max(self.evasion_dist + self.spline_bound_mindist, 0.50)
+        nominal_safe_space = self.evasion_dist + self.spline_bound_mindist
+        min_passable_gap = 0.34  # Physical car width ~0.28m + safety buffer
 
-        candidate_d_apex_left = obstacle.d_left + self.evasion_dist
-        candidate_d_apex_right = obstacle.d_right - self.evasion_dist
+        # Proportional Corridor Centering with Parallel Plateau Offset:
+        # In wide corridors, cap evasion offset to 0.24m to avoid excessive horizontal departure from the raceline.
+        # In narrow corridors (like lab tracks), center directly in the gap (gap * 0.40) without rigid floor.
+        if left_gap >= nominal_safe_space:
+            evasion_offset_left = min(max(self.evasion_dist, left_gap * 0.40), min(0.24, left_gap - self.spline_bound_mindist))
+        else:
+            evasion_offset_left = max(0.18, min(0.24, left_gap * 0.50))
+
+        if right_gap >= nominal_safe_space:
+            evasion_offset_right = min(max(self.evasion_dist, right_gap * 0.40), min(0.24, right_gap - self.spline_bound_mindist))
+        else:
+            evasion_offset_right = max(0.18, min(0.24, right_gap * 0.50))
+
+        candidate_d_apex_left = obstacle.d_left + evasion_offset_left
+        candidate_d_apex_right = obstacle.d_right - evasion_offset_right
 
         # 1. If only right has safe room
-        if right_gap >= min_safe_space and left_gap < min_safe_space:
+        if right_gap >= nominal_safe_space and left_gap < nominal_safe_space:
             return "right", candidate_d_apex_right
 
         # 2. If only left has safe room
-        elif left_gap >= min_safe_space and right_gap < min_safe_space:
+        elif left_gap >= nominal_safe_space and right_gap < nominal_safe_space:
             return "left", candidate_d_apex_left
 
-        # 3. If neither side has safe room (corridor too narrow or opponent blocking)
-        elif left_gap < min_safe_space and right_gap < min_safe_space:
-            if hasattr(self, 'get_logger'):
-                self.get_logger().info(
-                    f"[Spliner] Insufficient corridor space on BOTH sides (Left: {left_gap:.2f}m, Right: {right_gap:.2f}m, Req: {min_safe_space:.2f}m). Aborting pass.",
-                    throttle_duration_sec=1.0
-                )
-            return "", 0.0
+        # 3. If neither side meets nominal clearance: check if either side is physically passable (narrow track mode)
+        elif left_gap < nominal_safe_space and right_gap < nominal_safe_space:
+            if max(left_gap, right_gap) >= min_passable_gap:
+                if left_gap >= right_gap:
+                    return "left", candidate_d_apex_left
+                else:
+                    return "right", candidate_d_apex_right
+            else:
+                if hasattr(self, 'get_logger'):
+                    self.get_logger().info(
+                        f"[Spliner] Insufficient corridor space on BOTH sides (Left: {left_gap:.2f}m, Right: {right_gap:.2f}m, Min: {min_passable_gap:.2f}m). Aborting pass.",
+                        throttle_duration_sec=1.0
+                    )
+                return "", 0.0
 
         # 4. Both sides have sufficient clearance: ALWAYS pick the side with the LARGER physical track clearance!
-        # Strictly prevents squeezing into the suicidal narrow gap between opponent and wall.
         else:
             if left_gap >= right_gap:
                 return "left", candidate_d_apex_left
@@ -571,10 +591,16 @@ class ObstacleSpliner(Node):
         close_obs = self._obs_filtering(obstacles=obstacles)
 
         if len(close_obs) > 0:
-            # 1. Primary obstacle: closest in front
-            closest_obs = min(
-                close_obs, key=lambda obs: (obs.s_center - self.cur_s) % self.gb_max_s
-            )
+            # 1. Primary obstacle: prioritize active obstacle currently alongside (-0.50m to +0.30m) or closest ahead
+            half_track = self.gb_max_s / 2.0
+            def _obs_rank(o):
+                s_diff = (o.s_center - self.cur_s + half_track) % self.gb_max_s - half_track
+                # Actively passing: vehicle center is physically within obstacle envelope
+                if -1.50 <= s_diff <= 0.50:
+                    return 0.0  # Actively passing: maintain apex priority so corridor does not collapse
+                return s_diff if s_diff > 0.50 else 999.0
+
+            closest_obs = min(close_obs, key=_obs_rank)
 
             # 2. Compute evasion apex along s
             if closest_obs.s_end < closest_obs.s_start:
@@ -592,13 +618,15 @@ class ObstacleSpliner(Node):
                 is_static = getattr(closest_obs, 'is_static', False)
                 v_opp = 0.0 if is_static else max(0.0, float(getattr(closest_obs, 'vs', 0.0)))
 
-                delta_s = (s_opp - self.cur_s) % self.gb_max_s
+                delta_s_signed = (s_opp - self.cur_s + half_track) % self.gb_max_s - half_track
                 min_closing = float(getattr(self, 'min_closing_speed', 0.4))
                 max_horizon = float(getattr(self, 'max_intercept_horizon', 1.5))
                 closing_speed = max(v_ego - v_opp, min_closing)
 
-                if (v_ego > v_opp) and not is_static:
-                    t_intercept = float(np.clip(delta_s / closing_speed, 0.0, max_horizon))
+                # Only predict forward intercept if ego is approaching from behind
+                # Once ego is alongside or ahead (delta_s_signed <= 0), intercept is reached (t_intercept = 0)
+                if (delta_s_signed > 0.0) and (v_ego > v_opp) and not is_static:
+                    t_intercept = float(np.clip(delta_s_signed / closing_speed, 0.0, max_horizon))
                 else:
                     t_intercept = 0.0
 
@@ -625,6 +653,12 @@ class ObstacleSpliner(Node):
                 self.last_ot_side = ""
                 return wpnts, mrks
 
+            # Reset side commitment hysteresis when target obstacle changes
+            target_obs_id = getattr(closest_obs, 'id', -1)
+            if target_obs_id != getattr(self, 'last_target_obs_id', None):
+                self.last_target_obs_id = target_obs_id
+                self.last_ot_side = ""
+
             # Determine candidate side order respecting side commitment hysteresis
             candidate_sides = []
             if not self._check_ot_side_possible(more_space):
@@ -646,34 +680,64 @@ class ObstacleSpliner(Node):
             spline_res = 0.1
 
             for cand_side in candidate_sides:
-                # Compute apex distance for this candidate side
+                # Compute apex distance for this candidate side with corridor centering
                 if cand_side == "right":
-                    cand_d_apex = closest_obs.d_right - self.evasion_dist
+                    right_gap = abs(gb_wpnts[gb_idxs[0]].d_right) + closest_obs.d_right
+                    if right_gap >= self.evasion_dist + self.spline_bound_mindist:
+                        evasion_offset = min(max(self.evasion_dist, right_gap * 0.40), min(0.24, right_gap - self.spline_bound_mindist))
+                    else:
+                        evasion_offset = max(0.18, min(0.24, right_gap * 0.50))
+                    cand_d_apex = closest_obs.d_right - evasion_offset
                 else:
-                    cand_d_apex = closest_obs.d_left + self.evasion_dist
+                    left_gap = gb_wpnts[gb_idxs[0]].d_left - closest_obs.d_left
+                    if left_gap >= self.evasion_dist + self.spline_bound_mindist:
+                        evasion_offset = min(max(self.evasion_dist, left_gap * 0.40), min(0.24, left_gap - self.spline_bound_mindist))
+                    else:
+                        evasion_offset = max(0.18, min(0.24, left_gap * 0.50))
+                    cand_d_apex = closest_obs.d_left + evasion_offset
 
-                # Form 7 control points along the evasion trajectory:
-                # Defines a smooth overtaking corridor that transitions into the passing lane
-                # before reaching the opponent, holds lateral evasion alongside, and smoothly rejoins
+                # Form 9 control points along the evasion trajectory (Trapezoidal Parallel Plateau):
+                # 1. Ramps smoothly outward: pre_apex_0 -> pre_apex_1 -> pre_apex_2
+                # 2. Holds a constant parallel offset alongside the opponent: -0.50m -> 0.0m -> +0.50m
+                # 3. Merges gently back to raceline: p_exit_0 -> p_exit_1 -> p_exit_2 (< 8 deg re-entry angle)
+                p_exit_0 = max(1.2, min(1.6, self.post_apex_0))
+                p_exit_1 = max(p_exit_0 + 0.8, min(2.6, self.post_apex_1))
+                p_exit_2 = max(p_exit_1 + 1.2, min(4.2, self.post_apex_2))
                 evasion_offsets = [
                     (self.pre_apex_0, 0.0),
                     (self.pre_apex_1, 0.40 * cand_d_apex),
-                    (self.pre_apex_2, 0.95 * cand_d_apex),
+                    (self.pre_apex_2, 0.90 * cand_d_apex),
+                    (-0.50,           cand_d_apex),
                     (0.0,             cand_d_apex),
-                    (self.post_apex_0, 0.95 * cand_d_apex),
-                    (self.post_apex_1, 0.40 * cand_d_apex),
-                    (self.post_apex_2, 0.0),
+                    (0.50,            cand_d_apex),
+                    (p_exit_0,        0.65 * cand_d_apex),
+                    (p_exit_1,        0.25 * cand_d_apex),
+                    (p_exit_2,        0.0),
                 ]
-                # Bounded avoidance corridor: dynamically scaled by speed but strictly clamped
-                # to prevent oversized splines wrapping around hairpins or bleeding into parallel lanes
-                speed_scale = np.clip(1.0 + 0.3 * (self.cur_vs / max(self.gb_vmax, 1.0)), 1.0, 1.25)
-                max_evasion_span = min(9.0, 0.22 * self.gb_max_s)
-                nominal_span = (evasion_offsets[-1][0] - evasion_offsets[0][0]) * speed_scale
-                span_scale = (max_evasion_span / nominal_span) if nominal_span > max_evasion_span else 1.0
+                # Speed-Adaptive Corridor Sizing:
+                v_ego_eff = max(0.4, float(self.cur_vs)) if self.cur_vs is not None else 1.0
+                is_obs_static = getattr(closest_obs, 'is_static', False) or (getattr(closest_obs, 'vs', 0.0) < 0.5)
+
+                if is_obs_static or v_ego_eff < 2.0:
+                    target_span = float(np.clip(1.5 * v_ego_eff + 1.0, 2.5, 4.5))
+                else:
+                    target_span = float(np.clip(1.5 * v_ego_eff + 1.5, 3.5, 6.5))
+
+                # Track length upper bound (prevent spline wrapping more than 22% of total track)
+                target_span = min(target_span, 0.22 * self.gb_max_s)
+
+                # Curvature compression: in tight corners (high kappa), compress span to fit corner geometry
+                avg_curv = float(np.mean(np.abs(kappas[:10]))) if len(kappas) > 0 else 0.0
+                if avg_curv > 0.35:
+                    curv_factor = float(np.clip(1.0 - 0.40 * (avg_curv - 0.35), 0.60, 1.0))
+                    target_span *= curv_factor
+
+                nominal_span = evasion_offsets[-1][0] - evasion_offsets[0][0]
+                span_scale = target_span / nominal_span
 
                 evasion_points = []
                 for dst, di in evasion_offsets:
-                    scaled_dst = dst * speed_scale * span_scale
+                    scaled_dst = dst * span_scale
                     si = s_apex + scaled_dst
                     evasion_points.append([si, di])
                 evasion_points = np.array(evasion_points)
@@ -687,6 +751,9 @@ class ObstacleSpliner(Node):
                 s_cand_wrapped = s_cand % self.gb_max_s
 
                 # Feasibility Check A (Priority 2): Full-Horizon Track Boundary Clearance
+                # Adaptive margin: At crawl / low speed, reduce margin slightly (12cm) so vehicle can
+                # squeeze through narrow lab tracks and tight hairpins safely without artificial rejection.
+                eff_bound_mindist = self.spline_bound_mindist if v_ego_eff > 2.5 else max(0.12, self.spline_bound_mindist * 0.75)
                 spatially_feasible = True
                 for i in range(len(s_cand_wrapped)):
                     idx = int((s_cand_wrapped[i] / wpnt_dist) % self.gb_max_idx)
@@ -696,7 +763,7 @@ class ObstacleSpliner(Node):
                         clearance = w.d_left - di
                     else:
                         clearance = abs(w.d_right) - abs(di)
-                    if clearance < self.spline_bound_mindist:
+                    if clearance < eff_bound_mindist:
                         spatially_feasible = False
                         break
 
@@ -741,7 +808,10 @@ class ObstacleSpliner(Node):
                         for s, di in zip(s_cand_wrapped, d_cand)
                     )
                     # Cost: penalize high peak curvature, low track margin, and excessive lateral excursion
-                    cost = 2.0 * cand_curv + (0.35 / max(min_clr, 0.05)) + 0.3 * abs(cand_d_apex)
+                    # Heavily prioritize sides with large physical track clearance and the geometrically wider corridor
+                    cost = 1.5 * cand_curv + (0.30 / max(min_clr, 0.05)) + 0.2 * abs(cand_d_apex) - 1.0 * min_clr
+                    if cand_side == more_space:
+                        cost -= 1.0  # Dominant priority bonus for the side with physically larger track clearance
                 except Exception:
                     cost = 100.0
 
@@ -792,7 +862,7 @@ class ObstacleSpliner(Node):
             v_lat_limits = np.sqrt(self.spline_max_alat / np.maximum(curvatures, 0.05))
 
             # Curvature-gated velocity profiling adhering to tire friction ellipse
-            corner_thresh = getattr(self, 'corner_curvature_thresh', 0.08)
+            corner_thresh = getattr(self, 'corner_curvature_thresh', 0.22)
             speed_boost = getattr(self, 'overtake_speed_boost', 1.05)
             min_pass_delta_v = getattr(self, 'min_pass_delta_v', 0.8)
             v_targets = np.zeros(n_pts)
@@ -800,8 +870,8 @@ class ObstacleSpliner(Node):
                 gb_wpnt_i = int((evasion_s[i] / wpnt_dist) % self.gb_max_idx)
                 v_raceline = gb_wpnts[gb_wpnt_i].vx_mps
                 
-                # Check if local avoidance arc or raceline exceeds curvature threshold
-                is_corner = (curvatures[i] >= corner_thresh) or (abs(gb_wpnts[gb_wpnt_i].kappa_radpm) >= corner_thresh)
+                # Check if raceline is in a genuine track corner (avoidance spline curvature is constrained by v_lat_limits)
+                is_corner = abs(gb_wpnts[gb_wpnt_i].kappa_radpm) >= corner_thresh
                 
                 if is_corner:
                     # In corners / braking zones / apexes: Zero acceleration boost!
@@ -890,18 +960,16 @@ class ObstacleSpliner(Node):
         obs_on_traj = [obs for obs in obstacles.obstacles if abs(
             obs.d_center) < self.obs_traj_tresh]
 
-        # Only use obstacles that within self.lookahead in front of the car
+        # Only use obstacles that within self.lookahead in front of the car or actively being passed
         close_obs = []
+        half_track = (self.gb_max_s / 2.0) if (self.gb_max_s and self.gb_max_s > 0) else 500.0
         for obs in obs_on_traj:
             obs = self._predict_obs_movement(obs)
-            # Handle wraparound
-            dist_in_front = (obs.s_center - self.cur_s) % self.gb_max_s
-            # dist_in_back = abs(dist_in_front % (-self.gb_max_s)) # distance from ego to obstacle in the back
-            if dist_in_front < self.lookahead:
+            # Signed relative distance along track (positive = ahead, negative = behind ego)
+            s_diff = (obs.s_center - self.cur_s + half_track) % self.gb_max_s - half_track
+            # Retain obstacle while approaching AND while physically alongside or passing (-1.50m to lookahead)
+            if -1.50 <= s_diff < self.lookahead:
                 close_obs.append(obs)
-                # Not within lookahead
-            else:
-                pass
         return close_obs
 
     #################### VISUALIZATION FUNCTIONS####################

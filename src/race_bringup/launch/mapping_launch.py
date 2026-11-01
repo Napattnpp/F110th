@@ -57,7 +57,6 @@ def generate_launch_description():
     joy_teleop_config = PathJoinSubstitution([pkg_bringup, 'config', LaunchConfiguration('racecar_version'), 'joy_teleop.yaml'])
     vesc_config = PathJoinSubstitution([pkg_bringup, 'config', LaunchConfiguration('racecar_version'), 'vesc.yaml'])
     icm20948_config = PathJoinSubstitution([pkg_bringup, 'config', LaunchConfiguration('racecar_version'), 'icm20948.yaml'])
-    global_planner_params = os.path.join(pkg_bringup, 'config', 'global_planner', 'global_planner_params.yaml')
     ekf_config = os.path.join(pkg_bringup, 'config', 'ekf.yaml')
 
     # Crawl backwards to find maps in the src folder

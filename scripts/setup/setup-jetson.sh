@@ -148,6 +148,13 @@ else
     warn "VESC Controller: Not detected at /dev/sensors/vesc. Check USB connection."
 fi
 
+# Check ICM-20948 IMU
+if [ -c /dev/i2c-7 ] && i2cget -y 7 0x68 0x00 >/dev/null 2>&1; then
+    success "ICM-20948 IMU: Found on /dev/i2c-7 (0x68, WHO_AM_I: 0xEA)"
+else
+    warn "ICM-20948 IMU: Not responding at /dev/i2c-7 address 0x68."
+fi
+
 # Check Gamepad
 if ls /dev/input/js* >/dev/null 2>&1; then
     success "Gamepad / Joystick: Found ($(ls /dev/input/js* | tr '\n' ' '))"

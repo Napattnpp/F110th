@@ -29,10 +29,9 @@ make setup
 ```
 
 `make setup` will launch an **Interactive Setup Wizard** in your terminal:
-- Interactively configures your **`F110_ROLE`** (`vehicle` \| `simulation`)
 - Prompts for your **`ROS_DOMAIN_ID`** (0–101) to prevent team network cross-talk
 - Prompts for your target **`RACECAR_ID`** (e.g. `car01`)
-- Auto-detects your platform architecture (x86 / Mac / Jetson Tegra)
+- Auto-detects your platform architecture (x86 / Mac / Jetson Tegra) and CycloneDDS profile
 - Builds and launches the Docker container stack
 
 ---

@@ -49,16 +49,6 @@ def generate_launch_description():
         default_value='False',
         description='Measure execution time'
     )
-    map_name_arg = DeclareLaunchArgument(
-        'map_name',
-        default_value='',
-        description='Target map name (optional, only needed for legacy graph_based overtake_mode)'
-    )
-    fake_obstacles_arg = DeclareLaunchArgument(
-        'fake_obstacles',
-        default_value='false',
-        description='Publish synthetic fake obstacles for standalone tracker benchmarking'
-    )
     enable_recovery_arg = DeclareLaunchArgument(
         'enable_recovery',
         default_value='true',
@@ -124,10 +114,7 @@ def generate_launch_description():
                 package='sector_tuner',
                 executable='ot_interpolator',
                 name='ot_interpolator',
-                output='screen',
-                parameters=[
-                    {'map_name': LaunchConfiguration('map_name')}
-                ]
+                output='screen'
             )
         ]
     )
@@ -140,7 +127,7 @@ def generate_launch_description():
             perception_source,
             launch_arguments={
                 'param_file': os.path.join(pkg_bringup, 'config', 'opponent_tracker_params.yaml'),
-                'enable_fake_obstacles': LaunchConfiguration('fake_obstacles')
+                'enable_fake_obstacles': 'false'
             }.items()
         )
 
@@ -151,8 +138,6 @@ def generate_launch_description():
         overtake_mode_arg,
         ctrl_algo_arg,
         measure_arg,
-        map_name_arg,
-        fake_obstacles_arg,
         enable_recovery_arg,
     ]
     if controller_launch is not None:

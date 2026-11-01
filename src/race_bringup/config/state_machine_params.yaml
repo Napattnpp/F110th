@@ -10,7 +10,9 @@ state_machine:
     volt_threshold: 9.5 # [V] voltage threshold below which we start screaming
 
     force_state: False  # force state to be the one specified in force_state_choice
-    ftg_disabled: True  # disable FTG (Follow the Gap) fallback mode when stuck trailing
+    ftg_disabled: True  # disable FTG (Follow the Gap) fallback mode when stuck trailing (preserves racing autonomy)
+    ftg_threshold_speed: 0.35 # [m/s] speed below which car is considered blocked/stuck in TRAILING
+    ftg_timer_sec: 2.0 # [s] time we have to stay slower than ftg_threshold_speed before activating FTG fallback
 
 
     splini_ttl: 0.8 # [s] ttl counter for validity of spliner waypoints
@@ -22,15 +24,15 @@ state_machine:
     splini_hyst_timer_sec: 0.02 # [s] time we have to wait between switching sides
     overtake_speed_scale: 1.0 # speed boost fraction applied during OVERTAKE mode (1.0 = single source of truth in spline_planner)
 
-    ftg_threshold_speed: 0.1 # [m/s] speed threshold below which we start a timer for activating FTG
-    ftg_timer_sec: 3. # [s] time we have to stay slower than the `ftg_threshold_speed` threshold before we activate FTG
-
     # Autonomous Crash Recovery parameters
     enable_recovery: True # enable/disable autonomous recovery state machine
-    crash_dist_threshold: 0.25 # [m] front LiDAR distance threshold to trigger crash/stuck detection
+    crash_dist_threshold: 0.35 # [m] front LiDAR distance threshold to trigger crash/stuck detection (protects against angled wall contact)
     stuck_speed_threshold: 0.1 # [m/s] speed threshold below which car is considered stuck
-    stuck_time_threshold: 0.6 # [s] duration car must be stuck before triggering recovery
-    recovery_stop_time: 0.5 # [s] dwell time at complete standstill after crash before reversing
+    stuck_time_threshold: 0.25 # [s] duration car must be stuck before triggering recovery (fast cut-off to protect AMCL odometry)
+    imu_shock_threshold: 18.0 # [m/s^2] longitudinal deceleration spike threshold (~1.8g) for instantaneous crash detection
+    stall_current_threshold: 14.0 # [A] VESC motor stall current threshold to detect wall pushing with spinning wheels
+    cornering_yaw_rate_thresh: 0.45 # [rad/s] yaw rate threshold above which front wall proximity is treated as cornering, not a crash
+    recovery_stop_time: 0.25 # [s] dwell time at complete standstill after crash before reversing
     recovery_reverse_speed: -0.7 # [m/s] reverse speed during recovery maneuver
     recovery_max_reverse_time: 1.5 # [s] maximum time allowed for reversing
     recovery_align_time: 0.8 # [s] stabilization time in FTG mode after reversing

@@ -8,7 +8,7 @@ ORIGINAL_XAUTHORITY := $(XAUTHORITY)
 -include .env
 export
 
-.PHONY: help setup bootstrap configure build up attach stop clean push prune tuner optimize start_line benchmark monitor profile init_map finish_map clean_map clean_web map_status map_pipeline
+.PHONY: help setup bootstrap configure build up attach stop clean push prune tuner optimize start_line benchmark monitor profile init_map finish_map clean_map clean_web map_status map_pipeline hardware_check network_check
 
 ifneq ($(wildcard /.dockerenv),)
     PYTHON := python3
@@ -70,12 +70,16 @@ host_setup: ## Configure host performance, udev rules, network, and groups (No D
 		echo "Host is macOS. No kernel tuning needed."; \
 	fi
 
-hardware_check: ## Run non-destructive audit of VESC, LiDAR, joystick, clocks, and buffers
+hardware_check: ## Run non-destructive audit of VESC, LiDAR, IMU, joystick, clocks, and buffers
 	@echo "=== Physical Hardware & Interface Audit ==="
 	@[ -e /dev/sensors/vesc ] && echo "  \033[32m[✓]\033[0m VESC Controller: Found (/dev/sensors/vesc)" || echo "  \033[33m[!]\033[0m VESC Controller: Not detected at /dev/sensors/vesc"
+	@[ -c /dev/i2c-7 ] && (i2cget -y 7 0x68 0x00 >/dev/null 2>&1 && echo "  \033[32m[✓]\033[0m ICM-20948 IMU: Detected on /dev/i2c-7 (0x68, WHO_AM_I: 0xEA)" || echo "  \033[33m[!]\033[0m ICM-20948 IMU: Bus /dev/i2c-7 exists but 0x68 not responding") || echo "  \033[33m[!]\033[0m ICM-20948 IMU: /dev/i2c-7 not found"
 	@ls /dev/input/js* >/dev/null 2>&1 && echo "  \033[32m[✓]\033[0m Gamepad / Joystick: Found" || echo "  \033[33m[!]\033[0m Gamepad / Joystick: None connected (/dev/input/js*)"
 	@[ -e /dev/sensors/rplidar ] && echo "  \033[32m[✓]\033[0m RPLiDAR S1: Found (/dev/sensors/rplidar)" || ([ -e /dev/ttyUSB0 ] && echo "  \033[33m[!]\033[0m LiDAR on /dev/ttyUSB0 (udev rule not active)" || (ping -c 1 -W 1 192.168.0.10 >/dev/null 2>&1 && echo "  \033[32m[✓]\033[0m Hokuyo LiDAR: Reachable at 192.168.0.10" || echo "  \033[33m[!]\033[0m LiDAR: Neither RPLiDAR (/dev/sensors/rplidar) nor Hokuyo (192.168.0.10) detected"))
 	@sysctl net.core.rmem_max 2>/dev/null | grep -q "2147483647" && echo "  \033[32m[✓]\033[0m Kernel UDP Buffers: Locked to 2GB" || echo "  \033[33m[!]\033[0m Kernel UDP Buffers: Below 2GB"
+
+network_check: ## Audit Jetson & pitlane network, Wi-Fi latency, sysctl UDP buffers, and DDS isolation
+	@bash scripts/setup/check-network.sh $(CAR_HOSTNAME)
 
 bootstrap: ## Validate system dependencies and initialize .env and python virtual environment
 	@bash scripts/setup/bootstrap.sh
@@ -106,7 +110,7 @@ attach: ## Attach interactive bash session inside active container
 		fi; \
 		chmod a+r /tmp/.docker.xauth 2>/dev/null || true; \
 	fi
-	docker compose exec -e DISPLAY=$(DISPLAY) -e XAUTHORITY="$(XAUTHORITY_ENV)" -e LIBGL_ALWAYS_INDIRECT="$(LIBGL_ENV)" -u $(USER) $(SERVICE) /bin/bash
+	docker compose exec -e CYCLONEDDS_URI="file:///etc/cyclonedds.xml" -e DISPLAY=$(DISPLAY) -e XAUTHORITY="$(XAUTHORITY_ENV)" -e LIBGL_ALWAYS_INDIRECT="$(LIBGL_ENV)" -u $(USER) $(SERVICE) /bin/bash
 
 stop: ## Stop active container stack
 	docker compose --profile $(SERVICE) stop
@@ -196,11 +200,11 @@ finish_map: ## Save SLAM map and organize into 4-subfolder assets: make finish_m
 	fi
 
 ##@ 🏎️ Race Operations & Telemetry
-pitlane: ## Launch interactive 4-pane trackside tmux pitlane dashboard: make pitlane [MAP=yee2] [SIM=false|true]
+pitlane: ## Launch interactive 4-pane trackside tmux pitlane dashboard: make pitlane [MAP=ifac_roboracer] [SIM=false|true]
 	@if [ -f /.dockerenv ] || [ "$$(uname -s)" = "Linux" ]; then \
-		bash scripts/race/pitlane_session.sh $(or $(MAP),yee2) $(or $(SIM),false); \
+		bash scripts/race/pitlane_session.sh $(or $(MAP),ifac_roboracer) $(SIM); \
 	else \
-		docker compose exec -it -u $(USER) $(SERVICE) bash scripts/race/pitlane_session.sh $(or $(MAP),yee2) $(or $(SIM),false); \
+		docker compose exec -e CYCLONEDDS_URI="file:///etc/cyclonedds.xml" -it -u $(USER) $(SERVICE) bash scripts/race/pitlane_session.sh $(or $(MAP),ifac_roboracer) $(SIM); \
 	fi
 
 profile: ## View or switch active racecar profile: make profile [CAR=ORIN1|SIM]
@@ -215,12 +219,16 @@ profile: ## View or switch active racecar profile: make profile [CAR=ORIN1|SIM]
 			if [ "$$base" != "global_planner" ]; then \
 				echo "  - $$base"; \
 			fi; \
-		done; \
+			done; \
 	fi
 
 tuner: ## Launch Web Sector Tuner (speed & overtaking sectors): make tuner [PORT=8050]
 	@echo "Launching Web Sector Tuner using $(PYTHON)..."
 	@$(PYTHON) scripts/race/sector_tuner_web.py --port $(or $(PORT),8050)
+
+sim_tool: ## Launch Web Sim Obstacle Studio (place/drag obstacles & opponents): make sim_tool [MAP=ifac_roboracer] [PORT=8052]
+	@echo "Launching Web Sim Obstacle Studio using $(PYTHON)..."
+	@$(PYTHON) scripts/sim/sim_obstacle_web.py $(if $(MAP),--map $(MAP),) --port $(or $(PORT),8052)
 
 monitor: ## Open Foxglove Studio / Web connected to live vehicle bridge (ws://localhost:8765 or ws://<car>:8765)
 	@TARGET_HOST=$$(grep '^CAR_HOSTNAME=' .env 2>/dev/null | cut -d= -f2); \

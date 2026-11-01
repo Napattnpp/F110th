@@ -134,12 +134,19 @@ if [ -f "${TEMP_FILESTEM}.yaml" ] && [ -f "${TEMP_FILESTEM}.pgm" ]; then
     update_yaml_image "${WP_GEN_DIR}/${MAP_NAME}_waypoint_gen.yaml" "${MAP_NAME}_waypoint_gen.pgm"
 fi
 
-# Initializing per-track global_planner_params.yaml template in waypoints/
+# Initializing per-track global_planner_params.yaml template in waypoint_gen/ (ADR-004)
+TEMPLATE_PARAMS="${PROJECT_ROOT}/src/race_bringup/config/global_planner/global_planner_params.template.yaml"
 CENTRAL_PARAMS="${PROJECT_ROOT}/src/race_bringup/config/global_planner/global_planner_params.yaml"
-TRACK_PARAMS="${WAYPOINTS_DIR}/global_planner_params.yaml"
-if [ -f "${CENTRAL_PARAMS}" ] && [ ! -f "${TRACK_PARAMS}" ]; then
-    echo "5. Initializing per-track global_planner_params.yaml in ${WAYPOINTS_DIR}..."
-    cp -f "${CENTRAL_PARAMS}" "${TRACK_PARAMS}"
+TRACK_PARAMS="${WP_GEN_DIR}/global_planner_params.yaml"
+
+SRC_PARAMS="${CENTRAL_PARAMS}"
+if [ -f "${TEMPLATE_PARAMS}" ]; then
+    SRC_PARAMS="${TEMPLATE_PARAMS}"
+fi
+
+if [ -f "${SRC_PARAMS}" ] && [ ! -f "${TRACK_PARAMS}" ]; then
+    echo "5. Initializing per-track global_planner_params.yaml in ${WP_GEN_DIR}..."
+    cp -f "${SRC_PARAMS}" "${TRACK_PARAMS}"
 fi
 
 echo ""

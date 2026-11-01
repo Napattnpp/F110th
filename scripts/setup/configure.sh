@@ -73,26 +73,15 @@ if ! grep -q "^RACECAR_ID=" "$TARGET_ENV"; then
     LEGACY_ID=$(grep "^RACECAR_VERSION=" "$TARGET_ENV" 2>/dev/null | cut -d'=' -f2)
     set_env_var "RACECAR_ID" "${LEGACY_ID:-car01}"
 fi
-if ! grep -q "^F110_ROLE=" "$TARGET_ENV"; then
-    set_env_var "F110_ROLE" "simulation"
-fi
 
 # Load current .env values for validation & sync
 source "$TARGET_ENV"
 
-# 1. Validate F110_ROLE (Options: vehicle | simulation)
-case "${F110_ROLE}" in
-    vehicle|simulation) ;;
-    *)
-        warn "Invalid F110_ROLE '${F110_ROLE}'. Resetting to default 'simulation'."
-        F110_ROLE="simulation"
-        set_env_var "F110_ROLE" "simulation"
-        ;;
-esac
-
-# 2. Derive CYCLONEDDS_PROFILE from F110_ROLE if not explicitly overridden
+# Derive CYCLONEDDS_PROFILE if not explicitly overridden
+# Jetson hardware auto-selects loopback profile (cyclonedds_car.xml)
+# Workstation / Mac auto-selects dev profile (cyclonedds_dev.xml)
 if [ -z "${CYCLONEDDS_PROFILE:-}" ]; then
-    if [ "${F110_ROLE}" = "vehicle" ]; then
+    if [ "$IS_JETSON" = "yes" ]; then
         DDS_PROFILE="cyclonedds_car.xml"
     else
         DDS_PROFILE="cyclonedds_dev.xml"
@@ -124,8 +113,14 @@ set_env_var "DOCKER_PROFILE" "$DOCKER_PROFILE"
 set_env_var "HOST_UID" "$HOST_UID"
 set_env_var "HOST_GID" "$HOST_GID"
 set_env_var "CYCLONEDDS_PROFILE" "$DDS_PROFILE"
-set_env_var "CYCLONEDDS_URI" "file://$DDS_CONFIG"
-export CYCLONEDDS_URI="file://$DDS_CONFIG"
+if [ "$OS" = "Darwin" ]; then
+    # On macOS, ROS 2 runs strictly inside Docker. Point to container-safe mount path.
+    set_env_var "CYCLONEDDS_URI" "file:///etc/cyclonedds.xml"
+    export CYCLONEDDS_URI="file:///etc/cyclonedds.xml"
+else
+    set_env_var "CYCLONEDDS_URI" "file://$DDS_CONFIG"
+    export CYCLONEDDS_URI="file://$DDS_CONFIG"
+fi
 
 success "Configuration resolved:"
 info "  • Platform:       ${CYAN}$ARCH ($OS)${NC}"

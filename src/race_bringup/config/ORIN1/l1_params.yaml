@@ -3,20 +3,19 @@ controller:
     LUT_name: "ORIN1_hangar_pacejka"
     # ── Lookahead distance: L1 = q_l1 + speed * m_l1, clipped to [t_clip_min, t_clip_max] ──
     # OSCILLATION FIX: increase t_clip_min → longer lookahead → smoother path, less oscillation
-    # Too short (0.8m) on tight track → car overshoots corners → oscillates
-    # Too long → car cuts corners / slow to respond
-    t_clip_min: 0.42      # Sharpened lookahead to prevent late turn-in on tight corners
+    # Too short (<0.6m) on tight track → car snaps full steering lock and cuts into inside walls
+    # Too long (>1.5m) → car understeers wide
+    t_clip_min: 0.75      # Smooth lookahead to eliminate violent sharp corner snapping
     t_clip_max: 2.5       # Upper lookahead limit
-    m_l1: 0.70            # Lookahead time multiplier
-    q_l1: 0.15            # Base lookahead distance offset
+    m_l1: 0.50            # Lookahead time multiplier
+    q_l1: 0.35            # Base lookahead distance offset
 
     # ── Speed & Braking Lookahead ──
-    speed_lookahead: 0.35            # Increased from 0.25 to sample lower speeds earlier and brake BEFORE sharp corners
-    lat_err_coeff: 1.0
+    speed_lookahead: 0.35            # Sample lower speeds earlier to brake BEFORE corners
+    lat_err_coeff: 0.50
 
     # ── Steer scaling based on acceleration ──
-    # Amplify steering during acceleration to counteract weight transfer and front-wheel understeer
-    acc_scaler_for_steer: 1.15
+    acc_scaler_for_steer: 1.00       # Keep linear steering (1.15 was over-steering into inner walls under throttle)
     dec_scaler_for_steer: 0.95
 
     # ── High-speed steer downscaling ──
@@ -24,7 +23,7 @@ controller:
     end_scale_speed: 8.0
     downscale_factor: 0.2
 
-    speed_lookahead_for_steer: 0.22 # Increased from 0.18 to prepare steering angle for upcoming corners
+    speed_lookahead_for_steer: 0.0   # Disabled corner-cutting lookup (0.22 was aggressively cutting apexes)
 
     ## Acceleration Based Velocity Controller Parameters
     vel_accel_mode: False

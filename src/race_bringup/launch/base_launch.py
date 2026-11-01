@@ -211,8 +211,7 @@ def generate_launch_description():
         name='sector_tuner',
         output='screen',
         parameters=[
-            PathJoinSubstitution([map_path, 'waypoints', 'speed_scaling.yaml']),
-            {'map_name': LaunchConfiguration('map_name')}
+            PathJoinSubstitution([map_path, 'waypoints', 'speed_scaling.yaml'])
         ]
     )
 

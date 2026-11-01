@@ -26,7 +26,7 @@ class ManualWaypointLogger(Node):
         super().__init__('manual_waypoint_logger')
 
         # Declare ROS 2 parameters
-        self.declare_parameter('map_name', 'competition/rectangle1')
+        self.declare_parameter('map_name', 'ifac_roboracer')
         self.declare_parameter('odom_topic', '/odom')
         self.declare_parameter('min_dist', 0.10)        # [m] Minimum distance between logged points
         self.declare_parameter('default_speed', 3.0)    # [m/s] Default speed profile if odom speed is low

@@ -17,7 +17,7 @@ from typing import List
 from f110_msgs.msg import Wpnt, WpntArray, OTWpntArray, ObstacleArray, Obstacle
 import random
 from visualization_msgs.msg import Marker, MarkerArray
-from sensor_msgs.msg import LaserScan
+from sensor_msgs.msg import LaserScan, Imu
 try:
     from vesc_msgs.msg import VescStateStamped
 except ImportError:
@@ -42,17 +42,22 @@ class StateMachine(Node):
         self.params = StateMachineParams(self)
         
 
-        # Get sim parameter from global_parameters node to automatically switch profiles
+        # Get sim and map_path parameters from global_parameters node to automatically switch profiles
         self.global_param_client = self.create_client(GetParameters, '/global_parameters/get_parameters')
         self.global_param_client.wait_for_service()
         req = GetParameters.Request()
-        req.names = ['sim']
+        req.names = ['sim', 'map_path']
         future = self.global_param_client.call_async(req)
         rclpy.spin_until_future_complete(self, future)
         self.sim = False
+        self.active_map_name = ""
         if future.result() is not None:
             self.sim = future.result().values[0].bool_value
-        self.get_logger().info(f"Is simulation: {self.sim}")
+            if len(future.result().values) > 1:
+                p_val = future.result().values[1].string_value
+                if p_val:
+                    self.active_map_name = os.path.basename(p_val.rstrip('/'))
+        self.get_logger().info(f"Is simulation: {self.sim}, Active map: {self.active_map_name}")
 
         # Automate test_on_car alignment
         self.params.test_on_car = not self.sim
@@ -65,11 +70,11 @@ class StateMachine(Node):
         self.create_subscription(Bool, '/state_machine/force_ftg', self._force_ftg_cb, 10)
 
         # SUBSCRIPTIONS
+        volt_thresh = self.params.volt_threshold if self.params.volt_threshold is not None else 9.5
+        self.battery_level = volt_thresh + 1.0
         if self.params.test_on_car:
-            self.battery_sub = self.create_subscription(VescStateStamped, "/vesc/sensors/core", self.battery_cb, 10)
-        else:
-            volt_thresh = self.params.volt_threshold if self.params.volt_threshold is not None else 9.5
-            self.battery_level = volt_thresh + 1
+            self.battery_sub = self.create_subscription(VescStateStamped, "/sensors/core", self.battery_cb, 10)
+            self.battery_sub_legacy = self.create_subscription(VescStateStamped, "/vesc/sensors/core", self.battery_cb, 10)
         self.max_speed = None
         self.create_subscription(WpntArray, "/global_waypoints", self.glb_wpnts_cb, 10)
         while self.max_speed is None: # equivalent of wait for message
@@ -129,6 +134,14 @@ class StateMachine(Node):
         self.latest_scan = None
         self.scan_sub = self.create_subscription(LaserScan, '/scan', self.scan_cb, 10)
 
+        # Multi-modal crash detection telemetry (IMU shock + VESC current)
+        self.latest_imu_ax = 0.0
+        self.latest_imu_ay = 0.0
+        self.latest_imu_wz = 0.0
+        self.vesc_current = 0.0
+        self.imu_sub = self.create_subscription(Imu, '/imu/data_raw', self.imu_cb, 10)
+        self.imu_sub_sim = self.create_subscription(Imu, '/imu', self.imu_cb, 10)
+
         # Localization health & auto-relocalization
         self.loc_cov_trace = 0.0
         self.last_reloc_time = 0.0
@@ -186,6 +199,12 @@ class StateMachine(Node):
 
     def battery_cb(self, msg: VescStateStamped):
         self.battery_level = msg.state.voltage_input
+        self.vesc_current = getattr(msg.state, 'current_motor', 0.0)
+
+    def imu_cb(self, msg: Imu):
+        self.latest_imu_ax = float(msg.linear_acceleration.x)
+        self.latest_imu_ay = float(msg.linear_acceleration.y)
+        self.latest_imu_wz = float(msg.angular_velocity.z)
 
     def scan_cb(self, msg: LaserScan):
         self.latest_scan = msg
@@ -288,16 +307,58 @@ class StateMachine(Node):
     
     @property
     def _check_stuck(self) -> bool:
-        """Evaluates if car has crashed or is stuck against a wall."""
+        """
+        Evaluates if car has crashed or is stuck against a wall.
+        Fused multi-modal crash detection:
+        1. High-G IMU deceleration shock (>18 m/s^2, ~1.8-2.0g) upon wall impact.
+        2. VESC motor stall current (>14A) while speed is zero (wheel spinning on slick floor).
+        3. Front LiDAR bumper proximity (<0.35m) while stopped or very slow.
+        4. Sim Watchdog: In simulation, front clearance < 0.28m rapidly triggers recovery
+           before AMCL particles or Pure Pursuit can oscillate.
+        5. Cornering / Apex Gating: yaw rate > 0.45 rad/s with high forward velocity suppresses
+           false triggers when cutting apexes close to barriers.
+        """
         if not self.params.enable_recovery:
             return False
 
         front_dist, _ = self._evaluate_scan_clearance()
-        is_slow = abs(self.cur_vs) < self.params.stuck_speed_threshold
+        
+        # Effective speed threshold: if pressed against a wall (<0.28m), relax threshold to 0.35 m/s
+        # to catch spinning wheels on the wall surface
+        speed_thresh = 0.35 if front_dist < 0.28 else self.params.stuck_speed_threshold
+        is_slow = abs(self.cur_vs) < speed_thresh
         is_front_blocked = front_dist < self.params.crash_dist_threshold
 
-        if is_front_blocked or (is_slow and front_dist < 0.4):
-            self.stuck_counter += 1
+        # High-G IMU deceleration shock
+        imu_shock = False
+        shock_thresh = getattr(self.params, 'imu_shock_threshold', 18.0)
+        if hasattr(self, 'latest_imu_ax') and self.latest_imu_ax is not None:
+            if self.latest_imu_ax < -shock_thresh:
+                imu_shock = True
+
+        # Cornering / Apex Gating: suppress false-triggers on apex walls
+        is_cornering = False
+        corner_wz_thresh = getattr(self.params, 'cornering_yaw_rate_thresh', 0.45)
+        if hasattr(self, 'latest_imu_wz') and self.latest_imu_wz is not None:
+            if abs(self.latest_imu_wz) > corner_wz_thresh and self.cur_vs > 1.0:
+                is_cornering = True
+
+        # VESC motor stall against barrier
+        motor_stall = False
+        stall_curr_thresh = getattr(self.params, 'stall_current_threshold', 14.0)
+        if hasattr(self, 'vesc_current') and self.vesc_current is not None:
+            if abs(self.vesc_current) > stall_curr_thresh and is_slow:
+                motor_stall = True
+
+        # Multi-modal evaluation
+        if (imu_shock and front_dist < 0.45) or (motor_stall and front_dist < 0.40):
+            # Instant collision or stall confirmation: rapid accumulation
+            self.stuck_counter += 2
+        elif is_front_blocked and is_slow and not is_cornering:
+            self.stuck_counter += 2 if self.sim else 1
+        elif front_dist < 0.22 and not is_cornering:
+            # Physical bumper penetration / hard contact against wall in sim or real
+            self.stuck_counter += 2
         else:
             self.stuck_counter = max(0, self.stuck_counter - 1)
 
@@ -305,24 +366,28 @@ class StateMachine(Node):
         return self.stuck_counter >= threshold_ticks
 
     def _evaluate_scan_clearance(self) -> tuple[float, float]:
-        """Calculates front clearance and rear clearance from LiDAR scans."""
+        """Calculates front bumper clearance and rear clearance from LiDAR scans.
+        Uses exact beam angles from LaserScan to reliably cover the entire front bumper
+        arc ([-55 deg, +55 deg]) regardless of whether the sensor has 270 deg or 360 deg FOV.
+        """
         if self.latest_scan is None or len(self.latest_scan.ranges) == 0:
             return 1.0, 1.0
 
         ranges = np.array(self.latest_scan.ranges)
         ranges = np.nan_to_num(ranges, nan=10.0, posinf=10.0, neginf=0.0)
-
         n = len(ranges)
-        # Front cone: ~[-20 deg, +20 deg] around index n//2
-        front_window = int(n * (40.0 / 360.0))
-        front_start = max(0, n // 2 - front_window // 2)
-        front_end = min(n, n // 2 + front_window // 2)
-        front_dist = float(np.min(ranges[front_start:front_end])) if front_end > front_start else 1.0
 
-        # Rear cone: first 10% and last 10% of array (assuming scan starts near rear -180 deg)
-        rear_window = int(n * (30.0 / 360.0))
-        rear_ranges = np.concatenate((ranges[:rear_window], ranges[-rear_window:]))
-        rear_dist = float(np.min(rear_ranges)) if len(rear_ranges) > 0 else 1.0
+        angle_min = getattr(self.latest_scan, 'angle_min', -2.356)  # default -135 deg
+        angle_max = getattr(self.latest_scan, 'angle_max', 2.356)   # default +135 deg
+        angles = np.linspace(angle_min, angle_max, n)
+
+        # Front bumper arc: [-55 deg, +55 deg] (covers head-on and oblique angle wall collisions)
+        front_mask = np.abs(angles) <= np.deg2rad(55.0)
+        front_dist = float(np.min(ranges[front_mask])) if np.any(front_mask) else 1.0
+
+        # Rear clearance: angles beyond +/- 115 deg (towards the rear corners)
+        rear_mask = np.abs(angles) >= np.deg2rad(115.0)
+        rear_dist = float(np.min(ranges[rear_mask])) if np.any(rear_mask) else 1.0
 
         return front_dist, rear_dist
 
@@ -336,16 +401,24 @@ class StateMachine(Node):
         ranges = np.nan_to_num(ranges, nan=10.0, posinf=10.0, neginf=0.0)
         n = len(ranges)
 
-        # In ROS LaserScan (-135 to +135 deg):
-        # Indices [0.25n:0.45n] are -67.5 to -13.5 deg (RIGHT side)
-        # Indices [0.55n:0.75n] are +13.5 to +67.5 deg (LEFT side)
-        right_arc = ranges[int(n * 0.25):int(n * 0.45)]
-        left_arc = ranges[int(n * 0.55):int(n * 0.75)]
+        angle_min = getattr(self.latest_scan, 'angle_min', -2.356)
+        angle_max = getattr(self.latest_scan, 'angle_max', 2.356)
+        angles = np.linspace(angle_min, angle_max, n)
 
-        mean_right = float(np.mean(right_arc)) if len(right_arc) > 0 else 1.0
-        mean_left = float(np.mean(left_arc)) if len(left_arc) > 0 else 1.0
+        # Right side arc: [-75 deg, -15 deg]
+        right_mask = (angles >= np.deg2rad(-75.0)) & (angles <= np.deg2rad(-15.0))
+        # Left side arc: [+15 deg, +75 deg]
+        left_mask = (angles >= np.deg2rad(15.0)) & (angles <= np.deg2rad(75.0))
+
+        mean_right = float(np.mean(ranges[right_mask])) if np.any(right_mask) else 1.0
+        mean_left = float(np.mean(ranges[left_mask])) if np.any(left_mask) else 1.0
 
         # If left wall is closer (left <= right), steer left (+1.0) while reversing
+        # so the rear swings left and the front swings RIGHT into open space away from the left wall
+        if mean_left <= mean_right:
+            self.recovery_steer_dir = 1.0
+        else:
+            self.recovery_steer_dir = -1.0
         # so the rear swings left and the front swings RIGHT into open space away from the left wall
         if mean_left <= mean_right:
             self.recovery_steer_dir = 1.0   # steer left -> front swings right away from wall
@@ -357,11 +430,10 @@ class StateMachine(Node):
     ### Properties to evaulate state transitions
     @property
     def _low_bat(self)->bool:
-
-        if self.battery_level < self.params.volt_threshold:
+        battery = getattr(self, 'battery_level', None)
+        if battery is not None and battery < self.params.volt_threshold:
             return True
-        else:
-            return False
+        return False
     
     @property
     def _check_only_ftg_zone(self) -> bool:
@@ -388,10 +460,35 @@ class StateMachine(Node):
         max_trace = getattr(self.params, "max_loc_cov_trace", 0.15)
         return self.loc_cov_trace < max_trace
 
+    @property
+    def _check_heading_aligned(self) -> bool:
+        """Evaluates whether vehicle heading is reasonably aligned with raceline direction (|yaw_err| < 45 deg).
+        Prevents violent steering lock snaps when returning from recovery to global raceline tracking.
+        """
+        if self.cur_s is None or not self.glb_wpnts or not hasattr(self, 'current_position') or self.current_position is None:
+            return True
+        idx = self.get_closest_glb_wpnt_idx(self.cur_s)
+        wpnt = self.glb_wpnts[idx]
+        target_yaw = getattr(wpnt, 'psi_rad', 0.0)
+        veh_yaw = self.current_position[2]
+        delta_yaw = abs((veh_yaw - target_yaw + np.pi) % (2.0 * np.pi) - np.pi)
+        return delta_yaw < np.deg2rad(30.0)
+
     def trigger_relocalization(self):
-        """Re-seeds particle filter via /initialpose near the last known raceline s."""
+        """Re-seeds particle filter via /initialpose near the last known raceline s when in open track."""
         now_sec = self.get_clock().now().nanoseconds * 1e-9
         if now_sec - self.last_reloc_time < 3.0:
+            return
+
+        # Crucial safety check: Only re-seed if the car has backed away into open space
+        # (front_dist >= 0.45m). Never re-seed while pressed nose-first into a barrier!
+        front_dist, _ = self._evaluate_scan_clearance()
+        if front_dist < 0.45:
+            self.get_logger().warn(
+                f"[Relocalization] Front clearance too close ({front_dist:.2f}m < 0.45m). "
+                f"Deferring /initialpose re-seed until vehicle backs out into open corridor.",
+                throttle_duration_sec=1.0
+            )
             return
 
         self.last_reloc_time = now_sec
@@ -436,7 +533,24 @@ class StateMachine(Node):
         for obs in self.obstacles:
             # relative distance: positive = ahead of ego, negative = behind ego
             rel_s = (obs.s_center - self.cur_s + half_track) % self.track_length - half_track
-            if -4.5 <= rel_s <= -0.4:
+            # Only consider passed once ego is cleanly ahead (obstacle is at least 1.2m behind ego center)
+            if -5.5 <= rel_s <= -1.2:
+                return True
+        return False
+
+    @property
+    def _check_alongside_obstacle(self) -> bool:
+        """Returns True if ego is currently physically alongside or overlapping any tracked obstacle.
+        Used to prevent aborting an overtake maneuver while alongside, which would cause the vehicle
+        to brake to a dead stop side-by-side with the obstacle.
+        """
+        if not self.obstacles or self.cur_s is None or self.track_length is None:
+            return False
+        half_track = self.track_length / 2.0
+        for obs in self.obstacles:
+            rel_s = (obs.s_center - self.cur_s + half_track) % self.track_length - half_track
+            # Physical obstacle influence window (-1.2m behind to +1.2m ahead)
+            if -1.2 <= rel_s <= 1.2:
                 return True
         return False
 
@@ -460,59 +574,91 @@ class StateMachine(Node):
                     return True
         return False
 
-    def _check_dynamic_track_feasibility(self, cur_idx: int, runway_wpnts: int = 20) -> bool:
+    @property
+    def _is_primary_obstacle_static(self) -> bool:
+        """Determines if the closest obstacle ahead is stationary (< 0.5 m/s or marked static)."""
+        if not self.obstacles or self.cur_s is None or self.track_length is None:
+            return False
+        closest_gap = float('inf')
+        is_static = False
+        for obs in self.obstacles:
+            gap = (obs.s_center - self.cur_s) % self.track_length
+            if gap < closest_gap:
+                closest_gap = gap
+                obs_speed = getattr(obs, 'vs', 0.0)
+                is_static = getattr(obs, 'is_static', False) or (obs_speed < 0.5)
+        return is_static
+
+    def _check_dynamic_track_feasibility(self, cur_idx: int, runway_wpnts: int = 15, max_curv: float = 0.65) -> bool:
         """Evaluates track geometry over the upcoming passing horizon (Pillar 1: Dynamic Horizon Feasibility).
         Ensures upcoming track curvature is within safe tire limits and track has sufficient drivable width.
+        Speed-Adaptive: When passing a stationary obstacle or moving at approach speed (< 2.0 m/s),
+        allowable curvature scales dynamically with physical tire grip limit (v^2 * kappa <= a_lat_max).
         """
         if not self.glb_wpnts or len(self.glb_wpnts) == 0:
             return True
         N = len(self.glb_wpnts)
-        ego_speed = max(2.5, self.cur_vs if self.cur_vs is not None else 0.0)
-        # Dynamic runway scaling: at higher speeds, require longer low-curvature runway ahead
+        ego_speed = max(0.5, self.cur_vs if self.cur_vs is not None else 0.0)
+
+        # Dynamic curvature threshold based on physical tire friction demand
+        # Moving racecars at 4-6 m/s need max_curv <= 0.65 rad/m to prevent high-speed slide
+        # Crawling / stationary obstacle avoidance (< 2.0 m/s) allows up to 1.35 rad/m
+        if self._is_primary_obstacle_static or ego_speed < 2.0:
+            eff_max_curv = max(max_curv, min(1.35, 6.0 / (ego_speed**2 + 1.0)))
+            eff_runway = min(runway_wpnts, 8)
+            eff_min_width = 1.10  # Allow narrower corridors for low-speed pass
+        else:
+            eff_max_curv = max_curv
+            eff_runway = runway_wpnts
+            eff_min_width = 1.40
+
         wpnt_spacing = (self.track_length / N) if (self.track_length is not None and N > 0) else 0.1
-        dyn_runway = max(runway_wpnts, int((ego_speed * 1.0) / max(0.05, wpnt_spacing)))
+        dyn_runway = max(eff_runway, int((ego_speed * 0.8) / max(0.05, wpnt_spacing)))
 
         for offset in range(dyn_runway):
             idx = (cur_idx + offset) % N
             w = self.glb_wpnts[idx]
             curv = abs(getattr(w, 'kappa_radpm', 0.0))
-            if curv > 0.15:
+            if curv > eff_max_curv:
                 return False
             d_left = getattr(w, 'd_left', 1.0)
             d_right = abs(getattr(w, 'd_right', 1.0))
-            if d_left > 0.1 and d_right > 0.1:
+            if d_left > 0.05 and d_right > 0.05:
                 width = d_left + d_right
-                if width < 1.75:
+                if width < eff_min_width:
                     return False
         return True
 
     @property
     def _check_ot_sector(self) -> bool:
+        cur_idx = self.get_closest_glb_wpnt_idx(self.cur_s if self.cur_s is not None else 0.0)
         if self.params.overtake_mode == "spliner":
-            # Guardrail 1: Require an actual physical obstacle/opponent ahead
-            if not self._check_valid_opponent_ahead:
+            # Guardrail 1: Dynamic Track Feasibility Check (Absolute Safety Floor)
+            if not self._check_dynamic_track_feasibility(cur_idx, runway_wpnts=12, max_curv=0.65):
                 return False
 
-            cur_idx = self.get_closest_glb_wpnt_idx(self.cur_s if self.cur_s is not None else 0.0)
-
-            # Guardrail 2: Dynamic Track Feasibility Check (Absolute Safety Floor)
-            if not self._check_dynamic_track_feasibility(cur_idx, runway_wpnts=15):
-                return False
-
-            # Guardrail 3: Sector Gating (Static ot_sectors is strictly authoritative!)
+            # Guardrail 2: Sector Gating (Static ot_sectors is strictly authoritative!)
             # Hairpins and chicanes marked with ot_flag: false must NEVER be bypassed!
             if hasattr(self, 'ot_sectors') and len(self.ot_sectors) > 0:
                 for sector in self.ot_sectors:
                     if sector['ot_flag']:
-                        if sector['start'] <= cur_idx <= (sector['end'] + 1):
-                            return True
+                        if sector['start'] <= sector['end']:
+                            if sector['start'] <= cur_idx <= (sector['end'] + 1):
+                                return True
+                        else:  # Track finish line wrap-around
+                            if cur_idx >= sector['start'] or cur_idx <= (sector['end'] + 1):
+                                return True
                 return False
             return True
-        cur_idx = self.get_closest_glb_wpnt_idx(self.cur_s if self.cur_s is not None else 0.0)
-        for sector in self.ot_sectors:
+
+        for sector in (getattr(self, 'ot_sectors', []) or []):
             if sector['ot_flag']:
-                if (sector['start'] <= cur_idx <= (sector['end']+1)):
-                    return True
+                if sector['start'] <= sector['end']:
+                    if sector['start'] <= cur_idx <= (sector['end'] + 1):
+                        return True
+                else:
+                    if cur_idx >= sector['start'] or cur_idx <= (sector['end'] + 1):
+                        return True
         return False
 
     @property
@@ -520,12 +666,17 @@ class StateMachine(Node):
         """Evaluates whether all dynamic and sector racecraft conditions are met
         to safely launch an overtake from TRAILING mode.
         """
-        # 0. Overtake Cooldown: enforce mandatory 1.2s settling in TRAILING before re-attacking
+        # 0. Overtake Cooldown: enforce settling in TRAILING before re-attacking moving opponents
         # Prevents high-frequency chattering and perpetual offline dwelling.
+        # Static obstacles (stationary barriers) bypass cooldown to enable instant continuous evasion.
         now = self.get_clock().now()
-        if hasattr(self, 'last_ot_exit_time') and self.last_ot_exit_time is not None:
+        is_any_obs_static = any(
+            (getattr(o, 'is_static', False) or (getattr(o, 'vs', 0.0) < 0.5))
+            for o in (self.obstacles or [])
+        )
+        if not is_any_obs_static and hasattr(self, 'last_ot_exit_time') and self.last_ot_exit_time is not None:
             time_since_ot = (now - self.last_ot_exit_time).nanoseconds / 1e9
-            if time_since_ot < 1.2:
+            if time_since_ot < 0.8:
                 return False
 
         # 1. Must be in an approved overtaking sector
@@ -538,8 +689,13 @@ class StateMachine(Node):
         # Prohibits launching late passes that cannot finish before the braking zone/corner.
         if hasattr(self, 'ot_sectors') and len(self.ot_sectors) > 0:
             in_safe_runway = False
+            N = len(self.glb_wpnts) if self.glb_wpnts else 1000
             for sector in self.ot_sectors:
                 if sector['ot_flag']:
+                    # For full-track continuous loops (end - start >= N - 5), runway is always safe
+                    if (sector['end'] - sector['start'] >= N - 5):
+                        in_safe_runway = True
+                        break
                     min_runway_wpnts = 20
                     if sector['start'] <= cur_idx <= max(sector['start'], sector['end'] - min_runway_wpnts):
                         in_safe_runway = True
@@ -548,38 +704,57 @@ class StateMachine(Node):
                 return False
 
         # Dynamic curvature feasibility across the runway
-        if not self._check_dynamic_track_feasibility(cur_idx, runway_wpnts=18):
+        if not self._check_dynamic_track_feasibility(cur_idx, runway_wpnts=12, max_curv=0.65):
             return False
 
-        # 3. Must be within the decisive passing window (0.60m <= gap <= 3.60m)
-        # If gap > 3.60m, ego must remain in TRAILING slipstream to close the distance.
+        # 3. Must be within the decisive passing window
+        # For static obstacles: initiate early (up to gb_horizon_m, default 4.5m) to avoid deceleration lag
+        # For dynamic opponents: wait for slipstream closing window (0.60m <= gap <= 3.60m)
         if not self.obstacles or self.cur_s is None or self.track_length is None:
             return False
 
         in_passing_window = False
         opp_speed = 0.0
+        is_static = False
+        horizon_m = getattr(self.params, 'gb_horizon_m', 4.5)
+
         for obs in self.obstacles:
-            gap = (obs.s_center - self.cur_s) % self.track_length
-            if 0.60 <= gap <= 3.60:
+            half_track = self.track_length / 2.0
+            s_rel = (obs.s_center - self.cur_s + half_track) % self.track_length - half_track
+            obs_speed = getattr(obs, 'vs', 0.0)
+            obs_is_static = getattr(obs, 'is_static', False) or (obs_speed < 0.5)
+
+            # Static obstacles can be passed from the full detection horizon down through alongside (-2.5m)
+            # Moving opponents use the tactical slipstream window (0.40m to 3.60m)
+            max_gap = max(3.60, min(5.50, horizon_m)) if obs_is_static else 3.60
+            min_gap = -2.50 if obs_is_static else 0.40
+            if min_gap <= s_rel <= max_gap:
                 obs_size = getattr(obs, 'size', 0.0)
                 if obs_size <= 0.0 and hasattr(obs, 's_start') and hasattr(obs, 's_end'):
                     obs_size = abs(obs.s_end - obs.s_start)
-                if obs_size >= 0.15:
+                if obs_size >= 0.15 or obs_is_static:
                     in_passing_window = True
-                    opp_speed = getattr(obs, 'vs', 0.0)
+                    opp_speed = obs_speed
+                    is_static = obs_is_static
                     break
+
         if not in_passing_window:
             return False
 
         # 4. Trailing Dwell Stability: ego must have settled in TRAILING for at least 0.25s
         # Guarantees PID trailing speed synchronization and stable raceline tracking before pulling out.
-        if getattr(self, 'state_dwell_time', 0.0) < 0.25:
+        # Bypass dwell for static obstacles: stationary obstacles require zero speed synchronization!
+        if not is_static and getattr(self, 'state_dwell_time', 0.0) < 0.25:
             return False
 
-        # 5. Speed / momentum requirement: ego must have sufficient speed (>= 1.5 m/s)
+        # 5. Speed / momentum requirement:
+        # Dynamic slipstream check applies only when attacking a MOVING opponent (vs >= 0.5 m/s).
+        # Static obstacles (vs < 0.5 m/s or is_static) can be overtaken immediately (even from a stop)
+        # as long as the avoidance corridor is clear and available.
         ego_speed = self.cur_vs if self.cur_vs is not None else 0.0
-        if ego_speed < max(1.5, opp_speed - 0.35):
-            return False
+        if not is_static and opp_speed >= 0.5:
+            if ego_speed < max(1.2, opp_speed - 0.35):
+                return False
 
         # 6. Avoidance corridor availability and clearance
         if not self._check_availability_splini_wpts or not self._check_ofree:
@@ -607,44 +782,29 @@ class StateMachine(Node):
                         obs_len = max(0.30, abs(getattr(obs, 's_end', obs_s) - getattr(obs, 's_start', obs_s)))
                         if ego_s_diff < (obs_len / 2.0 + 0.20):
                             ego_lat_clearance = abs(self.cur_d - obs.d_center)
-                            if ego_lat_clearance < 0.25:
+                            if ego_lat_clearance < 0.15:
                                 o_free = False
                                 self.get_logger().warn(
-                                    f"[HSM] O_FREE False: obstacle encroaching alongside ego (lat_diff: {ego_lat_clearance:.3f}m < 0.25m)",
+                                    f"[HSM] O_FREE False: obstacle encroaching alongside ego (lat_diff: {ego_lat_clearance:.3f}m < 0.15m)",
                                     throttle_duration_sec=1.0
                                 )
                                 break
 
-                        # 2. Apex clearance check: evaluate planned avoidance path clearance strictly at the obstacle apex
-                        s_diffs = np.array([
-                            abs((avoid_s.s_m - obs_s + half_track) % self.track_length - half_track)
-                            for avoid_s in self.last_valid_avoidance_wpnts
-                        ])
-                        min_s_diff = np.min(s_diffs)
-                        avoid_wpnt_idx = int(np.argmin(s_diffs))
+                        # 2. Apex clearance check: verify the planned avoidance path provides safe lateral passing distance
+                        peak_avoid = max(self.last_valid_avoidance_wpnts, key=lambda w: abs(w.d_m))
+                        obs_d_center = obs.d_center
+                        obs_rad = max(0.12, abs(getattr(obs, 'd_left', obs_d_center + 0.15) - getattr(obs, 'd_right', obs_d_center - 0.15)) / 2.0)
+                        effective_margin = min(float(self.params.lateral_width_ot_m), 0.12)
 
-                        # Evaluate clearance only if closest waypoint is truly alongside the apex (within 0.20m)
-                        # Prevents false aborts on initial transition/ramp waypoints where d is still near 0!
-                        if min_s_diff < 0.20:
-                            ot_d = self.last_valid_avoidance_wpnts[avoid_wpnt_idx].d_m
-                            obs_d_center = obs.d_center
-                            obs_rad = max(0.15, abs(getattr(obs, 'd_left', obs_d_center + 0.15) - getattr(obs, 'd_right', obs_d_center - 0.15)) / 2.0)
-                            obs_d_left = obs_d_center + obs_rad
-                            obs_d_right = obs_d_center - obs_rad
-
-                            # Check clearance to obstacle boundary bounds
-                            if ot_d >= obs_d_center:
-                                clearance = ot_d - obs_d_left
-                            else:
-                                clearance = obs_d_right - ot_d
-
-                            if clearance < self.params.lateral_width_ot_m:
-                                o_free = False
-                                self.get_logger().info(
-                                    f"[HSM] O_FREE False: apex clearance ({clearance:.3f} m) < safety margin ({self.params.lateral_width_ot_m:.3f} m)",
-                                    throttle_duration_sec=1.0
-                                )
-                                break
+                        # Check peak clearance of the avoidance corridor plateau
+                        peak_clearance = abs(peak_avoid.d_m - obs_d_center) - obs_rad
+                        if peak_clearance < effective_margin:
+                            o_free = False
+                            self.get_logger().info(
+                                f"[HSM] O_FREE False: planned apex clearance ({peak_clearance:.3f} m) < safety margin ({effective_margin:.3f} m)",
+                                throttle_duration_sec=1.0
+                            )
+                            break
             else:
                 o_free = True
             return o_free
@@ -833,7 +993,7 @@ class StateMachine(Node):
         self.ot_sectors = []
 
         # 1. Attempt direct YAML load from maps folder (Single Source of Truth for both spliner & graph_based)
-        map_name = getattr(self.params, 'map_name', 'ifac_roboracer')
+        map_name = getattr(self, 'active_map_name', '') or getattr(self.params, 'map_name', '') or 'ifac_roboracer'
         candidates = [
             f"/home/napat/F110th/assets/maps/{map_name}/waypoints/ot_sectors.yaml",
             f"/home/napat/F110th/assets/maps/{map_name}/ot_sectors.yaml",

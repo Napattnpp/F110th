@@ -57,31 +57,19 @@ if [ ! -f "$TARGET_ENV" ]; then
         echo -e "${YELLOW}Configure your local team settings (press Enter for defaults):${NC}"
         echo ""
 
-        # 1. Operational Role
-        echo "Select Operational Mode (F110_ROLE):"
-        echo "  1) simulation — Local Mac/Laptop Simulator & Development (Default)"
-        echo "  2) vehicle    — Onboard Compute on Physical Car (Jetson / NUC)"
-        read -p "Select choice [1-2] (default: 1): " ROLE_CHOICE
-        case "$ROLE_CHOICE" in
-            2) ROLE="vehicle" ;;
-            *) ROLE="simulation" ;;
-        esac
-
-
-        # 2. ROS Domain ID
+        # 1. ROS Domain ID
         read -p "Enter ROS Domain ID [0-101] (default: 21): " DOMAIN_INPUT
         DOMAIN_ID="${DOMAIN_INPUT:-21}"
 
-        # 3. Racecar ID
+        # 2. Racecar ID
         read -p "Enter Target Racecar ID (default: car01): " CAR_ID_INPUT
         RACECAR_ID_VAL="${CAR_ID_INPUT:-car01}"
 
-        # 4. Car Hostname
+        # 3. Car Hostname
         read -p "Enter Racecar Hostname/IP (default: car01.local): " CAR_HOST_INPUT
         CAR_HOST_VAL="${CAR_HOST_INPUT:-car01.local}"
 
         # Write choices into .env
-        sed -i.bak "s|^F110_ROLE=.*|F110_ROLE=${ROLE}|" "$TARGET_ENV"
         sed -i.bak "s|^ROS_DOMAIN_ID=.*|ROS_DOMAIN_ID=${DOMAIN_ID}|" "$TARGET_ENV"
         sed -i.bak "s|^RACECAR_ID=.*|RACECAR_ID=${RACECAR_ID_VAL}|" "$TARGET_ENV"
         sed -i.bak "s|^CAR_HOSTNAME=.*|CAR_HOSTNAME=${CAR_HOST_VAL}|" "$TARGET_ENV"
@@ -98,7 +86,6 @@ source "$TARGET_ENV"
 echo ""
 echo -e "${CYAN}╔═══════════════════════════════════════════════════════════╗${NC}"
 echo -e "${CYAN}║ Active Configuration (.env):                              ║${NC}"
-echo -e "${CYAN}║ • F110_ROLE:      ${GREEN}${F110_ROLE:-simulation}${NC}"
 echo -e "${CYAN}║ • ROS_DOMAIN_ID:  ${GREEN}${ROS_DOMAIN_ID:-21}${NC}"
 echo -e "${CYAN}║ • RACECAR_ID:     ${GREEN}${RACECAR_ID:-car01}${NC}"
 echo -e "${CYAN}║ • CAR_HOSTNAME:   ${GREEN}${CAR_HOSTNAME:-car01.local}${NC}"
