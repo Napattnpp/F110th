@@ -132,7 +132,7 @@ colcon_build: ## Build workspace into out/ (natively in Docker or delegated from
 	@if [ -f /opt/ros/humble/setup.bash ]; then \
 		echo "Building with colcon to out/ ..."; \
 		mkdir -p out/build out/install out/logs; \
-		bash -c "source /opt/ros/humble/setup.bash && PYTHONWARNINGS='ignore:::setuptools.command.install,ignore:::setuptools.command.easy_install,ignore:::setuptools.command.develop' colcon --log-base out/logs build --base-paths src --build-base out/build --install-base out/install --symlink-install"; \
+		bash -c "source /opt/ros/humble/setup.bash && PYTHONWARNINGS='ignore:::setuptools.command.install,ignore:::setuptools.command.easy_install,ignore:::setuptools.command.develop' colcon --log-base out/logs build --base-paths src --build-base out/build --install-base out/install --symlink-install --packages-up-to vesc_msgs f110_msgs teleop_tools_msgs && colcon --log-base out/logs build --base-paths src --build-base out/build --install-base out/install --symlink-install"; \
 	else \
 		echo "Host does not have ROS 2 Humble. Delegating colcon_build to $(SERVICE) container..."; \
 		docker compose exec -e DISPLAY= -u $(USER) $(SERVICE) bash -c "make colcon_build"; \
